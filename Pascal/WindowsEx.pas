@@ -1,0 +1,731 @@
+// Created: 03.10.07 P.W
+// Purpose: Use extended functions of windows
+// especially:
+// - FileSize larger then LongWord
+// - FileTimes ...
+// Modifications:
+// 31.03.08 P.W function CopyFileExSh ensures use of absolute pathes to avoid problems with relative ones
+unit WindowsEx;
+
+interface
+
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  TransX,    // 31.03.08 P.W
+  Dialogs,   // 31.03.08 P.W
+  Forms,
+  ShellApi,
+  Windows, SysUtils;
+
+//
+// Define CopyFileEx option flags (WinBase.h)
+//
+const
+  COPY_FILE_FAIL_IF_EXISTS              = $00000001;
+  COPY_FILE_RESTARTABLE                 = $00000002;
+  COPY_FILE_OPEN_SOURCE_FOR_WRITE       = $00000004;
+  COPY_FILE_ALLOW_DECRYPTED_DESTINATION = $00000008;
+  COPY_FILE_COPY_SYMLINK                = $00000800;     // not under XP!
+
+function GetFileSizeEx(hFile: THandle; var lpFileSize: LARGE_INTEGER): BOOL; stdcall;
+{$EXTERNALSYM GetFileSizeEx}
+
+function GetFileSizeEx; external kernel32 name 'GetFileSizeEx';
+
+type
+  TSearchRecInt64 = Record
+    Time              : Integer;
+    Size              : Integer;
+    Attr              : Integer;
+    Name              : TFileName;
+    ExcludeAttr       : Integer;
+
+    SizeInt64         : Int64;
+    ftCreationTime    : TFileTime;
+    ftLastAccessTime  : TFileTime;
+    ftLastWriteTime   : TFileTime;
+
+    CreationTimeStr   : AnsiString;
+    LastAccessTimeStr : AnsiString;
+    LastWriteTimeStr  : AnsiString;
+
+    AlternateFileName : AnsiString;
+  end;
+
+type
+  TTimerPerf = class
+  // 04.06.08 P.W
+  private
+    PerfFreq, PerfCtrCreate, PerfCtrDelta: TLargeInteger;  // counts per second
+    PauseTime : Double;
+    FPaused : Boolean;
+    procedure SetPaused(const Value: Boolean);
+  public
+    constructor Create;
+    function GetTimeSec: Double;
+    function GetTimeMSec: TLargeInteger;
+    property Paused : Boolean read FPaused write SetPaused;
+  end;
+
+function GetFileSizeInt64(hFile: THandle): Int64;
+function SizeInt64(FileSizeHigh, FileSizeLow: DWORD): Int64;
+
+function SrToSrInt64(const SR : TSearchRec): TSearchRecInt64;
+function FileSizeInt64(const Name: AnsiString): Int64;
+
+//function CallCopyFileEx(Source, Target: AnsiString): Boolean;
+function CopyFileExSh(ASource, ADest: AnsiString;
+  Confirm:Boolean=True; ARenameCheck:Boolean=False): Boolean;
+
+function CallCopyFile(const Source, Target: AnsiString): Boolean;
+function CallCopyFile_Sized(const Source, Target: AnsiString; Size: Int64): Boolean;
+function IsFolderEmpty(Folder: AnsiString): Boolean;
+
+procedure SetCapturedWindow(Wnd: HWND;
+  Layered, Transparent, TopMost, FullScreen, NoBorder, NoTaskButton, Hide: Boolean;
+  Alpha: Byte; RedrawFlg: Boolean = True);
+
+Implementation
+  const Unit_Name = 'WindowsEx'; // 03.05.24 P.W
+
+function GetFileSizeInt64(hFile: THandle): Int64;
+begin
+  if not GetFileSizeEx(hFile, Large_Integer(Result)) then
+  begin
+    Result := -1;
+//  RaiseLastOSError;
+  end;
+end;
+
+function SizeInt64(FileSizeHigh, FileSizeLow: DWORD): Int64;
+begin
+  Result := Int64(FileSizeHigh) * (Int64(MAXDWORD)+1) + Int64(FileSizeLow);
+end;
+
+function SrSizeInt64(const SR: TSearchRec): Int64;
+begin
+  Result := SizeInt64(SR.FindData.nFileSizeHigh, SR.FindData.nFileSizeLow);
+end;
+
+function SrToSrInt64(const SR : TSearchRec): TSearchRecInt64;
+  function TimeStr(ftTime: TFileTime): AnsiString;
+  var
+    ST, STL: TSystemTime;
+  begin
+    Result := '?';
+    if FileTimeToSystemTime(ftTime, ST) then
+      if SystemTimeToTzSpecificLocalTime(nil, ST, STL) then
+        Result := Format('%4d.%.2d.%.2d %.2d:%.2d:%.2d',[STL.wYear, STL.wMonth, STL.wDay, STL.wHour, STL.wMinute, STL.wSecond]);
+  end;
+begin
+  Result.Time := SR.Time;
+  Result.Size := SR.Size;
+  Result.Attr := SR.Attr;
+  Result.Name := SR.Name;
+
+  Result.SizeInt64         := SrSizeInt64(SR);
+  Result.ftCreationTime    := SR.FindData.ftCreationTime;
+  Result.ftLastAccessTime  := SR.FindData.ftLastAccessTime;
+  Result.ftLastWriteTime   := SR.FindData.ftLastWriteTime;
+
+  Result.CreationTimeStr   := TimeStr(SR.FindData.ftCreationTime);
+  Result.LastAccessTimeStr := TimeStr(SR.FindData.ftLastAccessTime);
+  Result.LastWriteTimeStr  := TimeStr(SR.FindData.ftLastWriteTime);
+
+  Result.AlternateFileName := SR.FindData.cAlternateFileName;
+end;
+
+function FirstSr(const Name: AnsiString): TSearchRec;
+begin
+  if (FindFirst(Name, faAnyFile, Result) = 0) then
+  begin
+    FindClose(Result);
+  end else
+  begin
+    Result.Size := -1;
+    // force SrSizeInt64 to return -1:
+    Result.FindData.nFileSizeHigh := MAXDWORD;
+    Result.FindData.nFileSizeLow  := MAXDWORD;
+  end;
+end;
+
+function FileSizeInt64(const Name: AnsiString): Int64;
+begin
+  Result := SrSizeInt64(FirstSR(Name));
+end;
+
+function FileSizeInt64_B(const Name: AnsiString): Int64;
+var
+  hFile: Integer;
+begin
+  hFile := FileOpen(Name, fmOpenRead);
+  Result := GetFileSizeInt64(hFile);
+  FileClose(hFile);
+end;
+
+(*
+DWORD CALLBACK CopyProgressRoutine(
+  LARGE_INTEGER TotalFileSize,
+  LARGE_INTEGER TotalBytesTransferred,
+  LARGE_INTEGER StreamSize,
+  LARGE_INTEGER StreamBytesTransferred,
+  DWORD dwStreamNumber,
+  DWORD dwCallbackReason,
+  HANDLE hSourceFile,
+  HANDLE hDestinationFile,
+  LPVOID lpData
+);
+*)
+function CallBack_CopyFileEx(
+  TotalFileSize,
+  TotalBytesTransferred,
+  StreamSize,
+  StreamBytesTransferred : Int64; //LARGE_INTEGER;
+  dwStreamNumber,
+  dwCallbackReason : DWORD;
+  hSourceFile,
+  hDestinationFile : THANDLE;
+  lpData: Pointer
+): DWORD;  stdcall;
+begin
+//{
+  ShowMessageFmt('TFS:%d; TBT:%d; STS:%d; SBT:%d; SN: %d; CR: %d', [
+  TotalFileSize,
+  TotalBytesTransferred,
+  StreamSize,
+  StreamBytesTransferred,
+  dwStreamNumber,
+  dwCallbackReason
+  ]);
+{
+ }
+  Result := PROGRESS_CONTINUE;
+//Result := PROGRESS_CANCEL;
+//Result := PROGRESS_STOP;
+//Result := PROGRESS_QUIET;
+end;
+
+var
+{
+//CancelGlb : Boolean = False;      // this results in "error code 1235 The request was aborted"
+results ever in:
+---------------------------
+Debugger Exception Notification
+---------------------------
+Project FilesHyperlink.exe raised exception class EOSError with message 'System Error.  Code: 1235.
+Die Anforderung wurde abgebrochen'. Process stopped. Use Step or Run to continue.
+---------------------------
+OK   Help
+---------------------------
+}
+
+  CancelGlb : BOOL    = False;      // this works fine!
+
+function CallCopyFileEx(Source, Target: AnsiString): Boolean; // 03.10.07 P.W
+// overwrites existing files!
+var
+  fs : Int64;
+//  Cancel: Boolean;
+begin
+  fs := FileSizeInt64(Source);
+  if fs < 0.200000 then
+  begin
+    Result := CopyFile(PChar(Source), PChar(Target), {FailExist=}False);
+  end else
+  begin
+    CancelGlb := False;
+    Result :=
+      CopyFileEx(
+        PChar(Source),      // lpExistingFileName
+        PChar(Target),      // lpNewFileName
+      @CallBack_CopyFileEx, //
+//      nil, // lpProgressRoutine
+        nil, // lpData
+        @CancelGlb, // pbCancel
+          0 * COPY_FILE_FAIL_IF_EXISTS +
+          0 * COPY_FILE_RESTARTABLE +
+          0 * COPY_FILE_OPEN_SOURCE_FOR_WRITE +
+          0 * COPY_FILE_ALLOW_DECRYPTED_DESTINATION+
+          0 * COPY_FILE_COPY_SYMLINK);                 // not under XP!
+
+  end;
+end;
+{
+function CallCopyFileEx_2(const Source, Target: AnsiString; Size: Int64): Boolean;
+// overwrites existing files!
+// 31.03.08 P.W use of CopyFileExSh corrected for relative pathes!
+var
+  lpProgressRoutine: TFNProgressRoutine;
+  lpData: Pointer;
+  pbCancel: PBool;
+  dwCopyFlags: DWORD;
+begin
+  lpProgressRoutine := nil; //@CallBack_CopyFileEx;
+  lpData := nil;
+  pbCancel := @CancelGlb;
+  dwCopyFlags :=
+          0 * COPY_FILE_FAIL_IF_EXISTS +               //
+          0 * COPY_FILE_RESTARTABLE +                  //
+          0 * COPY_FILE_OPEN_SOURCE_FOR_WRITE +        //
+          0 * COPY_FILE_ALLOW_DECRYPTED_DESTINATION+   //
+          0 * COPY_FILE_COPY_SYMLINK;                  // not under XP!
+
+
+  Result :=
+    CopyFileEx(
+      PChar(Source),     // lpExistingFileName : PChar;
+      PChar(Target),     // lpNewFileName      : PChar;
+      lpProgressRoutine, // lpProgressRoutine: TFNProgressRoutine;
+      lpData,            // lpData: Pointer;
+      pbCancel,          // pbCancel: PBool;
+      dwCopyFlags);      // dwCopyFlags: DWORD);  // :BOOL;
+
+  Application.ProcessMessages;
+end;
+}
+
+function CopyFileExSh(ASource, ADest: AnsiString;
+  Confirm:Boolean=True; ARenameCheck:Boolean=False): Boolean;
+//  You should use fully-qualified path names with this function. Using it with relative path names is not thread safe.
+{
+// SHFILEOPSTRUCT Structure:
+// pFrom:
+//   Address of a buffer to specify one or more source file names. These names
+// ! must be fully qualified paths. Standard Microsoft MS-DOS wild cards, such
+//   as "*", are permitted in the file-name position. Although this member is
+//   declared as a null-terminated string, it is used as a buffer to hold
+//   multiple file names. Each file name must be terminated by a single NULL
+//   character. An additional NULL character must be appended to the end of the
+//   final name to indicate the end of pFrom.
+// pTo:
+//   Address of a buffer to contain the name of the destination file or directory.
+//   This parameter must be set to NULL if it is not used. Like pFrom, the pTo
+//   member is also a double-null terminated string and is handled in much the
+//   same way. However, pTo must meet the following specifications.
+//   Wildcard characters are not supported.
+//   Copy and Move operations can specify destination directories that do not
+//   exist and the system will attempt to create them. The system normally
+//   displays a dialog box to ask the user if they want to create the new
+//   directory. To suppress this dialog box and have the directories created
+//   silently, set the FOF_NOCONFIRMMKDIR flag in fFlags.
+//   For Copy and Move operations, the buffer can contain multiple destination
+//   file names if the fFlags member specifies FOF_MULTIDESTFILES.
+//   Pack multiple names into the string in the same way as for pFrom.
+// ! Use only fully-qualified paths. Using relative paths will have unpredictable results.
+}
+//
+// Modifications:
+// 31.03.08 P.W a) ExpandFileName() added to ensure use of "fully qualified paths"
+//   because detected problems when called from UfrmShowRef Function GetRefIniName
+//    also concerned is SvMen.pas procedure SetSaveSvOnly
+//   b) ErrorMessage when copy fails
+var
+  sh: TSHFileOpStruct;
+begin
+  FillChar(sh, SizeOf(sh), #0);  // title fields empty ...
+
+  sh.Wnd    := Application.Handle;
+//  sh.Wnd := 0;
+
+  sh.wFunc  := FO_COPY;
+
+  //
+  ASource := ExpandFileName(ASource);     // 31.03.08
+  ADest   := ExpandFileName(ADest  );     // 31.03.08
+  // String muss mit #0#0 Terminiert werden, um das Listenende zu setzen
+  sh.pFrom  := PChar(ASource + #0);
+  sh.pTo    := PChar(ADest   + #0);
+
+  sh.fFlags :=
+    0 * FOF_ALLOWUNDO             + // Preserve undo information, if possible. Operations can be undone only from the same process that performed the original operation. If pFrom does not contain fully qualified path and file names, this flag is ignored.
+    0 * FOF_CONFIRMMOUSE          + // Not used.
+    0 * FOF_FILESONLY             + // Perform the operation on files only if a wildcard file name (*.*) is specified.
+    0 * FOF_MULTIDESTFILES        + // The pTo member specifies multiple destination files (one for each source file) rather than one directory where all source files are to be deposited.
+    00* FOF_NOCONFIRMATION        + // Respond with "Yes to All" for any dialog box that is displayed.
+    00* FOF_NOCONFIRMMKDIR        + // Do not confirm the creation of a new directory if the operation requires one to be created.
+//  0 * FOF_NO_CONNECTED_ELEMENTS + // Version 5.0. Do not move connected files as a group. Only move the specified files.
+//  0 * FOF_NOCOPYSECURITYATTRIBS + // Version 4.71. Do not copy the security attributes of the file.
+    00* FOF_NOERRORUI             + // Do not display a user interface if an error occurs.
+//  0 * FOF_NORECURSION           + // Only operate in the local directory. Don't operate recursively into subdirectories.
+//  0 * FOF_NORECURSEREPARSE      + // Treat reparse points as objects, not containers. You must set _WIN32_WINNT to 5.01 or later to use this flag. See Shell and Common Controls Versions for further discussion of versioning.
+    00* FOF_RENAMEONCOLLISION     + // Give the file being operated on a new name in a move, copy, or rename operation if a file with the target name already exists.
+    0 * FOF_SILENT                + // Do not display a progress dialog box.
+    0 * FOF_SIMPLEPROGRESS        + // Display a progress dialog box but do not show the file names.
+    0 * FOF_WANTMAPPINGHANDLE     + // If FOF_RENAMEONCOLLISION is specified and any files were renamed, assign a name mapping object containing their old and new names to the hNameMappings member.
+//  0 * FOF_WANTNUKEWARNING       + // Version 5.0. Send a warning if a file is being destroyed during a delete operation rather than recycled. This flag partially overrides FOF_NOCONFIRMATION.
+    0;
+
+  if not Confirm  then
+    sh.fFlags := sh.fFlags     or
+        FOF_NOCONFIRMATION     or
+        FOF_NOCONFIRMMKDIR     or
+        FOF_NOERRORUI;
+  if ARenameCheck then
+    sh.fFlags := sh.fFlags     or
+        FOF_RENAMEONCOLLISION;
+
+  Result := (ShFileOperation(sh) = 0) and (not sh.fAnyOperationsAborted);
+
+  if not Result then       // 31.03.08 P.W
+    ShowMessageFmt(TraS('Could not copy')+sLineBreak+'"%s"'+sLineBreak+' -> '+sLineBreak+'"%s"', [ASource, ADest]);
+
+  Application.ProcessMessages;
+end;
+
+function CallCopyFile(const Source, Target: AnsiString): Boolean; // 03.10.07 P.W from WinTools
+// overwrites existing files!
+// 31.03.08 P.W use of CopyFileExSh corrected for relative pathes!
+begin
+  // --- does not loose mouseclicks: ---
+  //Result := CopyFile(PChar(Source), PChar(Target), {FailExist=}False); // original   u. 03.10.07 P.W
+  //  Application.ProcessMessages;
+
+  // --- looses some mouse clicks: ---
+  Result := CopyFileExSh(Source, Target, {Confirm:Boolean=}False, {ARenameCheck:Boolean=}False);
+end;
+
+function CallCopyFile_Sized(const Source, Target: AnsiString; Size: Int64): Boolean; // 25.11.07 P.W
+// overwrites existing files!
+// 31.03.08 P.W use of CopyFileExSh corrected for relative pathes!
+begin
+  if (Size < 1e7) then
+  begin
+    // --- does not loose mouseclicks: ---
+    Result := CopyFile(PChar(Source), PChar(Target), {FailExist=}False);
+    Application.ProcessMessages;
+  end else
+  begin
+    // --- looses some mouse clicks: ---
+    Result := CopyFileExSh(Source, Target, {Confirm:Boolean=}False, {ARenameCheck:Boolean=}False);
+  end;
+end;
+
+function IsFolderEmpty(Folder: AnsiString): Boolean;
+var
+  Sr : TSearchRec;
+begin
+  Result := True;
+  if (FindFirst(IncludeTrailingPathDelimiter(Folder)+'*.*', faAnyFile, Sr) = 0) then
+  begin
+    Repeat
+      if (SR.Name <> '.') and (SR.Name <> '..') then
+      begin
+        Result := False;
+      end;
+    Until (SysUtils.FindNext(SR) <> 0) or (not Result);
+
+    FindClose(Sr);
+  end;
+end;
+
+constructor TTimerPerf.Create;
+begin
+  QueryPerformanceFrequency(PerfFreq);
+  QueryPerformanceCounter(PerfCtrCreate);
+  PerfCtrDelta := PerfCtrCreate;
+end;
+
+procedure TTimerPerf.SetPaused(const Value: Boolean);
+begin
+  if Value = FPaused then EXIT;
+
+  if Value then
+  begin
+    PauseTime := GetTimeSec;  // before FPaused = True!
+  end;
+
+  FPaused := Value;
+end;
+
+function TTimerPerf.GetTimeSec: Double;
+var
+  PerfCtr : TLargeInteger;  // counts per second
+begin
+  if Paused then
+  begin
+    Result := PauseTime;
+  end else
+  begin
+    QueryPerformanceCounter(PerfCtr);
+    Result := (PerfCtr-PerfCtrDelta) / PerfFreq;
+  end;
+end;
+
+function TTimerPerf.GetTimeMSec: TLargeInteger;
+begin
+  Result := Round(1000 * GetTimeSec);
+end;
+
+
+procedure CallRedrawWindow(Wnd: HWND);
+begin
+  // Ask the window and its children to repaint
+  RedrawWindow(Wnd,
+               nil,
+               0,
+               RDW_ERASE or RDW_INVALIDATE or RDW_FRAME or RDW_ALLCHILDREN);  //UpdateLayeredWindow
+end;
+
+procedure SetCapturedWindow(Wnd: HWND;
+  Layered, Transparent, TopMost, FullScreen, NoBorder, NoTaskButton, Hide: Boolean;
+  Alpha: Byte; RedrawFlg: Boolean = True);
+// Transparent only together with Layered!     // maybe SetWindowStyle(No)TopMost cures the problem:
+// the use of SetWindowPos forces update of Cached data set by SetWindowLong
+  function  BoolSelect(UseB: Boolean; A, B: HWND): HWND;
+  begin
+    if UseB then Result := B else Result := A;
+  end;
+  function  BoolFact(val: Boolean): Integer;
+  begin
+    if Val then Result := 1 else Result := 0;
+  end;
+  procedure WS_Style(var WS: Integer; WStyle: Integer; SetFlg: Boolean);
+  begin
+    if SetFlg then WS := WS or       WStyle
+              else WS := WS and (not WStyle);
+  end;
+var
+  WR   : TRect;
+  Ws__ : Integer;
+  WsEx : Integer;
+begin
+  if not IsWindow(Wnd) then EXIT;
+
+  GetWindowRect(Wnd, WR);
+
+  Ws__    := GetWindowLong(Wnd, GWL_STYLE);
+  WsEx    := GetWindowLong(Wnd, GWL_EXSTYLE);
+
+  WS_Style(WsEx, WS_EX_LAYERED,          Layered);
+  WS_Style(WsEx, WS_EX_TRANSPARENT,      Transparent);
+//  WS_Style(WsEx, WS_EX_APPWINDOW,        not NoTaskButton);
+//  WS_Style(WsEx, WS_EX_TOOLWINDOW,        not NoTaskButton);
+
+//WS_Style(Ws__, WS_MAXIMIZE,            FullScreen);    // initially maximized
+  WS_Style(Ws__, WS_BORDER,              not NoBorder);
+
+  SetWindowLong(Wnd, GWL_STYLE,   WS__);
+  SetWindowLong(Wnd, GWL_EXSTYLE, WSEx);
+
+  // uses SetWindowPos (updates cached data):
+//  if TopMost     then SetWindowStyleTopMost  (Wnd)
+//                 else SetWindowStyleNoTopMost(Wnd);
+
+  SetWindowPos(Wnd, BoolSelect(TopMost, HWND_NOTOPMOST, HWND_TOPMOST),   0, 0, 0, 0, 0
+//    or SWP_NOSIZE
+//    or SWP_SHOWWINDOW
+//    or SWP_NOMOVE
+//    or SWP_NOREPOSITION
+
+//  or SWP_ASYNCWINDOWPOS
+    // If the calling thread and the thread that owns the window are attached to
+    // different input queues, the system posts the request to the thread that
+    // owns the window. This prevents the calling thread from blocking its
+    // execution while other threads process the request.
+
+//  or SWP_DEFERERASE
+    //Prevents generation of the WM_SYNCPAINT message.
+
+//  or SWP_DRAWFRAME
+    //Draws a frame (defined in the window's class description) around the window.
+
+    or SWP_FRAMECHANGED
+    // Applies new frame styles set using the SetWindowLong function. Sends a
+    // WM_NCCALCSIZE message to the window, even if the window's size is not
+    // being changed. If this flag is not specified, WM_NCCALCSIZE is sent only
+    // when the window's size is being changed.
+
+//  or SWP_HIDEWINDOW
+    // Hides the window.
+
+    or SWP_NOACTIVATE
+    // Does not activate the window. If this flag is not set, the window is
+    // activated and moved to the top of either the topmost or non-topmost group
+    // (depending on the setting of the hWndInsertAfter parameter).
+
+//  or SWP_NOCOPYBITS
+    // Discards the entire contents of the client area. If this flag is not
+    // specified, the valid contents of the client area are saved and copied
+    // back into the client area after the window is sized or repositioned.
+
+    or SWP_NOMOVE
+    // Retains the current position (ignores X and Y parameters).
+
+//  or SWP_NOOWNERZORDER
+    // Does not change the owner window's position in the Z order.
+
+//  or SWP_NOREDRAW
+    // Does not redraw changes. If this flag is set, no repainting of any kind
+    // occurs. This applies to the client area, the nonclient area (including
+    // the title bar and scroll bars), and any part of the parent window
+    // uncovered as a result of the window being moved. When this flag is set,
+    // the application must explicitly invalidate or redraw any parts of the
+    // window and parent window that need redrawing.
+
+//  or SWP_NOREPOSITION
+    // Same as the SWP_NOOWNERZORDER flag.
+
+//  or SWP_NOSENDCHANGING
+    // Prevents the window from receiving the WM_WINDOWPOSCHANGING message.
+
+    or SWP_NOSIZE
+    // Retains the current size (ignores the cx and cy parameters).
+
+//  or SWP_NOZORDER
+    // Retains the current Z order (ignores the hWndInsertAfter parameter).
+
+//  or SWP_SHOWWINDOW
+    // Displays the window.
+
+    );
+
+
+  if Layered then
+    SetLayeredWindowAttributes(Wnd, 0, Alpha, LWA_ALPHA);
+
+  ShowWindow(Wnd, 0
+//  or SW_FORCEMINIMIZE
+    // Windows 2000/XP: Minimizes a window, even if the thread that owns the
+    // window is not responding. This flag should only be used when minimizing
+    // windows from a different thread.
+//    or (SW_HIDE * BoolFact(Hide))
+    // Hides the window and activates another window.
+    or (SW_MAXIMIZE * BoolFact(FullScreen))
+    // Maximizes the specified window.
+//  or SW_MINIMIZE
+    // Minimizes the specified window and activates the next top-level window in
+    // the Z order.
+    or (SW_RESTORE  * BoolFact(not FullScreen))
+    // Activates and displays the window. If the window is minimized or maximized,
+    // the system restores it to its original size and position. An application
+    // should specify this flag when restoring a minimized window.
+//    or (SW_SHOW * BoolFact(not Hide))
+    // Activates the window and displays it in its current size and position.
+//  or SW_SHOWDEFAULT
+    // Sets the show state based on the SW_ value specified in the STARTUPINFO
+    // structure passed to the CreateProcess function by the program that started
+    // the application.
+//  or SW_SHOWMAXIMIZED
+    // Activates the window and displays it as a maximized window.
+//  or SW_SHOWMINIMIZED
+    // Activates the window and displays it as a minimized window.
+//  or SW_SHOWMINNOACTIVE
+    // Displays the window as a minimized window. This value is similar to
+    // SW_SHOWMINIMIZED, except the window is not activated.
+//  or SW_SHOWNA
+    // Displays the window in its current size and position. This value is similar
+    // to SW_SHOW, except the window is not activated.
+//  or SW_SHOWNOACTIVATE
+    // Displays a window in its most recent size and position. This value is
+    // similar to SW_SHOWNORMAL, except the window is not actived.
+//  or SW_SHOWNORMAL
+    // Activates and displays a window. If the window is minimized or maximized,
+    // the system restores it to its original size and position. An application
+    // should specify this flag when displaying the window for the first time.
+    );
+
+  if Hide then
+  begin
+    ShowWindow(Wnd, SW_Hide);
+  end else
+  begin
+    ShowWindow(Wnd, SW_Show);
+    if RedrawFlg then CallRedrawWindow(Wnd);  // neccessary?
+  end;
+end;
+
+
+{v---------------------------
+procedure Test;
+const
+  fName = 'D:\XCT\DATABASE\save d efect XResults\XRESULTS.MB';  // 4'294'967'296
+var
+  fs, fs_B : Int64;
+begin
+  fs   := FileSizeInt64  (fName);
+  fs_B := FileSizeInt64_B(fName);
+if fs <> fs_B then
+begin
+if fs <> fs_B then;
+end;
+end;
+
+
+function CopyFileWithProgressBar2(TotalFileSize,
+  TotalBytesTransferred,
+  StreamSize,
+  StreamBytesTransferred: LARGE_INTEGER;
+  dwStreamNumber,
+  dwCallbackReason: DWORD;
+  hSourceFile,
+  hDestinationFile: THandle;
+  lpData: Pointer): DWORD; stdcall;
+
+begin
+  // just set size at the beginning
+
+//  if dwCallbackReason = CALLBACK_STREAM_SWITCH then
+//    TProgressBar(lpData).Max := TotalFileSize.QuadPart;
+
+//  TProgressBar(lpData).Position := TotalBytesTransferred.QuadPart;
+
+  Application.ProcessMessages;
+  Result := PROGRESS_CONTINUE;
+end;
+
+function
+  //TForm1.
+  CopyWithProgress(sSource, sDest: AnsiString): Boolean;
+begin
+  // set this FCancelled to true, if you want to cancel the copy operation
+  //FCancelled := False;
+  CancelGlb := False;
+  Result     := CopyFileEx(PChar(sSource), PChar(sDest),
+    //nil, //
+    @CopyFileWithProgressBar2,
+    nil, // ProgressBar1,
+    @CancelGlb,//@FCancelled,
+    0);
+end;
+
+
+procedure TestCopy;
+const
+  SrcName0 = 'C:\Temp\debug.txt';
+  SrcName1 = 'D:\XCT\DATABASE\save defect XResults\XRESULTS.MB';  // 4'294'967'296
+  DstName  = 'C:\Temp\debug copy.txt';
+var
+  Res : Boolean;
+begin
+//  Res := CallCopyFileEx   (SrcName0, DstName);
+    Res := CopyFileExSh     (SrcName0, DstName, False);
+//  Res := CopyWithProgress (SrcName0, DstName);
+//  if not Res then RaiseLastOSError;
+end;
+
+initialization
+//  Test;
+  TestCopy;
+{^---------------------------}
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  CancelGlb := False;      // this works fine!
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Initialization part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init); // 03.05.24 P.W
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.

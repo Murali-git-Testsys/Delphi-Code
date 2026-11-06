@@ -1,0 +1,947 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; changes: 3; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; changes: 8; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+(*.+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+(*+ ~ ~                                                    ) %15nV0.%22v) +*)
+(*+ Module Name/Vers.: @(#)XGlb V.:1.00                                 ) +*)
+(*+ Author           : P.Wueseke                                          +*)
+(*+ Date             : 28.07.95                                           +*)
+(*+ Description      : XBONEJOB MASKEN (!!!Copy von BONEGLB-OUTPUT)       +*)
+(*+ ~ ~                                                       : %15d%30w: +*)
+(*+ Last modified/By : 28.04.03 P.W / P.Wueseke                               +*)
+(*+ Date/Modification: 14.08.95 P.W / SlicesSymFlg                        +*)
+(*+ Date/Modification: 03.11.95 P.W / Depending on compilerswitch         +*)
+(*+ Date/Modification: 03.11.95 P.W / compile Version for XBONE or FEMUR  +*)
+(*+ Date/Modification: 16.01.96 P.W / "XBONE": Changed Parameters         +*)
+(*+ Date/Modification: 09.02.96 P.W / "XBONE": Reduced Parameters         +*)
+(*+ Date/Modification: 23.05.96 P.W / Unit moved to Q:\POOL for use update+*)
+(*+ Date/Modification: 03.06.96 P.W / FEMUR: ColScale, ColOffs            +*)
+(*+ Date/Modification: 19.11.96 Michael Welsch : HeadPrefixType added     +*)
+(*+ Date/Modification: 22.11.96 M.W disregarding the compiler switches    +*)
+(*+ FEMUR or XBONE, both DetRec-types are provided as                     +*)
+(*+ DetRecType_XBONE and DetRecType_FEM. If one switch is set,            +*)
+(*+ the concerning type is additionally assigned to DetRecType.           +*)
+(*+ PatInfoRecType is handled the same way!!                              +*)
+(*+ Date/Modification: 28.11.96 P.W / DetRecType_FEMUR: Add QAFLG ...     +*)
+(*+ Date/Modification: 28.11.96 P.W / FemHeadVers = $0003                 +*)
+(*+ Date/Modification: 11.12.96 P.W / Add: tXbJobPlusRec (FEMUR)          +*)
+(*+ Date/Modification: 16.01.97 P.W / Add Var VoxSizChrCT (FEMUR)         +*)
+(*+ Date/Modification: 07.03.97 P.W / Add Var Info_TubeCurrentMa  (FEMUR) +*)
+(*+ Date/Modification: 07.03.97 P.W + Add Var Info_TubePotentialKv(FEMUR) +*)
+(*+ Date/Modification: 11.03.97 P.W / HeadVersion : $0004         (FEMUR) +*)
+(*+ Date/Modification: 11.03.97 P.W + Add GroupNo, DistFlg, ...   (FEMUR) +*)
+(*+ Date/Modification: 11.03.97 P.W + Sup. Func. Fem_SlicePos, ...(FEMUR) +*)
+(*+ Date/Modification: 20.03.97 P.W + all transf.-> Unit XMeasGrp (FEMUR) +*)
+(*+ Date/Modification: 16.06.97 P.W / Unused Par. MeasQuality splitted    +*)
+(*+ Date/Modification: 17.06.97 P.W / FemHeadVers : $0005                 +*)
+(*+ Date/Modification: 19.06.97 P.W / New: Clip_MQ, CalcClip_MQ           +*)
+(*+ Date/Modification: 09.07.97 P.W / Func. CalcClip_MQ Sign inverted     +*)
+(*
+{19.02.02 P.W}
+  Def. SetDRChkSum and TstDRChkSum to allow detection when
+     (for Femur only) Header has been modified
+     uses the field "MeasInfo[4]" which is expected to be not used
+     until today.
+     The use for ChkSum will be marked by MeasInfo[4]:="ChkSum"
+     The ChkSum will be defined in the bytes behind this entry
+  XSlope and XInter are stored into the fields: Info_XSlope Info_XInter
+{25.09.02 P.W}
+  Most functions for chkSum moved to unit ChkSum.Pas
+  Only Procedure AddChkSumDR remains here
+{25.09.02 P.W}
+  no only support compilation for "Femur" and not for "XBONE"
+{28.04.03 P.W}
+  PatInfoRecType_FEM : New field added: Info_DbHeaderPlus
+19.07.05 P.W:
+  PatInfoRecType_FEM : New field added: DummyCt
+22.07.05 P.W SVPLUS: ZPos_NumSteps_Org replaces ZUserOffs which was never used
+20.12.06 P.W SliceNoGrp renamed to SliceNoGrpLoByte and SliceNoGrpHiByte added.
+  use function  GetSliceNoGrp and procedure SetSliceNoGrp to Get or Set them.
+26.01.09 P.W: Support Orientation Information
+18.11.09 P.W: MinColScale MaxColScale from SvMen.pas to here
+*)
+(*+ Date/Modification  (end of list)                                      +*)
+(*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.*)
+
+Unit XGlb;
+
+Interface
+
+Uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  ChkSum,        {25.09.02 P.W}
+  GlbType;
+
+Type  {19.11.96 Michael Welsch, definitions for all projects:}
+
+  HeadPrefixType   = Packed Record {19.11.96 Michael Welsch} // "Record" to "Packed Record" Chg#1574 (02.03.04 P.W)
+    HeadVers       : LongInt;
+    HeadLen        : LongInt;
+  end;
+
+Type {here from ScanIo1.Pas since: 25.09.02 P.W}
+  HeadPart1RecType = Packed Record // "Record" to "Packed Record" Chg#1575 (02.03.04 P.W)
+    HeadVers       : LongInt;
+    HeadLen        : LongInt;
+    MaxNumScans    : LongInt;
+    NumScans       : LongInt;
+  end;
+
+Const
+
+  MinColScale                     =     0.1;  // 18.11.09 P.W from SvMen.pas for use by UtKnApp
+  MaxColScale                     =   400.0;
+
+  SizHeadPart1     = SizeOf(HeadPart1RecType);
+  // FemHeadVers may be increased but must be below 9000 = HVersB510_CTN which is defined in BnHead0.pas
+  {FemHeadVers     = $0003;  {28.11.96 P.W}
+  {FemHeadVers     = $0004;  {11.03.97 P.W}
+  FemHeadVers      = $0005;  {17.06.97 P.W} {sup. MeasQuality_Range...}
+  CT_FS_LimitDelete= 10000;  {17.04.97 P.W} {from CtFem}
+
+{--------------------------------------------------------------------}
+{---           Definitions used for XBone Version 5.20:           ---}
+{--------------------------------------------------------------------}
+
+Type
+
+  PatInfoRecType_XBONE        = Packed Record // "Record" to "Packed Record" Chg#1576 (02.03.04 P.W)
+    { EMPTY! }
+  end;
+
+{
+Type    Original : INIT\XBONE.MSK Written by BONEGLB
+  tXboneRec = Record
+}
+{--------------------------------------------------------------------}
+{Since 16.01.96 P.W}
+Type
+  // DetRecType_XBONE is for XCT521 software (Old pQCT)
+  DetRecType_XBONE      = Packed Record // "Record" to "Packed Record" Chg#1577 (02.03.04 P.W)
+    DELTACT             : Single      ; {  1}
+    CountryCodeGlb      : Word        ; {  2}
+    USA_Flg             : Boolean     ; {  3}
+    Res_Opt             : Word        ; {  4}
+    VoxelSizeChar       : Char        ; {  5}
+    ChanCorrCtHalo      : Single      ; {  6}
+    ParamVers           : String40    ; {  7}
+    SerialNo            : String40    ; {  8}
+    EpromMotorVers      : String40    ; {  9}
+    EpromCounterVers    : String40    ; { 10}
+    OffsetCenter        : Single      ; { 11}
+    ImpXmax             : Longint     ; { 12}
+    HorizPosMaxMm       : Single      ; { 13}
+    LightPointPos       : Single      ; { 14}
+    NumRefLines         : Word        ; { 15}
+    RefLine_1           : Single      ; { 16}
+    RefLine_2           : Single      ; { 17}
+    RefLine_3           : Single      ; { 18}
+    RefLine_4           : Single      ; { 19}
+    RefLine_5           : Single      ; { 20}
+    NumMeasGroups       : Word        ; { 21}
+    SlicesSymFlg        : Boolean     ; { 22}
+    PercentFlg          : Boolean     ; { 23}
+    PercentRule_1       : Single      ; { 24}
+    RefLineNo_1         : Word        ; { 25}
+    NumSlices_1         : Word        ; { 26}
+    SliceDist_1         : Single      ; { 27}
+    PercentRule_2       : Single      ; { 28}
+    RefLineNo_2         : Word        ; { 29}
+    NumSlices_2         : Word        ; { 30}
+    SliceDist_2         : Single      ; { 31}
+    PercentRule_3       : Single      ; { 32}
+    RefLineNo_3         : Word        ; { 33}
+    NumSlices_3         : Word        ; { 34}
+    SliceDist_3         : Single      ; { 35}
+    PercentRule_4       : Single      ; { 36}
+    RefLineNo_4         : Word        ; { 37}
+    NumSlices_4         : Word        ; { 38}
+    SliceDist_4         : Single      ; { 39}
+    PercentRule_5       : Single      ; { 40}
+    RefLineNo_5         : Word        ; { 41}
+    NumSlices_5         : Word        ; { 42}
+    SliceDist_5         : Single      ; { 43}
+    SlicePauseSec       : Smallint     ; { 44}
+    TubeCurrent         : Single      ; { 45}
+    PhantomDensity      : Single      ; { 46}
+    Speed_SV            : Longint     ; { 47}
+    Speed_CT            : Longint     ; { 48}
+    Speed_DXA           : Longint     ; { 49}
+    Speed_DXB           : Longint     ; { 50}
+    Speed_DXC           : Longint     ; { 51}
+    Speed_DXD           : Longint     ; { 52}
+    Speed_DXE           : Longint     ; { 53}
+    Speed_DXF           : Longint     ; { 54}
+    VoxelSizeFlg        : Boolean     ; { 55}
+    MultiSliceFlg       : Boolean     ; { 56}
+    ContCalcFlg         : Boolean     ; { 57}
+    ServiceFlg          : Boolean     ; { 58}
+    ProtFlg             : Boolean     ; { 59}
+    ErrProtFileFlg      : Boolean     ; { 60}
+    DeviceVers          : Char        ; { 61}
+    DeviceTyp           : String12    ; { 62}
+    QA_AutomaticFlg     : Boolean     ; { 63}
+    QAFlg               : Boolean     ; { 64}
+    ForcedZeroFlg       : Boolean     ; { 65}
+    ScrSavMin           : Single      ; { 66}
+    Shadow1X            : Single      ; { 67}
+    Shadow1Y            : Single      ; { 68}
+    Shadow2X            : Single      ; { 69}
+    Shadow2Y            : Single      ; { 70}
+    StartPosRot         : Single      ; { 71}
+    ImpPerMMx           : Single      ; { 72}
+    ImpPerMMz           : Single      ; { 73}
+    SvStartPosMm        : Single      ; { 74}
+    SvNumLines          : Word        ; { 75}
+    SvDet               : Word        ; { 76}
+    SvLineDistMm        : Single      ; { 77}
+    CtHorizMmGlb        : Single      ; { 78}
+    LongAddXA           : Longint     ; { 79}
+    LongAddXB           : Longint     ; { 80}
+    LongAddXC           : Longint     ; { 81}
+    LongAddXD           : Longint     ; { 82}
+    LongAddXE           : Longint     ; { 83}
+    LongAddXF           : Longint     ; { 84}
+    DiaMeterUse         : Single      ; { 85}
+    DiaMeterWork        : Single      ; { 86}
+    DeltaOffsLimit      : Longint     ; { 87}
+    DeltaOffsLimitQa    : Longint     ; { 88}
+    DeltaPosHor         : Longint     ; { 89}
+    DeltaPosRot         : Longint     ; { 90}
+    LongSwitchMin       : Longint     ; { 91}
+    LongSwitchMax       : Longint     ; { 92}
+    LongZeroEndLimit    : Longint     ; { 93}
+    ColorScale          : Single      ; { 94}
+    DeltaPercDet        : Single      ; { 95}
+    DeltaPercScan       : Single      ; { 96}
+    DeltaPercTime       : Single      ; { 97}
+    XctWaitSec          : Single      ; { 98}
+    LastOffset          : String80    ; { 99}
+    Pat_FamilyName      : String30    ; {100}
+    Pat_PreName         : String30    ; {101}
+    PatId               : String20    ; {102}
+    Pat_SexGer          : Char        ; {103}
+    Pat_BirthL          : Longint     ; {104}
+    ScanDateL           : Longint     ; {105}
+    ScanTimeL           : Longint     ; {106}
+    Pat_Number          : Longint     ; {107}
+    Pat_ObjSide         : Char        ; {108}
+    Pat_ObjLength       : Single      ; {109}
+    Pat_EthnicGrp       : Char        ; {110}
+    MeasNo              : Longint     ; {111}
+    MeasComment         : String20    ; {112}
+    SymbolName          : String12    ; {113}
+    ModifyOptions       : Word        ; {114}
+    AutoFlg             : Boolean     ; {115}
+    CtMeasFlg           : Boolean     ; {116}
+    CtStartPosManFlg    : Boolean     ; {117}
+    SvMeasFlg           : Boolean     ; {118}
+    SvStartPosManFlg    : Boolean     ; {119}
+    SVO_AName           : String [079]; {120}
+    SVO_Name            : String [079]; {121}
+    SVN_AName           : String [079]; {122}
+    SVN_Name            : String [079]; {123}
+    CTR_AName           : String [079]; {124}
+    CTB_AName           : String [079]; {125}
+    CTB_Name            : String [079]; {126}
+    SvMirrorSideFlg     : Boolean     ; {127}
+    SvMirrorTopFlg      : Boolean     ; {128}
+    CtMirrorSideFlg     : Boolean     ; {129}
+    CtMirrorTopFlg      : Boolean     ; {130}
+    CheckInit           : Boolean     ; {131}
+  end;
+{--------------------------------------------------------------------}
+(*
+{Until 16.01.96 P.W}
+Type
+  PDetRec               = ^DetRecType;
+  DetRecType            = Record
+    DELTACT             : Single      ; {  1}
+    PRN_TYP_W           : Word        ; {  2}
+    PRN_TYP_SL          : String [040]; {  3}
+    PRN_RES_WL          : Word        ; {  4}
+    PRN_PQY_SL          : String [040]; {  5}
+    PRN_TYP             : String [040]; {  6}
+    PRN_RES             : Word        ; {  7}
+    PRN_PQY             : Word        ; {  8}
+    PRN_NUM             : Word        ; {  9}
+    PRN_EXT             : Boolean     ; { 10}
+    PRN_OPT             : Boolean     ; { 11}
+    DeviceName          : String [040]; { 12}
+    CountryCodeGlb      : Word        ; { 13}
+    USA_Flg             : Boolean     ; { 14}
+    Res_Opt             : Word        ; { 15}
+    Institut_1          : String [080]; { 16}
+    Institut_2          : String [080]; { 17}
+    Institut_3          : String [080]; { 18}
+    VoxelSizeChar       : Char        ; { 19}
+    VoxelSize           : Single      ; { 20}
+    ChanCorrCtHalo      : Single      ; { 21}
+    DistSourceCenter    : Single      ; { 22}
+    ParamVers           : String [040]; { 23}
+    SerialNo            : String [040]; { 24}
+    EpromMotorVers      : String [040]; { 25}
+    EpromCounterVers    : String [040]; { 26}
+    OffsetCenter        : Single      ; { 27}
+    ImpXmax             : Longint     ; { 28}
+    HorizPosMaxMm       : Single      ; { 29}
+    LightPointPos       : Single      ; { 30}
+    NumRefLines         : Word        ; { 31}
+    RefLine_1           : Single      ; { 32}
+    RefLine_2           : Single      ; { 33}
+    RefLine_3           : Single      ; { 34}
+    RefLine_4           : Single      ; { 35}
+    RefLine_5           : Single      ; { 36}
+    NumMeasGroups       : Word        ; { 37}
+    SlicesSymFlg        : Boolean     ; { 38}
+    PercentRule_1       : Single      ; { 39}
+    RefLineNo_1         : Word        ; { 40}
+    NumSlices_1         : Word        ; { 41}
+    SliceDist_1         : Single      ; { 42}
+    PercentRule_2       : Single      ; { 43}
+    RefLineNo_2         : Word        ; { 44}
+    NumSlices_2         : Word        ; { 45}
+    SliceDist_2         : Single      ; { 46}
+    PercentRule_3       : Single      ; { 47}
+    RefLineNo_3         : Word        ; { 48}
+    NumSlices_3         : Word        ; { 49}
+    SliceDist_3         : Single      ; { 50}
+    PercentRule_4       : Single      ; { 51}
+    RefLineNo_4         : Word        ; { 52}
+    NumSlices_4         : Word        ; { 53}
+    SliceDist_4         : Single      ; { 54}
+    PercentRule_5       : Single      ; { 55}
+    RefLineNo_5         : Word        ; { 56}
+    NumSlices_5         : Word        ; { 57}
+    SliceDist_5         : Single      ; { 58}
+    SlicePauseSec       : Smallint     ; { 59}
+    TubeCurrent         : Single      ; { 60}
+    PhantomDensity      : Single      ; { 61}
+    Speed_SV            : Longint     ; { 62}
+    Speed_CT            : Longint     ; { 63}
+    Speed_DXA           : Longint     ; { 64}
+    Speed_DXB           : Longint     ; { 65}
+    Speed_DXC           : Longint     ; { 66}
+    Speed_DXD           : Longint     ; { 67}
+    Speed_DXE           : Longint     ; { 68}
+    Speed_DXF           : Longint     ; { 69}
+    VoxelSizeFlg        : Boolean     ; { 70}
+    MultiSliceFlg       : Boolean     ; { 71}
+    ContCalcFlg         : Boolean     ; { 72}
+    ServiceFlg          : Boolean     ; { 73}
+    ProtFlg             : Boolean     ; { 74}
+    ErrProtFileFlg      : Boolean     ; { 75}
+    DeviceVers          : Char        ; { 76}
+    QA_AutomaticFlg     : Boolean     ; { 77}
+    QAFlg               : Boolean     ; { 78}
+    ForcedZeroFlg       : Boolean     ; { 79}
+    ScrSavMin           : Single      ; { 80}
+    Shadow1X            : Single      ; { 81}
+    Shadow1Y            : Single      ; { 82}
+    Shadow2X            : Single      ; { 83}
+    Shadow2Y            : Single      ; { 84}
+    StartPosRot         : Single      ; { 85}
+    ImpPerMMx           : Single      ; { 86}
+    ImpPerMMz           : Single      ; { 87}
+    SvStartPosMm        : Single      ; { 88}
+    SvNumLines          : Word        ; { 89}
+    SvDet               : Word        ; { 90}
+    SvLineDistMm        : Single      ; { 91}
+    CtHorizMmGlb        : Single      ; { 92}
+    LongAddXA           : Longint     ; { 93}
+    LongAddXB           : Longint     ; { 94}
+    LongAddXC           : Longint     ; { 95}
+    LongAddXD           : Longint     ; { 96}
+    LongAddXE           : Longint     ; { 97}
+    LongAddXF           : Longint     ; { 98}
+    DiaMeterUse         : Single      ; { 99}
+    DiaMeterWork        : Single      ; {100}
+    DeltaOffsLimit      : Longint     ; {101}
+    DeltaOffsLimitQa    : Longint     ; {102}
+    DeltaPosHor         : Longint     ; {103}
+    DeltaPosRot         : Longint     ; {104}
+    LongSwitchMin       : Longint     ; {105}
+    LongSwitchMax       : Longint     ; {106}
+    LongZeroEndLimit    : Longint     ; {107}
+    ColorScale          : Single      ; {108}
+    CountsAlarm         : Word        ; {109}
+    CountsMin           : Word        ; {110}
+    DeltaPercDet        : Single      ; {111}
+    DeltaPercScan       : Single      ; {112}
+    DeltaPercTime       : Single      ; {113}
+    ScanTimeHSum        : Single      ; {114}
+    TubePotential       : Single      ; {115}
+    XctWaitSec          : Single      ; {116}
+    QA_Days             : Word        ; {117}
+    SLFact_XA           : Single      ; {118}
+    SLFact_XB           : Single      ; {119}
+    SLFact_XC           : Single      ; {120}
+    SLFact_XD           : Single      ; {121}
+    SLFact_XE           : Single      ; {122}
+    SLFact_XF           : Single      ; {123}
+    LastOffset          : String [080]; {124}
+    ArmLenMin           : Single      ; {125}
+    ArmLenMax           : Single      ; {126}
+    Pat_FamilyName      : String [030]; {127}
+    Pat_PreName         : String [030]; {128}
+    Pat_Title           : String [020]; {129}
+    Pat_SexGer          : Char        ; {130}
+    Pat_BirthL          : Longint     ; {131}
+    ScanDateL           : Longint     ; {132}
+    ScanTimeL           : Longint     ; {133}
+    Pat_Number          : Longint     ; {134}
+    Pat_ArmSide         : Char        ; {135}
+    Pat_ArmLength       : Single      ; {136}
+    Pat_EthnicGrp       : Char        ; {137}
+    MeasNo              : Longint     ; {138}
+    DeadTimeMySec       : Single      ; {139}
+    AutoFlg             : Boolean     ; {140}
+    CtMeasFlg           : Boolean     ; {141}
+    CtStartPosManFlg    : Boolean     ; {142}
+    SvMeasFlg           : Boolean     ; {143}
+    SvStartPosManFlg    : Boolean     ; {144}
+    SVO_AName           : String [079]; {145}
+    SVO_Name            : String [079]; {146}
+    SVN_AName           : String [079]; {147}
+    SVN_Name            : String [079]; {148}
+    CTR_AName           : String [079]; {149}
+    CTB_AName           : String [079]; {150}
+    CTB_Name            : String [079]; {151}
+    SvMirrorSideFlg     : Boolean     ; {152}
+    SvMirrorTopFlg      : Boolean     ; {153}
+    CtMirrorSideFlg     : Boolean     ; {154}
+    CtMirrorTopFlg      : Boolean     ; {155}
+    CheckInit           : Boolean     ; {156}
+  end;
+*)
+{--------------------------------------------------------------------}
+
+{--------------------------------------------------------------------}
+{---           Definitions used for FEMUR  (Vers. 1.00):          ---}
+{--------------------------------------------------------------------}
+
+type
+  tOrientDirRec = packed record  // 26.01.09 P.W   stored on disk!  Unit OrientDirUse.pas
+                                 // in case of modifications: adapt PatInfoRecType_FEM and BnHead0.pas THeadRec
+    VersionNrHead            : Word;         { 2 Byte}
+      {VersionNrHead will be set with value XctVersion.VersionNrHead ; start with 6201 all before are zero}
+    VersionNrImage           : Word;         { 2 Byte  only in Image files set by Backprojection(I*.*) or SvComp (S*.I??)}
+    Info_MirrorBits          : Byte;         { 1 Byte  contains CtMirrorHoriz bit 0 .. SVMirrorVert bit 3}
+    CtPixRowDir              : Byte;         { 1 Byte}  // sup. up to two letters: HFLRAP  (numbered 1..6) low 4 bits for first letter
+    CtPixColDir              : Byte;         { 1 Byte}
+    SvPixRowDir              : Byte;         { 1 Byte}
+    SvPixColDir              : Byte;         { 1 Byte}
+  end;
+
+  PatInfoRecType_FEM        = Packed Record // "Record" to "Packed Record" Chg#1578 (02.03.04 P.W)
+    RecSize                  : LongInt;     { = SizeOf(PatInfoRecType) }
+
+    PatGender                : Word;
+    PatEthnicGrp             : Word;
+    PatMeasNo                : Word;        { Patients meas number }
+    PatNo                    : LongInt;     { Patient number }
+    PatBirth                 : LongInt;
+    PatMenoAge               : LongInt;
+    PatName                  : String40;    { Patient familyname & firstname }
+     ZeroChar1               : Char;
+    PatTitle                 : String40;
+     ZeroChar2               : Char;
+    PatComment               : String80;
+     ZeroChar3               : Char;
+    {Free                    : Array[1..256] of Byte;}
+    {----------------------------------------------------------------}
+    {since 11.07.97 P.W}
+    MeasTime                 : LongInt;      { 4 Byte}
+    UserId                   : String12;     {13 Byte}
+    PatId                    : String12;     {13 Byte}
+    Ethnic                   : String12;     {13 Byte}
+    MeasMode                 : String12;     {13 Byte}
+    MacroNo                  : String12;     {13 Byte}
+    AnaMacro                 : String12;     {13 Byte}
+    {Free                    : Array[1..174] of Byte;}
+    {----------------------------------------------------------------}
+    {since 28.04.03 P.W}
+    Info_DbHeaderPlus        : String40;     {41 Byte}    {28.04.03 P.W}
+                           {set by FemPrep}
+    {Free                    : Array[1..133] of Byte;}
+    {----------------------------------------------------------------}
+    {since 19.07.05 P.W}
+    DummyCT                  : Boolean;      { 1 Byte  true if dummy ct for Sv without CT}
+
+    {Free                    : Array[1..132] of Byte;}
+    {----------------------------------------------------------------}
+    {since 26.01.09 P.W  for orientation information in CT and SV images}
+    OrientDirRec             : TOrientDirRec;
+
+    Free                     : Array[1..123] of Byte;   { Reserved; used to keep size constant}
+    {----------------------------------------------------------------}
+  end;
+
+Const
+  MaxNumDet             = 32;      {!!! Duplicate}
+  Opt_ScanForward       = $01;   // 24.08.09 P.W
+  Opt_BlockForward      = $02;   // 24.08.09 P.W
+
+Type
+
+  PDetRec_FEM           = ^DetRecType_FEM; {19.02.02 P.W}
+  DetRecType_FEM        = Packed Record // "Record" to "Packed Record" Chg#1579 (02.03.04 P.W)
+    (* --- added: 12.07.94 P.W  *)
+    RecSize             : LongInt;     { = SizeOf(DetRecType) }
+    (* *)
+
+    {--- Input and Calculated: ---}
+    VoxelSize           : Double;
+    {--- Input ---}
+    NumIntv             : Word;   {total number of intervals                }
+    AirRadius           : Double; {radius to take airvalues                 }
+    NumSlices           : Word;   {total number of slices                   }
+    SliceStart          : Double; {Z-Pos of first slice [mm]                }
+    SliceDist           : Double; {DeltaZ between two slices [mm]           }
+    SlicePause          : Word;   {Seconds pause between Slices             }
+    NumBlocks           : Word;   {Number of Blocks                         }
+    BlockPause          : Word;   {Seconds pause between Blocks             }
+    WaitSec             : Word;   {Seconds to wait after HV is switched on  }
+    {--- Input ---}
+    DistSourceCenter    : Double; {Distance source to rotation center [mm]  }
+    OffSetCenterMm      : Double; {x-axis: Distance zero-pos to center [mm] }
+    AddValueMm          : Double; {value added to start and end of measrange}
+    SLVoxelSizeRef      : Double; {reference voxelsize to calculate SLFactor}
+    SLFactorRef         : Double; {reference SLFactor to calculate SLFactor }
+    {--- Calculated ---}
+    SLFactor            : Double; {SLFactor:=SLFactorRef/SLVoxelSizeRef*VoxelSize}
+    {--- Input ---}
+    DeadTimeMySec       : Double; {Deadtime of detectors in microseconds    }
+    BeamHard_SF1        : Double; {Parameter SF1 for beam hardening corr.   }
+    BeamHard_SF2        : Double; {Parameter SF2 for beam hardening corr.   }
+    BeamHard_SF3        : Double; {Parameter SF3 for beam hardening corr.   }
+    BeamHard_SF4        : Double; {Parameter SF4 for beam hardening corr.   }
+    Delta_Theta         : Double; {Angle between two detectors              }
+    DetDir              : Smallint;{+1: increase Angle with DetNo; -1: invers}
+    Theta_Det1          : Double; {Angle Theta of physical Det1             }
+    FirstUsedDet        : Word;   {First Physikal Detector to be used       }
+    NumDet              : Word;   {Number of Dets to be used,               }
+    ImpPerMmX           : Double;
+    ImpPerDeg           : Double;
+    ImpPerMmZ           : Double;
+    TimRefScale         : Double;
+    InterValTime        : Double;
+    DetNumByte          : Byte;
+    TimRefNumByte       : Byte;
+    PosRefNumByte       : Byte;
+    DetEprFromDetPhys : Array[1..MaxNumDet] of Byte;  {20.04.94 P.W} {input}
+    StartAngle          : Double; {Offset of Angle                          }
+    OddBlockDir         : Smallint;{+1: odd blocks increase Angle with ScanNo}
+                                  {-1: odd blocks decrease Angle with ScanNo}
+    OddScanDir          : Smallint;{+1: odd scans increase Xpos with IntvNo}
+                                  {-1: odd scans decrease Xpos with IntvNo}
+    SystemDir           : Smallint;{+1: right handed system                  }
+                                  {-1: left handed system                   }
+    MirrorDir           : Smallint;{+1: do not invert picture                }
+                                  {-1: invert picture                       }
+    {--- Calculated ---}
+    LastUsedDet         : Word;                               {Output}
+    NumBScans           : Word;                               {Output}
+    NumBProj            : Word;                               {Output}
+    NumBProjUsed        : Word;                               {Output}
+    NumBProjUnused      : Word;                               {Output}
+    NumAllProjUsed      : Word;                               {Output}
+    StepAngle           : Double;                             {Output}
+    Delta_Angle         : Double;                             {Output}
+    IntvNumByte         : Byte;                               {Output}
+    {-------------------------}
+
+    (* --- added: 16.05.94 P.W (to adapt vxsv1.pas) *)
+      ZPos_Start        : Double; { [mm] }         {Input}
+      ZPos_DiffRefMeas  : Double; { [mm] }      {Output} {Input}
+      ZPos_MeasCT       : Double; { [mm] }         {Input}
+      ZPos_Step         : Double; { [mm] }         {Input}   // distance between Sv Lines
+      ObjLen            : Double; { [mm] }         {Input}
+      Percent           : Double; { [%]  }         {Input}
+    (* *)
+
+    (* --- added: 04.07.94 P.W  *)
+      ZPos_NumSteps     : Word;   { [1]  }         {Input}
+      MSpeed_MmPerSec   : Double; { [mm/Sec] }     {Output}
+      MTime_mSecPerIntv : Double; { [mSec/Intv] }  {Output}
+      MTime_SecPerScan  : Double; { [Sec/Scan] }   {Output}
+      MTime_SecPerSlice : Double; { [Sec/Slice] }  {Output}
+      RateMin           : Double; { [Counts/Sec] } {Input}
+      RateMax           : Double; { [Counts/Sec] } {Input}
+    (* *)
+
+    (* --- added: 12.07.94 P.W  *)
+      SampleTimeMySec   : Double; { [mySec] }      {Input}
+
+      XUserDir          : Smallint;{ [1]  }         {Input}
+      {--------------------------------------------------------------}
+      {until 19.02.02 P.W} {Unused}
+      {XUserOffs         : Double; { [mm] }         {Input}
+      {XPos_Min          : Double; { [mm] }         {Input}
+      {--------------------------------------------------------------}
+      {since 19.02.02 P.W :}
+      Info_XSlope       : Double; {      }         {Input}
+      Info_XInter       : Double; {      }         {Input}
+                            {Copy from GlbDevTypPtr}
+                            {Copy done in XbJob}
+      {--------------------------------------------------------------}
+      XPos_Max          : Double; { [mm] }         {Input}
+      XV_Min            : Double; { [mm/Sec] }     {Input}
+      XV_Max            : Double; { [mm/Sec] }     {Input}
+      XAcc              : Double; { [mm/Sec/Sec] } {Input}
+      XV_0              : Double; { [mm/Sec] }     {Input}
+      XV_1              : Double; { [mm/Sec] }     {Input}
+      XV_2              : Double; { [mm/Sec] }     {Input}
+      XV_S              : Double; { [mm/Sec] }     {Input}
+      XV_M              : Double; { [mm/Sec] }     {Input}
+
+      YUserDir          : Smallint;{ [1]  }         {Input}
+      YUserOffs         : Double; { [mm] }         {Input}
+      YPos_Min          : Double; { [mm] }         {Input}
+      YPos_Max          : Double; { [mm] }         {Input}
+      YV_Min            : Double; { [mm/Sec] }     {Input}
+      YV_Max            : Double; { [mm/Sec] }     {Input}
+      YAcc              : Double; { [mm/Sec/Sec] } {Input}
+      YV_0              : Double; { [mm/Sec] }     {Input}
+      YV_1              : Double; { [mm/Sec] }     {Input}
+      YV_2              : Double; { [mm/Sec] }     {Input}
+      YV_S              : Double; { [mm/Sec] }     {Input}
+      YV_M              : Double; { [mm/Sec] }     {Input}
+
+      ZUserDir          : Smallint;{ [1]  }         {Input}
+
+      {--------------------------------------------------------------}
+      {until 22.07.05} {Unused}
+      {ZUserOffs         : Double;}{ [mm] }         {Input}
+      {--------------------------------------------------------------}
+      {since 22.07.05}
+      ZPos_NumSteps_Org : Word; {Value of ZPos_NumSteps before SVPLUS}
+      Free_W1_Options   : Word;  // "Free_W1" -> "Free_W1_Options" 24.08.09 P.W
+      Free_W2           : Word;
+      Free_W3           : Word;
+      {--------------------------------------------------------------}
+
+      ZPos_Min          : Double; { [mm] }         {Input}
+      ZPos_Max          : Double; { [mm] }         {Input}
+      ZV_Min            : Double; { [mm/Sec] }     {Input}
+      ZV_Max            : Double; { [mm/Sec] }     {Input}
+      ZAcc              : Double; { [mm/Sec/Sec] } {Input}
+      ZV_0              : Double; { [mm/Sec] }     {Input}
+      ZV_1              : Double; { [mm/Sec] }     {Input}
+      ZV_2              : Double; { [mm/Sec] }     {Input}
+      ZV_S              : Double; { [mm/Sec] }     {Input}
+      ZV_M              : Double; { [mm/Sec] }     {Input}
+
+      MeasInfo          : Array[1..4] of String80;
+                            {MeasInfo[3] anyhow used by FemSvIo for MeasNo_H}
+                            {MeasInfo[4] Used for SetDRChkSum s.: 19.02.02 P.W}
+                            {especially see XBJOB.EXE (XbJob0)
+                              MeasInfo[1] : SV or CT ; (MeasInfo_SV/CT)
+                              MeasInfo[2] : MeasComment; (MeasInfo2)
+                              MeasInfo[3] : MeasNo     ; (MeasInfo3)
+                              MeasInfo[4] : CheckSum   ; (MeasInfo4)
+                            }
+      MeasDate          : LongInt;
+      MeasType          : LongInt;
+      MeasState         : LongInt;
+
+      {--------------------------------------------------------------}
+      {until 16.06.97 P.W} {Unused}
+      {MeasQuality       : LongInt;}
+      {--------------------------------------------------------------}
+      {since 16.06.97 P.W}
+      MeasQuality_Free   : ShortInt; {not used}
+      MeasQuality_LN     : ShortInt; {LnCheck}
+      MeasQuality_Offset : ShortInt; {OffsetCheck}
+      MeasQuality_Range  : ShortInt; {Arm-Range-Check}
+                                     {  -120 ..  -1 : out of Range}
+                                     {     0 .. 120 : in Range    }
+                                     {[Percent of Measdiameter]   }
+      {--------------------------------------------------------------}
+
+
+      {29.07.94 P.W:}
+      IntvNoNumByte     : Byte;                         {Input}
+      ChkSumNumByte     : Byte;                         {Input}
+      HexFlg            : Boolean;                      {Input}
+      DetPhysFromDetEpr : Array[1..MaxNumDet] of Byte;  {OUTPUT}
+
+      {--------------------------------------------------------------}
+      {From 03.08.94 P.W until 03.06.96 P.W :}
+      (*
+      {never used Fields:}
+      Ell_X0            : Double; { [mm] }              {Input}
+      Ell_Y0            : Double; { [mm] }              {Input}
+      Ell_A             : Double; { [mm] }              {Input}
+      Ell_B             : Double; { [mm] }              {Input}
+      Ell_Phi           : Double; { [°]  }              {Input} //OemToAnsi Chg#1584 (02.03.04 P.W)
+      *)
+      {---------------------------}
+      {since 03.06.96 P.W :}
+      ColScale          : Single;
+      ColOffs           : Single;
+      {Reserve          : Array[1..32] of Byte;} {until 28.11.96 P.W}
+      {---------------------------}
+      {since 28.11.96 P.W :}
+      QaFlg             : Boolean;     { 1 Byte }
+      Sv_Comp_Delta     : Single;      { 4 Byte }
+      DeviceTyp         : String12;    {13 Byte!}
+
+      {Reserve          : Array[1..14] of Byte;}
+      {---------------------------}
+      {since 16.01.97 P.W :}
+      VoxSizChrCT       : Char;        { 1 Byte }
+
+      {Reserve          : Array[1..13] of Byte;}
+      {---------------------------}
+      {since 07.03.97 P.W :}
+      Info_TubeCurrentMa:   Single;    { 4 Byte } {Copy from Device.Snr!}
+      Info_TubePotentialKv: Single;    { 4 Byte } {Copy from Device.Snr!}
+                                                  {Copy done in XbJob}
+
+      {Reserve          : Array[1.. 5] of Byte;}
+      {---------------------------}
+      {since 11.03.97 P.W :}
+      GroupNo           : Byte;        { 1 Byte }
+      SliceNoGrpLoByte  : Byte;        { 1 Byte }  // 20.12.06 P.W renamed from SliceNoGr
+      DistFlg           : Boolean;     { 1 Byte } {id. to not PercentFlg}
+      AsymFlg           : Boolean;     { 1 Byte } {id. to not SlicesSymFlg}
+
+      {Reserve           : Array[1.. 1] of Byte;}
+      {--------------------------------------------------------------}
+      {since 20.12.06 P.W :}
+      SliceNoGrpHiByte  : Byte;        { 1 Byte }
+      {--------------------------------------------------------------}
+  end;
+
+function  GetSliceNoGrp(const DRF: DetRecType_FEM): Integer;           // 20.12.06 P.W
+procedure SetSliceNoGrp(var DRF: DetRecType_Fem; SliceNoGrp: Integer); // 20.12.06 P.W
+
+{--------------------------------------------------------------------}
+{--------------------------------------------------------------------}
+
+Type
+  PicInfoRecType   = Packed Record      {from XGLB_FB to XGLB: 25.09.02 P.W} // "Record" to "Packed Record" Chg#1580 (02.03.04 P.W)
+    RecSize        : LongInt;    { = SizeOf(PicInfoRecType) }
+
+    PicX0          : Word;            { Usage: RoiEcke fürs Ausstanzen } //OemToAnsi Chg#1583 (02.03.04 P.W)
+    PicY0          : Word;            { Usage: RoiEcke fürs Ausstanzen } //OemToAnsi Chg#1582 (02.03.04 P.W)
+    PicMatrixX     : Word;
+    PicMatrixY     : Word;
+    PicVoxelSizeX  : Real48; {!!!(real)} // Real -> Real48: 11.10.04 P.W.
+    PicVoxelSizeY  : Real48; {!!!(real)} // Real -> Real48: 11.10.04 P.W.
+    Free           : Array[1..64] of Byte;
+  end;
+
+Const
+  BoneFlg               : Boolean = False;
+  FemFlg                : Boolean = True;
+  CompDefMsg            = 'FEMUR';
+
+Type
+  DetRecType            = DetRecType_FEM;
+  TDetRec               = DetRecType;
+  PDetRec               = ^TDetRec;
+  tPatInfoRec           = PatInfoRecType_FEM;
+  PPatInfoRec           = ^tPatInfoRec;
+
+Type
+  pXbJobPlusRec        = ^tXbJobPlusRec;
+  tXbJobPlusRec        = Packed Record              {11.12.96 P.W} // "Record" to "Packed Record" Chg#1581 (02.03.04 P.W)
+    Qa_AutomaticFlg    : Boolean;
+    SvForcedZeroFlg    : Boolean;
+    CtForcedZeroFlg    : Boolean;
+    SymbolName         : String12;
+  end;
+Var
+  PatInfoRec_      : PPatInfoRec; {from XGLB_FB to XGLB: 25.09.02 P.W}
+
+// v--- from BnHeado.pas to XGlb.pas 08.05.09 P.W
+const
+  MaxRefLine       =  5;
+  MaxMeasGrp       =  5;
+  ErrValueFloat_   : Single = MaxSingle * 0.000001; // renamed to "*_" 21.04.08 P.W
+
+// v--- from Scans1.pas to XGlb.pas 08.05.09 P.W
+type
+  pDetRecList      = ^tDetRecList;
+  tDetRecList      = Array[1 .. MaxMeasGrp+1] of PDetRec;
+  tSvCt_Mode       = (No_Mode, Sv_Mode, Ct_Mode, PostCt_Mode);
+                     { 0: SVCT_Type = '' 1: 'SV' 2: 'CT' 3: 'POSTCT') }
+// ^--- from Scans1.pas to XGlb.pas 08.05.09 P.W
+
+
+Function  Clip_MQ(s: Single): ShortInt;
+Function  CalcClip_MQ(ChkVal, LimVal: Single): ShortInt;
+
+Procedure AddChkSumDR(Var ChkSum: tChkSum; Const aDR: tDetRec);
+
+
+Implementation
+
+uses
+  TurboToDelphi, SysUtils;
+  const Unit_Name = 'XGlb'; // 03.05.24 P.W
+
+function  GetSliceNoGrp(const DRF: DetRecType_FEM): Integer;           // 20.12.06 P.W
+begin
+  Result := DRF.SliceNoGrpLoByte + 256 * Integer(DRF.SliceNoGrpHiByte);
+end;
+
+procedure SetSliceNoGrp(var DRF: DetRecType_Fem; SliceNoGrp: Integer); // 20.12.06 P.W
+begin
+  DRF.SliceNoGrpLoByte :=  SliceNoGrp        and $FF;
+  DRF.SliceNoGrpHiByte := (SliceNoGrp shr 8) and $FF;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : Clip_MQ                                            **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 20.06.97                                           **)
+(** Description      : Returns an value for measquality limited to +-125  **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : -                                                  **)
+(** Input            : s                                                  **)
+(** Output           : RETURN (ShortInt): Round(s)                        **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function  Clip_MQ(s: Single): ShortInt;
+begin
+  If s < -125 then s:= -125
+  else
+  If s >  125 then s:=  125;
+  Clip_MQ:=Round(s);
+end;
+
+(*.**************************************************************************)
+(** Function Name    : CalcClip_MQ                                        **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 20.06.97                                           **)
+(** Description      : Calculate: 100.0 * ((ChkVal/ChkLim) - 1.0)         **)
+(** Description      : and clip the result with Clip_MQ                   **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : Clip_Mq                                            **)
+(** Input            : ChkVal, LimVal                                     **)
+(** Output           : RETURN (ShortInt): s clipped                       **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : 09.07.97 / P.Wueseke                               **)
+(** Date/Modification: 09.07.97 P.W / Sign inverted                       **)
+(**************************************************************************.*)
+Function  CalcClip_MQ(ChkVal, LimVal: Single): ShortInt;
+begin
+  CalcClip_MQ:=Clip_MQ(-100.0 * ((ChkVal / LimVal) -1.0));
+                       {^--- "-": 09.07.97 P.W}
+end;
+
+Procedure AddChkSumDR(Var ChkSum: tChkSum; Const aDR: tDetRec);
+(*
+{25.09.02 P.W}
+1) to the chkSum add the data of DR with MeasInfo4 fix content
+2) aDR is not changed! (this by use of DR_Loc as copy of aDR)
+*)
+  Procedure FillStringEnd(Var aString; Size: Word; FChar: Char);
+  Var
+    L, P           : Smallint;
+  begin
+    L := Length(String(aString));
+    P := Size - L -1;
+    If (P > 0) then
+      FillChar(String(aString)[L+1], P, FChar);
+  end;
+
+Var
+  DR_Loc           : pDetRec;
+  I                : Smallint;
+begin
+  New(DR_Loc);
+  DR_Loc^ := aDR;
+  With DR_Loc^ do
+  begin
+    {prepare fields for checksum that might change later:}
+
+    ZPos_NumSteps:=0;  {temporary for calculation of ChkSum (SV }
+          {^-- might be changed if "F4" is used to terminate SV}
+    NumSlices    :=0;  {temporary for calculation of ChkSum }
+          {^-- might be changed for a CT if "SvStudy Add Slice is used"}
+
+    {clear the field MeasInfo[4] before continued calculation of ChkSum}
+    FillChar(MeasInfo[4], SizeOf(MeasInfo[4]), #5);
+
+    {define the unused parts of String types:}
+    For I:= 1 to 3 do
+      FillStringEnd(MeasInfo[I], SizeOf(MeasInfo[I]), #0);
+
+    FillStringEnd(DeviceTyp, SizeOf(DeviceTyp), #0);
+  end;
+  {1) now complete the calculation of ChkSum:}
+  AddChkSum(ChkSum, DR_Loc^, SizeOf(DR_Loc^));  {DR_Loc^ to ChkSum; changes only ChkSum}
+  Dispose(DR_Loc);
+end;
+
+Procedure SetDefault;{from XGLB_FB to XGLB: 25.09.02 P.W}
+// Modifications:
+// 23.01.09 P.W use FillChar to initialize all fields to zero
+// this change is only for convenience
+// XbJob.pas Function Work1 is clearing all fields before creating INIT\PAT.REC
+// so without the change: all headers in have already zeroed fields (especially free for future use)
+begin
+  FillChar(PatInfoRec_^, SizeOf(PatInfoRec_^), #0);  // 23.01.09 P.W
+  With PatInfoRec_^ do
+  begin
+    RecSize        := SizeOf(PatInfoRec_^);
+    PatGender      :=         1;
+    PatEthnicGrp   :=         0;
+    PatMeasNo      :=         1;         { Patients meas number }
+    PatNo          :=         1;         { Patient number }
+    PatBirth       :=         1;
+    PatMenoAge     :=         0;
+    PatName        := 'N.N.'   ;         { Patient familyname & firstname }
+    PatTitle       := 'Dr.'    ;
+    PatComment     := 'PatCommment';
+  end;
+
+end;
+
+
+
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  BoneFlg               := False;
+  FemFlg                := True;
+  FillChar(PatInfoRec_, SizeOf(PatInfoRec_), #0);
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Init  part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+  New(PatInfoRec_);  {06.04.94 P.W}        {from XGLB_FB to XGLB: 25.09.02 P.W}
+  SetDefault;                              {from XGLB_FB to XGLB: 25.09.02 P.W}
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+  New(PatInfoRec_);  {06.04.94 P.W}        {from XGLB_FB to XGLB: 25.09.02 P.W}
+  SetDefault;                              {from XGLB_FB to XGLB: 25.09.02 P.W}
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.

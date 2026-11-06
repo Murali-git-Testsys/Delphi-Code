@@ -1,0 +1,841 @@
+unit ViewScreens;
+// 04.10.04 P.W: around Open & savePictureDialog keep CurrentDir
+// modifications:
+// 20.06.05 P.W some corrections made concerning:
+//  a) Edit.Height
+//  b) Size of ClientRect depends on Scrollbars visible or not
+// 19.12.07 P.W: Support MouseWheel, Move Img use Mouse, DoubleBuffered
+//                 a bit less flickering, SingleImage: PgUp Dwn keeps ScrollPos
+// 15.04.08 P.W: support FormTag_InWindowsList
+interface
+
+uses
+  WinTools,             // 18.11.09 P.W
+  GlbType,              // 15.04.08 P.W
+  TransX,
+  TypesUse,
+  DialogsSecure,        // 19.10.05 P.W
+  GlbPath,
+  GraphGlb,
+  UseDelphi,
+  Math,
+  jpeg,
+  Draw,
+  Windows, Messages,
+  SysUtils, Variants,
+  Classes, Graphics,
+  Controls, Forms,
+  Dialogs, ExtDlgs,
+  Menus, ExtCtrls, ActnList, StdCtrls, XPMan;
+
+type
+
+  TScrollImage    = class(TScrollBox)
+    Img : TImage;
+    Edit : TEdit;
+    constructor Create(aOwner: TComponent); override;
+    destructor Destroy; override;
+    Public
+    FileName : String;
+  end;
+
+  TfrmViewScreens = class(TForm)
+    OpenPictureDialog1: TOpenPictureDialog;
+    MainMenu1: TMainMenu;
+    File1: TMenuItem;
+    Exit1: TMenuItem;
+    N1: TMenuItem;
+    N2: TMenuItem;
+    Open1: TMenuItem;
+    New1: TMenuItem;
+    SaveScreen1: TMenuItem;
+    Screentofile1: TMenuItem;
+    SavePictureDialog1: TSavePictureDialog;
+    Zoom1: TMenuItem;
+    ZoomPlus1: TMenuItem;
+    ZoomMinus1: TMenuItem;
+    ActionList1: TActionList;
+    ScreenToFile: TAction;
+    ScrollbarsVisible: TAction;
+    ViewOptions1: TMenuItem;
+    Scrollbarsvisible1: TMenuItem;
+    TileHorizVert1: TMenuItem;
+    sbHorz: TScrollBar;
+    sbVert: TScrollBar;
+    pnlImages: TPanel;
+    SingleImage1: TMenuItem;
+    NextImage1: TMenuItem;
+    PreviousImage1: TMenuItem;
+    XPManifest1: TXPManifest;
+    procedure Open1Click(Sender: TObject);
+    procedure Exit1Click(Sender: TObject);
+    procedure New1Click(Sender: TObject);
+    procedure SaveScreen1Click(Sender: TObject);
+    procedure Screentofile1Click(Sender: TObject);
+    procedure ZoomPlus1Click(Sender: TObject);
+    procedure ZoomMinus1Click(Sender: TObject);
+    procedure ScrollbarsVisibleExecute(Sender: TObject);
+    procedure Scrollbarsvisible1Click(Sender: TObject);
+    procedure TileHorizVert1Click(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure pnlImagesResize(Sender: TObject);
+    procedure sbVertChange(Sender: TObject);
+    procedure sbHorzChange(Sender: TObject);
+    procedure SingleImage1Click(Sender: TObject);
+    procedure NextImage1Click(Sender: TObject);
+    procedure PreviousImage1Click(Sender: TObject);
+    procedure tmrTimeOutTimer(Sender: TObject);
+    procedure FormMouseWheel(Sender: TObject; Shift: TShiftState;
+      WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+    procedure imgMouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+    procedure imgMouseMove(Sender: TObject; Shift: TShiftState; X,
+      Y: Integer);
+    procedure imgMouseUp(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+  private
+    Scale : double;
+    FSingleMode: Boolean;
+    imgMouseButtons: set of TMouseButton;
+    imgMouseDwnPos : TPoint;
+    imgMouseDwnScrollPos : TPoint;
+    ImgMouseDwnImgIdx : Integer;
+    procedure AddImage(FileName: String);
+    procedure MyDraw(SetPos:Boolean=True);
+    procedure ShowZoomFactor;
+    procedure ChkEnabled;
+    procedure ChkSingleModeIndx;
+    procedure IncSingleModeIndx(Dir:Integer=1);
+    function dimX: Integer;
+    function dimY: Integer;
+    function GetThumbRect(aClientRect: TRect; Indx: Integer): TRect;
+    procedure SetImagePos(const aClientRect: TRect; var SBx: TScrollImage;
+      Indx: Integer);
+    function ImgScrollBars: Boolean;
+    function LargeScrollBars: Boolean;
+    procedure SetAllScrollPos(Pos: Integer; SbKind: TScrollBarKind);
+    procedure SetSingleMode(const Value: Boolean);
+    procedure NewZoom(aScale: Double);
+    function SingleModePos(Idx: Integer): TPoint;
+  public
+    ImageCount   : Integer;
+    property SingleMode: Boolean read FSingleMode write SetSingleMode;
+  end;
+
+var
+  frmViewScreens: TfrmViewScreens;
+
+Implementation
+
+uses Types;
+  const Unit_Name = 'ViewScreens'; // 03.05.24 P.W
+
+{$R *.dfm}
+
+procedure TfrmViewScreens.ShowZoomFactor;
+begin
+  Zoom1.Caption :=
+    Format(TraS('Zoom (%1.2f)'),[Scale]);
+end;
+
+procedure TfrmViewScreens.FormCreate(Sender: TObject);
+begin
+  Tag := FormTag_InWindowsList; // 15.04.08 P.W
+//  Application.OnMessage := AppMessage;
+//  KeyPreview := True; // allows OnKeyDown even if a control has focus
+                        // but shortcuts are not seen!
+
+  TraXC(Self);
+  TraXM(MainMenu1);  // 01.08.06 P.W
+  Scale := 1;
+  ShowZoomFactor;
+  SavePictureDialog1.InitialDir := SavePictureInitDir_NB;
+  OpenPictureDialog1.InitialDir := OpenPictureInitDir_NB;
+  SingleMode := False;
+  ImageCount := 0;
+  ChkEnabled;
+end;
+
+
+Const
+  MaxImages = 16;
+var
+  MyLock : Integer = 0;
+  TileHoriz : Boolean = True;
+  SingleModeIndx : Integer = 0;
+  SwapAroundFlg  : Boolean = False;
+  WantImgScrollBars : Boolean = False;
+  ImgMaxHeight : Integer = 0;
+  ImgMaxWidth  : Integer = 0;
+
+  Images : Array[0 .. MaxImages -1] of TScrollImage;
+
+
+// dimX dimY from ImageCount:
+// 0..1: 1x1;  2: 2x1 or 1x2; 3..4: 2x2; 5..6: 2x3;
+// 7..9: 3x3; 10..12: 4x3; 13..16: 4x4;
+//
+// X   xx   XX   XXX   XXX   XXXX   XXXX
+//     or   XX   XXX   XXX   XXXX   XXXX
+//     x               XXX   XXXX   XXXX
+//     x                            XXXX
+//
+function TfrmViewScreens.dimX: Integer;
+begin
+  case ImageCount of
+     0 ..  1: Result := 1;
+     2 ..  4: Result := 2;
+     5 ..  9: Result := 3;
+    else      Result := 4;
+  end;
+  if TileHoriz and (ImageCount = 2) then
+    Result := 1;
+  if SingleMode then Result := 1;
+end;
+
+function TfrmViewScreens.dimY: Integer;
+begin
+  case ImageCount of
+     0 ..  2: Result := 1;
+     3 ..  6: Result := 2;
+     7 .. 12: Result := 3;
+    else      Result := 4;
+  end;
+  if TileHoriz and (ImageCount = 2) then
+    Result := 2;
+
+  if SingleMode then Result := 1;
+end;
+
+function RectWidth(R: TRect): Integer;
+begin
+  Result := R.Right - R.Left;
+end;
+
+function RectHeight(R: TRect): Integer;
+begin
+  Result := R.Bottom - R.Top;
+end;
+
+function TfrmViewScreens.GetThumbRect(aClientRect: TRect; Indx: Integer): TRect;
+const
+  df = 1;
+var
+  dx, dy : Integer;
+  NX, NY : Integer;
+begin
+  dx := (aClientRect.Right  - aClientRect.Left) div dimX;
+  dy := (aClientRect.Bottom - aClientRect.Top ) div dimY;
+
+  NX := (Indx) mod dimX;
+  NY := (Indx) div dimX;
+
+  Result.Left   :=  NX   *dx+df;
+  Result.Right  := (NX+1)*dx-df;
+  Result.Top    :=  NY   *dy+df;
+  Result.Bottom := (NY+1)*dy-df;
+end;
+
+procedure TfrmViewScreens.SetImagePos(const aClientRect: TRect; var SBx: TScrollImage; Indx: Integer);
+var
+  R : TRect;
+begin
+  R:=GetThumbRect(aClientRect, Indx);
+  SBx.Top    := R.Top;
+  SBx.Width  := RectWidth(R);
+  SBx.Left   := R.Left;
+  SBx.Height := RectHeight(R);
+end;
+
+procedure TfrmViewScreens.ChkEnabled;
+begin
+  ZoomMinus1.Enabled := Scale > 0.02;
+  ZoomPlus1.Enabled  := Scale < 50;
+  Scrollbarsvisible1.Enabled := (ImageCount>=2) and (not SingleMode);
+  TileHorizVert1.Enabled     := (ImageCount =2) and (not SingleMode);
+  SingleImage1.Enabled       := (ImageCount>=2);
+  ViewOptions1.Enabled       :=
+    Scrollbarsvisible1.Enabled or
+    TileHorizVert1.Enabled or
+    SingleImage1.Enabled;
+  PreviousImage1.Enabled     := SingleMode and
+    (SwapAroundFlg or (SingleModeIndx > 0));
+  NextImage1.Enabled         := SingleMode and
+    (SwapAroundFlg or (SingleModeIndx < ImageCount -1));
+  SingleImage1.Checked := SingleMode;
+end;
+
+procedure TfrmViewScreens.ChkSingleModeIndx;
+begin
+  SingleModeIndx := Max(SingleModeIndx, 0);
+  SingleModeIndx := Min(SingleModeIndx, ImageCount-1);
+  ChkEnabled;
+end;
+
+function TfrmViewScreens.SingleModePos(Idx: Integer): TPoint;
+// 17.03.08 P.W
+begin
+  if (Idx >= 0) and (Idx < ImageCount) and Assigned(Images[Idx]) then
+  begin
+    Result := Point(Images[Idx].HorzScrollBar.Position, Images[Idx].VertScrollBar.Position);
+  end else
+    Result := Point(0, 0);
+end;
+
+procedure TfrmViewScreens.IncSingleModeIndx(Dir:Integer=1);
+// modifications
+// 17.03.08 P.W: try to keep the scroll position in SingleMode
+var
+  PrevIndx : Integer;
+  PrevPos : TPoint;
+begin
+  PrevIndx := SingleModeIndx;
+  Inc(SingleModeIndx, Dir);
+  if SwapAroundFlg then
+  begin
+    if (SingleModeIndx >= ImageCount) then SingleModeIndx := 0
+    else
+    if (SingleModeIndx < 0) then SingleModeIndx := ImageCount-1;
+  end;
+  ChkSingleModeIndx;
+  If (PrevIndx <> SingleModeIndx) then
+  begin
+    PrevPos := SingleModePos(PrevIndx);
+    MyDraw(False);
+    if SingleMode then // 17.03.08 P.W
+    begin
+      Images[SingleModeIndx].HorzScrollBar.Position := PrevPos.X;
+      Images[SingleModeIndx].VertScrollBar.Position := PrevPos.Y;
+    end;
+  end;
+end;
+
+procedure WinControlSetOpaque(WC: TWinControl; Opaque: Boolean);
+var
+  cs : TControlStyle;
+begin
+  CS := WC.ControlStyle;
+  if Opaque
+    then Include (CS, csOpaque)  // skips  EraseBackground
+    else Exclude (CS, csOpaque); // allows EraseBackground
+  WC.ControlStyle := CS;
+end;
+
+
+procedure TfrmViewScreens.AddImage(FileName: String);
+var
+  Bmp  : TBitMap;
+  Indx : Integer;
+begin
+  if ImageCount < MaxImages then
+  begin
+    inc(ImageCount);
+    Indx := ImageCount -1;
+
+    Bmp := TBitMap.Create;
+    LoadBitMapFromAny(Bmp, FileName);
+
+    Images[Indx] := TScrollImage.Create(pnlImages);
+    Images[Indx].Parent := pnlImages;
+    Images[Indx].FileName := FileName;
+    Images[Indx].Edit.Text := FileName;
+    Images[Indx].Hint := FileName;         // 19.12.07 P.W
+//    Images[Indx].Hint := FileName;
+//    Images[Indx].ShowHint := True;
+    Images[Indx].Img.Center   := True;
+    Images[Indx].Img.AutoSize := False;
+    Images[Indx].Img.Align := alNone;
+    Images[Indx].Img.Stretch  := True; // needed for zoom!
+    Images[Indx].Img.Proportional := True;
+
+    ImgMaxHeight := Max(ImgMaxHeight, Bmp.Height);
+    ImgMaxWidth  := Max(ImgMaxWidth,  Bmp.Width);
+
+    Images[Indx].Img.Picture.Assign(Bmp);
+
+//    WinControlSetOpaque(Images[Indx], True);  // less flickering when scrolled 19.12.07 P.W
+                                                // but too less clear background!
+
+    Images[Indx].Img.Canvas.Brush.Style := bsClear;
+    Images[Indx].Img.Picture.Bitmap.Canvas.Brush.Style := bsClear;
+
+    Images[Indx].Img.OnMouseDown := imgMouseDown; // 19.12.07 P.W
+    Images[Indx].Img.OnMouseMove := imgMouseMove; // 19.12.07 P.W
+    Images[Indx].Img.OnMouseUp   := imgMouseUp;   // 19.12.07 P.W
+    Images[Indx].DoubleBuffered  := True;         // 19.12.07 P.W  // seems to leave sometimes shadow of hint alive on screen
+
+    Bmp.Free;
+
+  end;
+  ChkSingleModeIndx;
+  ChkEnabled;
+end;
+
+procedure TfrmViewScreens.Open1Click(Sender: TObject);
+var
+  I : Integer;
+  FList : TStringList;
+begin
+  If CommonDialog_Execute(OpenPictureDialog1) then
+  begin
+//    ShowMessage(OpenPictureDialog1.Files.Text);
+    // --- Sort the names (otherwise order not defined!)
+    //
+    FList := TStringList.Create;
+    FList.Assign(OpenPictureDialog1.Files);
+    FList.Sort;
+
+    if (FList.Count + ImageCount > MaxImages) then
+      ShowMessageFmt('Maximum of %d Images reached!', [MaxImages]);
+    for I:= 0 to FList.Count -1 do
+      AddImage(FList[I]);
+    FList.Free;
+  end;
+  if ImageCount = 0
+    then Close
+    else MyDraw;
+end;
+
+procedure TfrmViewScreens.Exit1Click(Sender: TObject);
+begin
+  modalResult := mrOk;
+  Close;
+end;
+
+function TfrmViewScreens.ImgScrollBars: Boolean;
+begin
+  Result := (WantImgScrollBars or (ImageCount = 1) or SingleMode)
+            and (ImageCount > 0);
+end;
+function TfrmViewScreens.LargeScrollBars: Boolean;
+begin
+  Result := (not ImgScrollBars) and (ImageCount > 0);
+end;
+
+procedure SetScrollPos(SI: TScrollImage; Pos: Integer; SbKind: TScrollBarKind);
+var
+  SB : TControlScrollBar;
+begin
+  Case SbKind of
+    sbHorizontal: SB := SI.HorzScrollBar;
+    sbVertical  : SB := SI.VertScrollBar;
+    else          SB := SI.VertScrollBar;
+  end;
+  If SB.Visible then
+  begin
+    SB.Position := Pos;
+  end else
+  begin
+    Case SbKind of
+      sbHorizontal: SI.Img.Left := -Pos;  // Horiz, X
+      sbVertical  :
+        begin
+          if SI.Edit.Visible
+          then  SI.Img.Top  := -Pos+SI.Edit.Height   // Vert,  Y
+          else  SI.Img.Top  := -Pos               ;  // Vert,  Y
+        end;
+    end;
+  end;
+end;
+
+procedure TfrmViewScreens.SetAllScrollPos(Pos: Integer; SbKind: TScrollBarKind);
+var
+  Indx : Integer;
+begin
+  For Indx := 0 to ImageCount -1 do
+    if Assigned(Images[Indx]) then
+      SetScrollPos(Images[Indx], Pos, SbKind);
+end;
+
+procedure TfrmViewScreens.sbVertChange(Sender: TObject);
+begin
+  SetAllScrollPos(sbVert.Position, sbVert.Kind);
+end;
+
+procedure TfrmViewScreens.sbHorzChange(Sender: TObject);
+begin
+  SetAllScrollPos(sbHorz.Position, sbHorizontal);
+end;
+
+procedure TfrmViewScreens.MyDraw(SetPos:Boolean=True);
+var
+  EditHeight : Integer; // 20.06.05 P.W
+
+  procedure SetScrollBarParams(var SB: TScrollBar; ImgPicExt, ImgPaneExt: Integer);
+  begin
+    SB.Min := 0;
+    SB.PageSize := 0; // max may not be set to less but PageSize!
+    SB.Max := Round(Scale * ImgPicExt) +EditHeight+4;//"+Ed.+4": 20.06.05 P.W
+    if ImgPaneExt >= SB.Max then
+    begin
+      SB.Position := 0;
+      Sb.Visible  := False;
+    end else
+    begin
+      SB.Position := Min(SB.Position, SB.Max-ImgPaneExt);
+      SB.PageSize := ImgPaneExt;
+      SB.Visible  := True;    // False -> True: reduces ClientRect!
+    end;
+    if SetPos then
+      SetAllScrollPos(SB.Position, SB.Kind);
+  end;
+
+  procedure ChkEditVisible(Indx: Integer);
+  var
+    EdVis : Boolean;
+  begin
+    EdVis := (not SingleMode) and (not ImageCount =1);
+    if (Images[Indx].Edit.Visible <> EdVis) then
+    begin
+      Images[Indx].Edit.Visible := EdVis;
+      if Images[Indx].Edit.Visible
+        then Images[Indx].Img.Top := Images[Indx].Edit.Height
+        else Images[Indx].Img.Top := 0;
+    end;
+  end;
+
+var
+  Indx, Indx0, Indx1 : Integer;
+begin
+  If (MyLock > 0) then EXIT;
+
+  Inc(MyLock);
+  try
+    EditHeight := 0;
+    Caption := 'XCT View Screens';
+    if SingleMode or (ImageCount = 1) then
+       if Assigned(Images[SingleModeIndx]) then
+         Caption := Caption + ' - ' + Images[SingleModeIndx].FileName;
+    if SingleMode then
+    begin
+      if SingleModeIndx < 0 then
+      begin // no images
+        Indx0 := 0;
+        Indx1 := -1;
+      end else
+      begin
+        Indx0 := SingleModeIndx;
+        Indx1 := Indx0;
+      end;
+    end else
+    begin
+      Indx0 := 0;
+      Indx1 := ImageCount -1;
+    end;
+
+
+    // set Visible before the current visible is set invisble: Better performance (uses DoubleBuffered)
+    Indx := SingleModeIndx;
+    if InRange(Indx, 0, ImageCount -1) and Assigned(Images[Indx]) then
+      Images[Indx].Visible := (not SingleMode) or (Indx = SingleModeIndx);
+
+    for Indx := 0 to ImageCount -1 do
+    begin
+      if Assigned(Images[Indx]) then
+      begin
+        Images[Indx].Visible := (not SingleMode) or (Indx = SingleModeIndx);
+        ChkEditVisible(Indx);
+      end;
+    end;
+
+    for Indx := Indx0 to Indx1 do
+    begin
+      if Assigned(Images[Indx]) then
+      begin
+        if LargeScrollBars then  // 20.06.05 P.W
+        begin  // changes pnlImages.ClientRect
+          sbHorz.Visible := True;
+          sbVert.Visible := True;
+        end;
+        SetImagePos(pnlImages.ClientRect, Images[Indx], Indx-Indx0);
+        Images[Indx].Img.Width  := Round(Scale *Images[Indx].Img.Picture.Width);
+        Images[Indx].Img.Height := Round(Scale *Images[Indx].Img.Picture.Height);
+
+        If (Indx = Indx0) then
+        begin
+          if LargeScrollBars then
+          begin
+            EditHeight := Images[Indx].Edit.Height; // 20.06.05 P.W
+            SetScrollBarParams(sbHorz,
+              ImgMaxWidth, //Images[Indx].Img.Picture.Width,   // ImgPicExt;
+              Images[Indx].Width);              // ImgPaneExt;
+
+            SetScrollBarParams(sbVert,
+              ImgMaxHeight, //Images[Indx].Img.Picture.Height,  // ImgPicExt;
+              Images[Indx].Height);             // ImgPaneExt;
+
+          end else
+          begin
+            sbHorz.Visible := False;
+            sbVert.Visible := False;
+
+            // avoid that only positive position part of image is visible:
+            if SetPos then
+            begin
+              SetAllScrollPos(0, sbHorizontal);                  // 20.06.05 P.W
+              SetAllScrollPos(0, sbVertical);                    // 20.06.05 P.W
+            end;  
+          end;
+          SetImagePos(pnlImages.ClientRect, Images[Indx], Indx-Indx0);
+        end;
+
+        Images[Indx].HorzScrollBar.Visible := ImgScrollBars;
+        Images[Indx].VertScrollBar.Visible := ImgScrollBars;
+      end;
+    end;
+
+  Finally
+    Dec(MyLock);
+  end;
+end;
+
+procedure TfrmViewScreens.New1Click(Sender: TObject);
+var
+  Indx : Integer;
+begin
+  Inc(MyLock);
+  try
+    ImgMaxHeight := 0;
+    ImgMaxWidth  := 0;
+
+    For Indx := 0 to MaxImages -1 do
+    begin
+      if Assigned(Images[Indx]) then
+      begin
+        Images[Indx].Free;
+        Images[Indx]:=Nil;
+      end;
+    end;
+    ImageCount := 0;
+  finally
+    Dec(MyLock);
+  end;
+  MyDraw;
+  Open1Click(Sender);
+end;
+
+procedure TfrmViewScreens.SaveScreen1Click(Sender: TObject);
+begin
+  ShowMessageFmt(TraS('Screen saved to file "%s"'), [ScrSave(Self)]);
+end;
+
+procedure TfrmViewScreens.Screentofile1Click(Sender: TObject);
+var
+  Bmp : TBitMap;
+begin
+  if CommonDialog_Execute(SavePictureDialog1) then
+  begin
+    Bmp := Self.GetFormImage;
+    SaveBitMapAsAny(Bmp, SavePictureDialog1.FileName);
+    Bmp.Free;
+  end;
+end;
+
+procedure TfrmViewScreens.NewZoom(aScale: Double);
+begin
+  Scale := aScale;
+  ShowZoomFactor;
+  ChkEnabled;
+  MyDraw(False);
+end;
+
+procedure TfrmViewScreens.ZoomPlus1Click(Sender: TObject);
+begin
+  NewZoom(Scale * sqrt(sqrt(2)));
+end;
+
+procedure TfrmViewScreens.ZoomMinus1Click(Sender: TObject);
+begin
+  NewZoom(Scale / sqrt(sqrt(2)));
+end;
+
+{ TScrollImage }
+
+constructor TScrollImage.Create(aOwner: TComponent);
+begin
+  inherited Create(aOwner);
+  // Self :     TScrollImage (TScrollBox with an Image)
+  Edit := TEdit.Create(Self);
+  Edit.Parent := Self;
+
+  Edit.ReadOnly := True;
+  Edit.AutoSize := True;
+  Edit.Align := alTop;
+
+  Img := TImage.Create(Self);
+  Img.Parent := Self;
+  Img.Align  := alClient;
+  Img.Top    := Edit.Height + 4;  // 28.06.05 P.W
+  FileName   := '';
+
+  HorzScrollBar.Tracking := True; // 27.07.06 P.W
+  VertScrollBar.Tracking := True; // 27.07.06 P.W
+end;
+
+destructor TScrollImage.Destroy;
+begin
+  Img.Free;
+  inherited Destroy;
+end;
+
+procedure TfrmViewScreens.ScrollbarsVisibleExecute(Sender: TObject);
+begin
+  WantImgScrollBars := not WantImgScrollBars;
+  MyDraw;
+end;
+
+procedure TfrmViewScreens.Scrollbarsvisible1Click(Sender: TObject);
+begin
+  ScrollbarsVisibleExecute(Sender);
+end;
+
+procedure TfrmViewScreens.TileHorizVert1Click(Sender: TObject);
+begin
+  TileHoriz := not TileHoriz;
+  MyDraw;
+end;
+
+procedure TfrmViewScreens.pnlImagesResize(Sender: TObject);
+begin
+  MyDraw(False);
+end;
+
+procedure ApplicationHandleMessages;
+var
+  J : Integer;
+begin
+  for J:= 1 to 10 do
+    Application.HandleMessage;
+end;
+
+procedure TfrmViewScreens.SingleImage1Click(Sender: TObject);
+// 28.06.05 P.W
+begin
+  SingleMode := not SingleMode;
+end;
+
+procedure TfrmViewScreens.NextImage1Click(Sender: TObject);
+begin
+  IncSingleModeIndx;
+end;
+
+procedure TfrmViewScreens.PreviousImage1Click(Sender: TObject);
+begin
+  IncSingleModeIndx(-1);
+end;
+
+procedure TfrmViewScreens.SetSingleMode(const Value: Boolean);
+begin
+  if (FSingleMode <> Value) then
+  begin
+    FSingleMode := Value;
+    ChkEnabled;
+    MyDraw;
+  end;
+end;
+
+procedure TfrmViewScreens.tmrTimeOutTimer(Sender: TObject);
+begin
+  modalResult := mrCancel;
+end;
+
+procedure TfrmViewScreens.FormMouseWheel(Sender: TObject; Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+// 19.12.07 P.W
+const
+  SF = 1.1;
+var
+  NumDelta, I, dP : Integer;
+  ScaleFact : Double;
+  MP : TPoint;
+begin
+  NumDelta := WheelDelta div WHEEL_DELTA;
+  Handled := True;
+  if (ssCtrl in Shift) then
+  begin
+    ScaleFact := Power(SF, NumDelta);
+    NewZoom(ScaleFact * Scale);
+  end else
+  begin
+    if LargeScrollBars then
+    begin
+      dP := - Round(0.1 * NumDelta * sbVert.Max);
+      sbVert.Position := Min(sbVert.Max - sbVert.PageSize,       sbVert.Position + dP);
+    end else
+    begin
+      MP := Mouse_CursorPos;
+      for I := 0 to ImageCount -1 do
+      if Assigned(Images[I])  then
+//    if Images[I].Focused then // never focused!
+      if WindowFromPoint(MP) = Images[I].Handle then
+      begin
+        dP := - Round(0.1 * NumDelta * Images[I].VertScrollBar.Range);
+        Images[I].VertScrollBar.Position := Images[I].VertScrollBar.Position + dP;
+      end;
+    end;
+  end;
+end;
+
+procedure TfrmViewScreens.imgMouseDown(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+// 19.12.07 P.W
+var
+  I : Integer;
+  MP : TPoint;
+begin
+  Include(imgMouseButtons, Button);
+  imgMouseDwnPos       := Mouse_CursorPos;// Point(X, Y);   // Use ScreenCoordinates!
+  if LargeScrollBars then
+  begin
+    imgMouseDwnScrollPos := Point(sbHorz.Position, sbVert.Position);
+    ImgMouseDwnImgIdx := -1;
+  end else
+  begin
+    MP := Mouse_CursorPos;
+    for I := 0 to ImageCount -1 do
+    if Assigned(Images[I])  then
+    if WindowFromPoint(MP) = Images[I].Handle then
+    begin
+      imgMouseDwnScrollPos := Point(Images[I].HorzScrollBar.Position, Images[I].VertScrollBar.Position);
+      ImgMouseDwnImgIdx := I;
+    end;
+  end;
+end;
+
+procedure TfrmViewScreens.imgMouseMove(Sender: TObject; Shift: TShiftState;
+  X, Y: Integer);
+// 19.12.07 P.W
+var
+  PS, PM : TPoint;
+  I : Integer;
+begin
+  if (mbLeft in imgMouseButtons) then
+  begin
+    PM := Mouse_CursorPos; // Point(X, Y);   // Use ScreenCoordinates! (X, Y depend on ScrollBar.Position!)
+    PS := PointsAdd(imgMouseDwnScrollPos, PointsSub(imgMouseDwnPos, pM));
+    if LargeScrollBars then
+    begin
+      sbHorz.Position := Min(sbHorz.Max - sbHorz.PageSize, PS.X);
+      sbVert.Position := Min(sbVert.Max - sbVert.PageSize, PS.Y);
+    end else
+    begin
+      for I := 0 to ImageCount -1 do
+      if Assigned(Images[I])  then
+      if (I = ImgMouseDwnImgIdx) then
+      begin
+        Images[I].HorzScrollBar.Position := PS.X;
+        Images[I].VertScrollBar.Position := PS.Y;
+      end;
+    end;
+  end;
+end;
+
+procedure TfrmViewScreens.imgMouseUp(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+// 19.12.07 P.W
+begin
+  Exclude(imgMouseButtons, Button);
+end;
+
+end.
+

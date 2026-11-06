@@ -1,0 +1,4379 @@
+unit WinTools;
+// created: 10.09.04 P.W
+//Description see below "Description"
+// used by StartXctCon and FemurPcDelphi KnMultiDelphi
+(*  // for tests see StartXCT1.Pas of StartXCT.DPR
+Main Result:  08.09.04 P.W
+  for Win98 and WinXP a solution has been found to switch between console-app and
+  GUI-App the focus in both directions.
+  only for Win98 the chance to toggle console between fullscreen and normal window mode
+  is not possible (the Post Alt-enter does not work) send simple keys to Console in fullscreen
+  is possible;
+  Demonstration see btnEasyActivateFor10SecClick
+  PLANS:
+  Use is planed and neccessary for XCT - delphi project:
+    the Dos-Batches Start01.bat ... Start2.Bat ... handle the flow of files
+    as long as the Database stays as dos-module in textmode:
+    here the situation is:
+    a) the console sometimes keeps the focus while the measmodule
+    GUI-App (delphi) is running: Enter- Key leads to activation of the waiting console
+    instead of activating the highlighted OK-button of the visible GUI-App
+    b) after termination of GUI-App (analysis) the Console gets no focus and is not shown
+       when activating then sometimes comes up in windows-Normal mode instead of FullScreen
+  Planed solutions:
+    write a delphi console app "StartXctCon.Exe" which launches Start01.bat (pif sets to
+    Fullscreen for Win98, WinXP may force FullScreen using PostAltEnter)
+    The StartXCTCon.Exe stays alive aslong as the Console window handle is valid.
+    StartXctCon.exe may avoid duplicate activation of XCT software
+    (? dont launch itself a second time: check during start up for itself?)
+    StartXctCon may switch the Console to foreground when analysis terminated
+    (by a message written to special file, checking for its existance...)
+    this might be done by all the GUI-Apps (start: force themselfes to front)
+    termination: create the message file
+! StartXctCon is in work !!
+Results:
+  Console may be in one of these states:
+    Maximized, Normal, Minimized, Minimized-FullScreen
+    no message supports the differenzes between the two Minimized states!
+
+  EnsumThreadWindows:
+    Win98:  only with Threadid <> zero for GUI-Apps, nothing for console-Apps
+    WinXP:  works for GUI-Apps, returns all Apps if ThreadId is 0 (includes Console-Apps)
+
+  Send- PostMessage(WM_KeyDown, WM_SysKeyDown)
+    Win98 :
+      GUI-Apps: only PostMessage works
+      Con-Apps: only PostMessage works if Console is not minimized
+                Syskeys are not detected by Console Apps!
+    WinXP:
+      GUI-Apps: Send- and PostMessage work
+      Con-Apps: Send- and PostMessage work for all Console states
+            Syskeys are detected by Console Apps
+            SendAltEnter toggles FullScreen off and on
+
+  CreateProcess:
+    Both: Windowhandle is not returned, (Window created later!)
+          Windowhandle must be searched using EnumWindows
+          WaitForInputIdle: not for console Apps!
+    Win98: AppName must be part of Commandline!
+          Search Console window: look out three windows are detected!
+          (Two without name)
+          title of created window changes during run!
+    WinXP: AppName may be part of Commandline.
+          Search Console Window: only one matching window found;
+
+  Hide Show:
+    Both: GUI- Taskbarbutton remains visible (but only minimize or close possible)!
+          Console TaskbarButton disappears
+
+  ShowWindow: mostly more success wiht ShowWindowAsync
+    and SW_ShowDefault is better than SW_Normal
+
+  ForceForeGroundWindow:
+    Both: does not work if ForegroundWindow is Con-App! Win98
+
+*)
+// modifications:
+// 15.12.04 P.W: some "Sleep(1);" added: increases chance to activate the window
+// 21.12.04 P.W: Message WM_ForceToFront introduced: StartWin98 uses this to inform
+//   apps using FemurPcForm1.pas to bring them to front
+// 13.12.07 P.W: const PipeName to functuon to include Lauchname to allow
+//   two XCT apps (in different folders) may be launched independently
+// 17.12.07 P.W: call CheckSetForeGroundWindow where we wait for window of app to close
+// 23.04.08 P.W: procedure HintWindow_BugFix solves:
+// Problem: Under Windows XP     Shadow of HintWindow remains when mouse moved over other application
+//          Under Windows Vista  parts of hint remain visible and application no longer responds!
+// 01.09.08 P.W: LaunchWait calls CheckSetForeGroundWindow to ensure window we wait for is set to foreground
+// 11.09.08 P.W
+//	Launch is requested with Fullscreen = false, but when the default (in registry) is set to Fullscreen the batch is launched in fullscreen mode.
+//	Then when WaitSec (windows app) is launched the console full screen window is not visible. Switch to the console hides the WaitSec...
+//	The situation is not convenient.
+//	Now when a batch is launched and the default for "Stratec XCT Console" is fullscreen then a copy will be used "Stratec XCT Console (WM)".
+//	In the copy fullscreen is set to zero (entry in registry, made by StartXctCon.exe (StartXct0.pas) by calling Wintools.pas FindMaximalConsoleFontSize.
+//	Changed: LaunchConsole and FindMaximalConsoleFontSize.
+// 27.08.09 P.W: GetDrivesString avioid "Window is not responding" and later overwrites second window
+
+
+(*
+  Description of Launching Stratec XCT Delphi // 21.12.04 P.W
+     StartXctCon.exe compiled as console application is the starting point.
+     (StartXctCon.exe assumes that it is located in the XCT WorkDir and calls there
+      Start01.bat (defined by function  "LaunchName"); Start01.bat calls all the
+      batches which will call the Database
+       (Xmenu.exe from XCT 5.50 E as Borland Turbo pascal application)
+      then the course of batches call the other apps like FemurPc.exe.. KnMulti.exe
+      these executables are 32 bit console apps (renamed copy of StartWin98.exe) which
+      serve to launch the 32 bit Window apps (Delphi). StartWin98.exe launches
+      apps whith same name where "Delphi" is added as part of the name: For example
+      renamed to XBJOB.EXE it calls XBJOBDELPHI.EXE with the same parameters and
+      returns the errorlevel of the called Delphi app While the Delphi app is running
+      it is monitored when XBJOB.EXE is made visible: then it sends W_ForceToFront to the
+      Delphi App which then calls procedure FemurPc1.pas ForceBringToFront.
+      By this we achieve: a) batches wait for Delphi Apps until they terminate,
+      b) StartXctCon avoids launching the Stratec XCT App a second time but will
+      activate the already running app which is partly a console app and partly delphi
+      Win 32 Apps. c) PrintJobs (from DOS apps) are supported also by StartXctCon in LaunchXCT
+
+*)
+
+interface
+
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  HaltUnit,
+  Param_StrUnit,
+  GlbDecs,         // 09.07.08 P.W
+  Math,
+  Registry,
+  Classes,
+  MsgBox,          // 17.06.05 P.W
+  ComNames,
+{$Ifdef DELPHI}
+  TransX,          // 26.11.08 P.W
+  FileCtrl,        // 11.11.08 P.W
+  StdCtrls,        // 09.07.08 P.W
+  UMsgDelay,       // 17.06.05 P.W
+  Dialogs, // avoid use for small console apps!!
+//  classes,
+  Graphics,
+  Forms,
+  Controls,
+  WindowsEx,  // 03.10.07 P.W
+{$ENDIF}
+  Windows,
+  Messages,
+  SysUtils;
+
+const
+  ConWndWidth    = 80;
+  ConWndHeight   = 25;
+
+type
+  TFolderSizeRec = record
+    SizeNorm,
+    SizeUsed,
+    MaxSizeNorm,
+    MaxSizeUsed  : Int64;
+    Files,
+    Folders   : Integer;
+  end;
+
+const
+  EmptyFolderSizeRec : TFolderSizeRec =
+    (SizeNorm:0; SizeUsed:0; MaxSizeNorm:0; MaxSizeUsed:0; Files:0; Folders:0);
+
+type
+  PDiskInfoRec = ^TDiskInfoRec;
+  TDiskInfoRec = Record
+    ClusterSize           : Cardinal;
+    SectorPerCluster      : Cardinal;
+    BytesPerSector        : Cardinal;
+    NumberOfFreeClusters  : Cardinal;
+    TotalNumberOfClusters : Cardinal;
+    OSVersInfo            : OSVersionInfo;
+    Drive                 : AnsiString;
+    ValidFlg              : Boolean;
+  end;
+
+  PExtLaunchOptions = ^TExtLaunchOptions;     // 20.10.09 P.W
+  TExtLaunchOptions = Record                  // 20.10.09 P.W
+    BreakAwayFromJob : Boolean;
+  end;
+
+const
+  ELO_BreakAway   : TExtLaunchOptions = (BreakAwayFromJob : True);   // 20.10.09 P.W
+  ELO_NoBreakAway : TExtLaunchOptions = (BreakAwayFromJob : False);  // 20.10.09 P.W
+  // BreakAway needs Job with right BreakAway_Ok !
+
+function ITPD(const S: AnsiString): AnsiString;
+function ETPD(const S: AnsiString): AnsiString;
+
+Type
+  TForAllProc = Procedure(const Folder: String; const SR:TSearchRec);
+procedure ForAllSubFolders(const Folder:String; ForAllProc: TForAllProc);
+
+var    // be careful to set the ConsoleFlg if using SignalMutexName!
+  ConsoleFlg  : Boolean = False;         // set  by StartXctCon.pas
+
+function ProcessHasTerminated(hProcess: THandle): Boolean;
+//procedure CheckSetForegroundWindow(Wnd: HWND; IgnoreEnaVisFlg:Boolean=False);
+function IsFullScreen(Wnd: HWND): Boolean;
+function IsConsoleWndFullScreen_Active(const Wnd: HWND): Boolean;
+function IsConsoleWndFullScreen(const Wnd: HWND): Boolean;
+function Try_SetConsoleDisplayMode(const Wnd: HWnd; MA, MB:Integer): Boolean;
+
+const
+  // --- use with GetConsoleDisplayMode:
+  CONSOLE_FULLSCREEN          = 1;
+  CONSOLE_FULLSCREEN_HARDWARE = 2;
+
+  // --- use with SetConsoleDisplayMode:
+  CONSOLE_FULLSCREEN_MODE     = 1;
+  CONSOLE_WINDOWED_MODE       = 2;
+
+function AttachConsole(dwProcessId: DWORD): BOOL; stdcall  external kernel32 name 'AttachConsole';  // 02.07.08 P.W
+//BOOL AttachConsole(DWORD dwProcessId);
+
+function GetConsoleDisplayMode(var ModeFlags: DWORD): BOOL;
+  stdcall  external kernel32 name 'GetConsoleDisplayMode';
+//BOOL GetConsoleDisplayMode(LPDWORD lpModeFlags);
+// ModeFlags may be a combination of
+//  CONSOLE_FULLSCREEN          (= 1)
+//  CONSOLE_FULLSCREEN_HARDWARE (= 2)
+
+function SetConsoleDisplayMode(hConsoleOutput: THandle; ModeFlags: DWORD;
+  lpNewScreenBufferDimensions: PCOORD): BOOL; // 11.09.08 P.W
+  stdcall  external kernel32 name 'SetConsoleDisplayMode';
+//BOOL SetConsoleDisplayMode(HANDLE hConsoleOutput, DWORD dwFlags, PCOORD lpNewScreenBufferDimensions);
+// ModeFlags: combination of
+// ModeFlags may be a combination of
+//  CONSOLE_FULLSCREEN_MODE    (= 1)
+//  CONSOLE_WINDOWED_MODE      (= 2)
+// lpNewScreenBufferDimensions: Pointer to a COORD structure that receives the new dimensions of the screen buffer, in characters
+
+
+function LaunchDir: AnsiString;          // used by StartXctCon.pas
+function  IsLaunched: Boolean; overload; // used by StartXctCon.pas
+procedure ChkPrintJob;  // support Print for XSetPar LV_Tools LvPrint 22.03.05 P.W
+procedure LaunchXCT;                     // used by StartXctCon.pas
+function SetLaunchDir_0_Debug(const Value: AnsiString): AnsiString;
+procedure SetFullScreenMode(SetVal: Boolean); // used by StartXctCon.pas
+function GetFullScreenMode: Boolean;          // used by StartXctCon.pas
+
+{$Ifdef DELPHI}
+
+const
+  OEM_ANSI_437 : Array[0 .. 255] of Char = (       // 17.07.08 P.W by procedure create_OEM_Ansi_Table;
+  #000, #001, #002, #003, #004, #005, #006, #007,  //   0 ..   7
+  #008, #009, #010, #011, #012, #013, #014, #164,  //   8 ..  15
+  #016, #017, #018, #019, #182, #167, #022, #023,  //  16 ..  23
+  #024, #025, #026, #027, #028, #029, #030, #031,  //  24 ..  31
+  #032, #033, #034, #035, #036, #037, #038, #039,  //  32 ..  39
+  #040, #041, #042, #043, #044, #045, #046, #047,  //  40 ..  47
+  #048, #049, #050, #051, #052, #053, #054, #055,  //  48 ..  55
+  #056, #057, #058, #059, #060, #061, #062, #063,  //  56 ..  63
+  #064, #065, #066, #067, #068, #069, #070, #071,  //  64 ..  71
+  #072, #073, #074, #075, #076, #077, #078, #079,  //  72 ..  79
+  #080, #081, #082, #083, #084, #085, #086, #087,  //  80 ..  87
+  #088, #089, #090, #091, #092, #093, #094, #095,  //  88 ..  95
+  #096, #097, #098, #099, #100, #101, #102, #103,  //  96 .. 103
+  #104, #105, #106, #107, #108, #109, #110, #111,  // 104 .. 111
+  #112, #113, #114, #115, #116, #117, #118, #119,  // 112 .. 119
+  #120, #121, #122, #123, #124, #125, #126, #127,  // 120 .. 127
+  #199, #252, #233, #226, #228, #224, #229, #231,  // 128 .. 135
+  #234, #235, #232, #239, #238, #236, #196, #197,  // 136 .. 143
+  #201, #230, #198, #244, #246, #242, #251, #249,  // 144 .. 151
+  #255, #214, #220, #248, #163, #216, #215, #131,  // 152 .. 159
+  #225, #237, #243, #250, #241, #209, #170, #186,  // 160 .. 167
+  #191, #174, #172, #189, #188, #161, #171, #187,  // 168 .. 175
+  #166, #166, #166, #166, #166, #193, #194, #192,  // 176 .. 183
+  #169, #166, #166, #043, #043, #162, #165, #043,  // 184 .. 191
+  #043, #045, #045, #043, #045, #043, #227, #195,  // 192 .. 199
+  #043, #043, #045, #045, #166, #045, #043, #164,  // 200 .. 207
+  #240, #208, #202, #203, #200, #105, #205, #206,  // 208 .. 215
+  #207, #043, #043, #166, #095, #166, #204, #175,  // 216 .. 223
+  #211, #223, #212, #210, #245, #213, #181, #254,  // 224 .. 231
+  #222, #218, #219, #217, #253, #221, #175, #180,  // 232 .. 239
+  #173, #177, #061, #190, #182, #167, #247, #184,  // 240 .. 247
+  #176, #168, #183, #185, #179, #178, #166, #160); // 248 .. 255
+
+function  OemToString(const aStr: AnsiString): AnsiString;
+function TextOemToAnsi437(const S: AnsiString): AnsiString;   // 17.07.08 P.W
+//procedure HideLaunchInfo;  u. 27.06.05 P.W
+//procedure RestoreLaunchInfo; u. 27.06.05 P.W
+procedure ForceBringToFront;
+function Mouse_CursorPos: TPoint;  // 18.11.09 P.W
+{$ENDIF}
+function GetWindowTitle(WinHwnd : HWND;LogFlg:Boolean=True): AnsiString;
+function Debug_GetHwndLaunched: HWND;
+
+procedure SignalFullScreen(fsFlg: Boolean = True);  // used by StartXctCon.pas with parameter FullScreen
+var
+  LaunchConsoleIgnoreWindow : Boolean = False; // 09.06.05 P.W
+function LaunchConsole(AppPath, Cmd_Line, CurDir, Title: pChar;
+              FullScreenFlg : Boolean           = True;
+              WaitWndFlg    : Boolean           = True;
+              ELO           : PExtLaunchOptions = nil   // ELO: 20.10.09 P.W
+              ):THandle;
+procedure LaunchConsoleProc(AppPath, CmdLine, CurDir, Title: pChar; FullScreenFlg:Boolean=True);
+function UseLaunchConsole(var hProcess: THandle; AppPath, CmdLine, CurDir, Title: AnsiString;
+  FullScreenFlg:Boolean{=True}; HideWndFlg:Boolean=False; WaitWndFlg:Boolean=True;
+  ELO           : PExtLaunchOptions = nil   // ELO: 20.10.09 P.W
+  ): HWND; // used by StartWin98
+procedure LaunchQuick(AppPath, CmdLine, CurDir, Title: AnsiString;
+              ELO: PExtLaunchOptions = nil);
+procedure LaunchNotePad(fName: AnsiString; WaitFlg:Boolean=False);
+procedure LaunchNotePad_Refresh(fName: AnsiString; WaitFlg:Boolean=False);
+function ConsoleLaunchWait(AppPath, CmdLine, CurDir, Title: AnsiString; FullScreenFlg:Boolean=False; ChkForeGrnd:Boolean=False): Boolean;
+procedure LaunchWaitTimeDlg(Msg: String='');
+{$Ifdef DELPHI}
+function  CreateFileFromArr(const FileName:String; Lines: Array of String): Boolean;
+procedure LaunchWait(AppPath, CmdLine, CurDir, Title: AnsiString; FullScreenFlg:Boolean{=False}; HideWndFlg:Boolean=False);
+procedure ReadlnHaltMessagesToMemo(Memo: TMemo);
+function LaunchWaitForm(AppPath, CmdLine, CurDir, Title: AnsiString;
+            FullScreenFlg: Boolean{=False};
+            HideWndFlg: Boolean = False; LaunchedTitle: AnsiString = ''): DWORD;
+
+function LaunchWaitSE_Compiler(AppPath, CmdLine, CurDir, Title: AnsiString): Boolean;
+
+procedure LaunchWaitSE(AppPath, CmdLine, CurDir, Title: AnsiString; FullScreenFlg:Boolean{=False}; HideWndFlg: Boolean);
+Function  LaunchWaitSEF(AppPath, CmdLine, CurDir, Title: AnsiString;
+            FullScreenFlg: Boolean{=False};
+            HideWndFlg: Boolean; LaunchedTitle: AnsiString = ''): DWORD;
+procedure DeleteFiles(Path, Mask: String);
+function FileAppendString(aName, Msg: AnsiString): Boolean;
+//function CallCopyFile(Source, Target: AnsiString): Boolean; // 03.10.07 P.W moved to WindowsEx
+
+type
+  TDriveTypes = Set of TDriveType;
+const
+//  DrivesMayInst = [dtFixed, dtNetwork, dtCDROM,dtRAM];
+  DrivesMayInst = [dtFixed, dtNetwork];  // 13.09.05 P.W  avoid message "insert CD ..."
+  DrivesAll     = [dtFloppy, dtFixed, dtNetwork, dtCDROM,dtRAM];
+
+var
+  WinToolsMsgHook : procedure(const Msg: AnsiString=''; aColor:TColor=clNone) = nil;
+                                        // ^--- must be AnsiString!
+type
+  TCopyMsgRec   = record
+    Level: Integer;
+    SrcFolder,
+    DstFolder,
+    fName,
+    Mask        : String;
+    Size        : Int64;
+  end;
+  TMsgFunc      = function(const CMR: TCopyMsgRec): Boolean of object;
+  TCallInfo = record
+    Level : Integer;
+    LevLim : Integer;
+    InfLevLim : Integer;
+  end;
+
+const
+  CallInfoOff  : TCallInfo = (Level: 0; LevLim: 0; InfLevLim: -1);
+  CallInfoEver : TCallInfo = (Level: 0; LevLim: 0; InfLevLim:  0);
+  CallInfoOnce : TCallInfo = (Level: 0; LevLim: 0; InfLevLim:  1);
+  CallInfoTwice: TCallInfo = (Level: 0; LevLim: 0; InfLevLim:  2);
+
+function IsNetDrive(const Path: AnsiString): Boolean;
+function GetDrivesString(DriveTypes: TDriveTypes=DrivesAll; WithMedia:Boolean=True): String;
+function GetDiskInfo(aFileName: AnsiString; QuietFlg:Boolean=False): PDiskInfoRec;
+procedure IncFolderSizeRec(var ValRec: TFolderSizeRec; const AddRec: TFolderSizeRec);
+procedure FolderSizeRecAddFile(var FSR: TFolderSizeRec; FileName: String; PDIR: PDiskInfoRec=nil);
+function FolderSize(DirName: String; CI : TCallInfo; PDIR: PDiskInfoRec=nil): TFolderSizeRec; overload;
+function FolderSize(DirName: String): TFolderSizeRec;                 overload;
+function DeleteFolder(DirName: String; CI : TCallInfo): Boolean;      overload;
+function DeleteFolder(DirName: String): Boolean;                      overload;
+function FillCopyMsgRec(Level: Integer; const SrcFolder, DstFolder, fName, Mask: String; Size: Int64): TCopyMsgRec;
+function CopyFolder(
+           const SourceFolder,
+           TargetFolder:String;
+           CI : TCallInfo;
+           Mask:String='*.*';
+           SubFlg:Boolean=True;
+           MsgFunc: TMsgFunc=nil;
+           ExcludeMask:String=''   // 18.01.09 P.W
+           ): Boolean;                             overload;
+function CopyFolder(
+           const SourceFolder,
+           TargetFolder:String;
+           Mask:String='*.*';
+           SubFlg:Boolean=True): Boolean;                             overload;
+
+function FolderTree(const Folder: AnsiString; var Folders: TStringList; Level:Integer=0): Boolean;
+function GetFilesMasked(const Folder: AnsiString; const Masks: Array of AnsiString; Level:Integer=0; AddPathFlg:Boolean=True): TStringList;
+function DeleteFileList(FList: TStringList): Boolean;
+function DeleteFilesSubMasked(const Folder: AnsiString; const Masks: Array of AnsiString): Boolean;
+
+function FileContentEqual(const NameA, NameB: AnsiString): Boolean;
+{$ENDIF}
+procedure PostAltEnter(hWndCons: HWND);
+procedure ActivateDelphi(lnHWND: HWND);  // used by FemurPcForm1 at start to avoid running without focus
+type
+  TWantBool = (WB_False, WB_True, WB_FalseOrTrue) ;
+function CallFindWindow(WindowName: AnsiString; WantVis:TWantBool=WB_FalseOrTrue): HWND;
+function  LaunchedInfoGetHandle: HWND;  overload;
+
+{$EXTERNALSYM SwitchToThisWindow}
+function SwitchToThisWindow(hAppWnd: HWND; bSwitch: BOOL): BOOL; stdcall; deprecated;
+ // better use SetConsoleDisplayMode
+
+procedure ForceForegroundWindow(lnHWND: HWND; ShowMode: Integer= SW_SHOWDEFAULT);
+function TestPrinterStatus(LPTPort: Word): Byte;
+function MayPrintLpt(LPTPort: Word): Boolean;
+
+function CenterRect(CR, WA: TRect): TRect;
+function CenterRectTopPref(CR, WA: TRect): TRect;
+function CenterRectTop(CR, WA: TRect): TRect;
+function GetWorkAreaPrim: TRect; // primary monitor
+function IsRegStratecConsoleFullScreen: Boolean;
+function FindMaximalConsoleFontSize(LaunchDir: AnsiString; ForceSearchFontSize:Boolean=False): Integer; // 02.07.08 P.W
+function SecondsIdle: Double;
+
+var
+  BreakFlg : Boolean = False;
+  NonDelphiApplication_Terminated_Func      : function : Boolean = nil;  // 02.07.08 P.W
+  NonDelphiApplication_ProcessMessages_Proc : procedure          = nil;  // 02.07.08 P.W
+
+Implementation
+
+uses Masks;
+  const Unit_Name = 'WinTools'; // 03.05.24 P.W
+
+{$Ifdef DELPHI}
+{$ELSE}
+function  TraS(const S: String; MinLen:Integer=0): String;
+// 26.11.08 P.W
+// dummy to replace missing TransX TraS
+begin
+  Result := S;
+end;
+{$ENDIF}
+
+{$Ifdef DELPHI}
+type
+  TMyHintWindow = class(THIntwindow)
+  protected
+    procedure CreateParams(var Params: TCreateParams); override;
+  end;
+
+procedure TMyHintWindow.CreateParams(var Params: TCreateParams);
+begin
+  inherited CreateParams(Params);
+  Params.WindowClass.Style :=
+    Params.WindowClass.style and not CS_DROPSHADOW;
+end;
+
+procedure HintWindow_BugFix;
+// 23.04.08 P.W
+// Problem: Under Windows XP     Shadow of HintWindow remains when mouse moved over other application
+//          Under Windows Vista  parts of hint remain visible and application no longer responds!
+begin
+  forms.HintWindowClass := TMyHintWindow;
+end;
+
+function  OemToString(const aStr: AnsiString): AnsiString;
+var
+  S : AnsiString; // for convert to PChar
+begin
+  if (aStr = '') then
+  begin
+    Result := '';
+  end else
+  begin
+    S := aStr;
+    OemToChar(PChar(S), PChar(S));
+    Result := S;
+  end;
+end;
+
+function  StringToOem(const aStr: AnsiString): AnsiString;
+var
+  S : AnsiString; // for convert to PChar
+begin
+  if (aStr = '') then
+  begin
+    Result := '';
+  end else
+  begin
+    S := aStr;
+    CharToOem(PChar(S), PChar(S));
+    Result := S;
+  end;
+end;
+
+procedure create_OEM_Ansi_Table;
+// 17.07.08 P.W
+// creates table for OEM_ANSI_437
+var
+  I : Integer;
+  SI, S : AnsiString;
+  SL : TStringList;
+begin
+  SL := TStringList.Create;
+  S := '';
+  for I := 0 to 255 do
+  begin
+    SI := Char(I);
+    SI := OemToString(SI);
+    S := Format('%s#%1.3d, ', [S, Ord(SI[1])]);
+    if ((I+1) mod 8) = 0 then
+    begin
+      SL.Append(Format('  %s // %3d .. %3d', [S, I-7, I]));
+      S := '';
+    end;
+  end;
+  SL.SaveToFile('C:\Temp\OEM_ANSI_CODE.txt');
+  FreeAndNil(SL);
+end;
+
+function TextOemToAnsi437(const S: AnsiString): AnsiString;
+// 17.07.08 P.W
+var
+  Len, I : Integer;
+begin
+  Len := Length(S);
+  SetLength(Result, Len);
+  for I := 1 to Len do
+    Result[I] := OEM_ANSI_437[Ord(S[I])];
+end;
+
+{$ENDIF}
+
+function NonDelphiApplication_Terminated: Boolean;
+// 02.07.08 P.W   (for StartXct0.exe)
+begin
+  if Assigned(NonDelphiApplication_Terminated_Func) then
+    Result := NonDelphiApplication_Terminated_Func
+  else
+    Result := False;
+end;
+
+procedure NonDelphiApplication_ProcessMessages;
+// 02.07.08 P.W    (for StartXct0.exe)
+begin
+  if Assigned(NonDelphiApplication_ProcessMessages_Proc) then
+    NonDelphiApplication_ProcessMessages_Proc;
+end;
+
+procedure ProcessMessages_Any;
+// 02.07.08 P.W
+begin
+{$Ifdef DELPHI}
+  Application.ProcessMessages;
+{$ELSE}
+  NonDelphiApplication_ProcessMessages;
+{$ENDIF}
+end;
+
+procedure ProcessMessages_Any_Sleep(NumRepeat: Integer; SleepMs: DWord);
+// 02.07.08 P.W
+var
+  I : Integer;
+begin
+  for I := 1 to NumRepeat do
+  begin
+    Sleep(SleepMs);
+    ProcessMessages_Any;
+  end;
+end;
+
+function ITPD(const S: AnsiString): AnsiString;
+begin
+  Result := IncludeTrailingPathDelimiter(S);
+end;
+
+function ETPD(const S: AnsiString): AnsiString;
+begin
+  Result := ExcludeTrailingPathDelimiter(S);
+end;
+
+procedure ForAllSubFolders(const Folder:String; ForAllProc: TForAllProc);
+var
+  SR: TSearchRec;
+begin
+  if BreakFlg then exit;
+  if (0= FindFirst(ITPD(Folder)+'*.*', faAnyFile, SR)) then
+  begin
+    Repeat
+      if BreakFlg then exit;
+      If ((SR.Attr and faDirectory) <> 0) then
+      begin
+        if (SR.Name <> '.') and (SR.Name <> '..') then
+        begin
+          ForAllProc(ITPD(Folder), SR);
+          ForAllSubFolders(ITPD(Folder)+SR.Name, ForAllProc);
+        end;
+      end else
+      begin  // here we receive also *.lnk files
+        ForAllProc(ITPD(Folder), SR);
+      end;
+    Until (FindNext(SR) <> 0);
+    FindClose(SR);
+  end;
+end;
+
+function IsFullScreen(Wnd: HWND): Boolean;
+var
+  R : TRect;
+begin
+  if IsWindow(Wnd) and GetWindowRect(Wnd, R) then // 06.09.05 P.W
+  begin
+//  MessageBox1(0, PChar(Format('LRTB: %d %d %d %d', [R.Left, R.Top, R.Right, R.Bottom])), 'INFO', MB_OK+MB_TASKMODAL);
+    Result := (R.Left = R.Top) and (R.Left = -32000);
+    // alternative: look into registry current user Console Window Name FullScreen (see StartXctCon)
+  end else
+  begin
+    Result := False;
+  end;
+end;
+
+function IsConsoleWndFullScreen(const Wnd: HWND): Boolean;
+// 08.07.09 P.W
+// returns True when console is in active or passive FullScreen Mode
+var
+  dwProcessId: DWORD;
+  ConModeFlags : DWORD;
+  BRes : BOOL;
+begin
+  Result := False;
+  GetWindowThreadProcessId(Wnd,  dwProcessId);
+  if AttachConsole(dwProcessId) then
+  begin
+    BRes := GetConsoleDisplayMode(ConModeFlags);
+    if BRes then
+      Result := ConModeFlags <> 0;
+  end;
+  FreeConsole;
+end;
+
+function IsConsoleWndFullScreen_Active(const Wnd: HWND): Boolean;
+// 24.07.09 P.W
+// returns True when console is in active FullScreen Mode
+var
+  dwProcessId: DWORD;
+  ConModeFlags : DWORD;
+  BRes : BOOL;
+begin
+  Result := False;
+  GetWindowThreadProcessId(Wnd,  dwProcessId);
+  if AttachConsole(dwProcessId) then
+  begin
+    BRes := GetConsoleDisplayMode(ConModeFlags);
+    if BRes then
+      Result := ((ConModeFlags and CONSOLE_FULLSCREEN_HARDWARE) <> 0);
+  end;
+  FreeConsole;
+end;
+
+
+
+function Try_SetConsoleDisplayMode(const Wnd: HWnd; MA, MB:Integer): Boolean;
+// 08.07.09 P.W
+// returns True when console was in FullScreen Mode
+var
+  dwProcessId: DWORD;
+  ConOutHdl    : THandle;
+  ConModeFlags : DWORD;
+  BRes : BOOL;
+  NewCoord : TCoord;
+begin
+  Result := False;
+  GetWindowThreadProcessId(Wnd,  dwProcessId);
+  if AttachConsole(dwProcessId) then
+  begin
+    BRes := GetConsoleDisplayMode(ConModeFlags);
+    if BRes then
+    begin
+      Result := ConModeFlags <> 0;
+        // ConModeFlags = 1: console is fullscreen but inactive 3: FullScreen and Active
+        // ConModeFlags = 0: console is in windowed mode
+      if (ConModeFlags > CONSOLE_FULLSCREEN) or (MA+MB > 0) then
+      begin
+        ConOutHdl := GetStdHandle(STD_OUTPUT_HANDLE);
+        if (ConOutHdl <> INVALID_HANDLE_VALUE) and (ConOutHdl <> 0) then
+        begin
+        if not SetConsoleDisplayMode(ConOutHdl,
+                 MA*CONSOLE_FULLSCREEN_MODE +
+                 MB*CONSOLE_WINDOWED_MODE, @NewCoord) then
+//          ShowMessageFmt_('SetConsoleDisplayMode failed: "%s"', [SysErrorMessage(GetLastError)]);
+      //  Switch to Fullscreen_mode is possible but to windowed_mode (when windowed) returns "Falscher Parameter"
+      //  Change of size not detected
+        end else
+        begin
+//          ShowMessageFmt_('GetStdHandle failed: "%s"', [SysErrorMessage(GetLastError)]);
+        end;
+      end;
+    end else
+    begin
+//      ShowMessageFmt_('GetConsoleDisplayMode failed: "%s"', [SysErrorMessage(GetLastError)]);
+    end;
+  end;
+  FreeConsole;
+end;
+
+
+
+{
+procedure TestWind;
+// draws in the window below the mouse cursor
+const
+  dd = 5;
+var
+  Wnd : HWnd;
+  DC  : HDC;
+  CB  : TRect;
+  DX, DY : Integer;
+  MP  : TPoint;
+  I, X, Y : Integer;
+begin
+
+  for I := 0 to 500 do
+  begin
+    MP := Mouse_CursorPos;
+//    MP.X := 1600;
+//    MP.Y := 700;
+    Wnd := WindowFromPoint(MP);
+    DC  := GetDC(Wnd);
+
+    GetClipBox(DC, CB);
+    DX := (CB.Right  - CB.Left) div dd;
+    DY := (CB.Bottom - CB.Top ) div dd;
+
+    for x := 0 to DX do
+      for y := 0 to DY do
+        SetPixel(DC, dd*x, dd*y, $00FFFFFF and (not GetPixel(DC, dd*x, dd*y)));
+    ReleaseDC(Wnd, DC);
+
+    Sleep(100);
+  end;
+
+  H_alt(1);
+end;
+}
+
+//**********************************************************************/
+//* Undocumented Windows Functions
+//* Copyright (C) 2001, MATCODE Software
+//* http://www.matcode.com
+//* Author: Vitaly Evseenko
+//**********************************************************************/
+// from http://www.matcode.com/undocwin.h.txt at 20.09.04 P.W
+//
+//////////////////////////////////////////////////////////////
+// Function SwitchToThisWindow
+// deprecated!  better use SetConsoleDisplayMode
+// Import: user32.dll
+//
+// Descryption: The SwitchToThisWindow function
+// forced switch to the thread that created the specified
+// window into the foreground, activates and focused the window.
+// Keyboard input is directed to the window.
+// Unlike SetFocus and SetForegroundWindow, SwitchToThisWindow
+// forced switch anyway even if console application work in
+// full-screen window mode!
+//
+// Arguments: hAppWnd - Identifies the main thread window that
+// should be activated, focused and brought to the foreground.
+//            bSwitch - TRUE - switch to the window;
+//            FALSE - switch back.
+// Result: If the function succeeds, the return value is nonzero.
+// Platform: Windows 95/98/ME/NT/2000/XP
+//
+// BOOL __stdcall SwitchToThisWindow(HWND hAppWnd, BOOL bSwitch);
+// only advantage compared with SetForeGroundWindow: works with console in Fullscreen
+function SwitchToThisWindow; external user32 name 'SwitchToThisWindow';
+// deprecated!  better use SetConsoleDisplayMode
+
+//const
+//  XctDirVar_Duplicate = 'XCTDIR'; // compare GlbPath.pas
+
+var
+  FullScreen  : Boolean    = False;  // false for Win98
+  LaunchDir_0 : AnsiString = '';  // use without trailingPathDelimiter
+
+function SetLaunchDir_0_Debug(const Value: AnsiString): AnsiString;
+// 03.06.08 P.W
+begin
+  SetLaunchDir_0_Debug := LaunchDir_0;
+  LaunchDir_0 := Value;
+end;
+
+procedure SetFullScreenMode(SetVal: Boolean);
+begin
+  FullScreen := SetVal;
+end;
+function GetFullScreenMode: Boolean;
+begin
+  Result := FullScreen;
+end;
+
+function  GetProgPathName: AnsiString;
+//Example for GetProgPathName: "C:\XctCmp\Tools\StartXctCon.exe"
+begin
+  if IsDevelopePath then
+  begin
+    Result := ITPD(DevelopeXctDir) + ExtractFileName(Param_Str(0));
+  end else
+  begin
+    Result := ExpandFileName(Param_Str(0));
+  end;
+end;
+
+function  GetProgPath: AnsiString;
+//Example for GetProgPath    : "C:\XctCmp\Tools"
+begin
+  Result := ETPD(ExtractFilePath(GetProgPathName));
+end;
+
+function  GetProgName: AnsiString;
+//Example for GetProgName    : "StartXctCon.exe"
+begin
+  Result := ExtractFileName(GetProgPathName);
+end;
+
+{
+procedure Test;
+//GetProgPathName: "C:\XctCmp\Tools\StartXctCon.exe"
+//GetProgPath    : "C:\XctCmp\Tools"
+//GetProgName    : "StartXctCon.exe"
+begin
+  ShowMessageFmt('GetProgPathName: "%s"', [GetProgPathName]);
+  ShowMessageFmt('GetProgPath    : "%s"', [GetProgPath]);
+  ShowMessageFmt('GetProgName    : "%s"', [GetProgName]);
+end;
+}
+
+function LaunchDir: AnsiString;
+begin
+  if LaunchDir_0 = '' then
+  begin
+    If ConsoleFlg then
+    begin // for StartXctCon which calls LaunchXct
+      LaunchDir_0 := GetProgPath;
+    end else
+    begin // for FemurPc(Delphi), KnMulti(Delpbi), SvComp(Delphi),
+          // XbJob(Delphi), FemBackPro as CtFem,
+          // which call ActivateXct, ActivateDelphi
+      LaunchDir_0 :=
+        ETPD(GetEnvironmentVariable(XctDirVar));
+    end;
+  end;
+  Result := LaunchDir_0;
+end;
+
+function  LaunchName :AnsiString;
+begin
+//  Result := LaunchDir + '\TestWin.BAT';
+  Result := LaunchDir + PathDelim + LaunchXctConBatName;
+end;
+
+function LogFile: AnsiString;
+// C:\XCT550\LOG\WinToolsLog.txt
+begin
+  Result := LaunchDir + '\LOG\WinToolsLog.txt';
+end;
+
+function LaunchedInfoName: AnsiString;
+begin
+  Result := LaunchDir + '\INTER\LAUNCHINFO.TXT';
+end;
+
+{$Ifdef DELPHI}
+function HideLaunchedInfoName: AnsiString;
+// 10.06.05 P.W
+begin
+  Result := LaunchDir + '\INTER\LAUNCHINFO.TXT';
+end;
+
+procedure HideLaunchInfo;
+// 10.06.05 P.W for use by XCTDIRECTOR at start u. 27.06.05 P.W
+begin
+  if FileExists(LaunchedInfoName) then
+  begin
+    try
+      CallCopyFile(LaunchedInfoName, HideLaunchedInfoName);
+    except
+    end;
+
+    try
+      DeleteFile(LaunchedInfoName);
+    except
+    end;
+  end;
+end;
+
+procedure RestoreLaunchInfo;
+// 10.06.05 P.W for use by XCTDIRECTOR at termination u. 27.06.05 P.W
+begin
+  if FileExists(HideLaunchedInfoName) then
+  begin
+    try
+      CallCopyFile(HideLaunchedInfoName, LaunchedInfoName);
+    except
+    end;
+  end;
+end;
+{$ENDIF}
+
+function GetPerformanceCounter: Int64;
+begin
+  if not QueryPerformanceCounter(Result) then Result := 0;
+end;
+
+function TimeMsg: String;
+begin
+//  result := Format('%s %d', [TimeToStr(Time), GetPerformanceCounter]);
+  result := TimeToStr(Time);
+end;
+
+//============================================================================
+function GetWindowTitle(WinHwnd : HWND;LogFlg:Boolean=True): AnsiString;
+// returns Title of window or Text of control
+begin
+  SetLength(Result, 1024);    // SetLenght reserves space
+  SetLength(Result, GetWindowText(WinHwnd, pChar(Result), Length(Result))); // adapt size
+end;
+
+var
+  hwndLaunched        : HWND  = 0;
+  GlbLaunchedThreadId : DWORD = 0;
+
+function Debug_GetHwndLaunched: HWND;
+begin
+  Result := hwndLaunched;
+end;
+
+function SearchEnumWndProc(WndHwnd: HWND; lparam: LPARAM): BOOL; stdcall;
+// Callback for EnumdWindows or EnumThreadWindows
+// Check for ThreadId identical to GlbThreadId
+var
+  ThreadId: DWORD;
+begin
+  ThreadId := Windows.GetWindowThreadProcessId(WndHwnd);
+  if (ThreadId = GlbLaunchedThreadId) then
+  begin
+    Result := (GetWindowTitle(WndHwnd, False)='');// continue if empty  // False: terminates enumeration
+    hwndLaunched := WndHWnd;
+  end else
+  begin
+    Result := True;   // True: continues enumeration
+  end;
+end;
+
+(*
+function GetAllEnvVars(const Vars: TStrings): Integer;
+var
+  PEnvVars: PChar;    // pointer to start of environment block
+  PEnvEntry: PChar;   // pointer to an env string in block
+begin
+  // Clear the list
+  if Assigned(Vars) then
+    Vars.Clear;
+  // Get reference to environment block for this process
+  PEnvVars := GetEnvironmentStrings;
+  if PEnvVars <> nil then
+  begin
+    // We have a block: extract strings from it
+    // Env strings are #0 separated and list ends with #0#0
+    PEnvEntry := PEnvVars;
+    try
+      while PEnvEntry^ <> #0 do
+      begin
+        if Assigned(Vars) then
+          Vars.Add(PEnvEntry);
+        Inc(PEnvEntry, StrLen(PEnvEntry) + 1);
+      end;
+      // Calculate length of block
+      Result := (PEnvEntry - PEnvVars) + 1;
+    finally
+      // Dispose of the memory block
+      Windows.FreeEnvironmentStrings(PEnvEntry);
+    end;
+  end
+  else
+    // No block => zero length
+    Result := 0;
+end;
+
+function CreateEnvBlock(const NewEnv: TStrings;
+  const IncludeCurrent: Boolean;
+  const Buffer: Pointer;
+  const BufSize: Integer): Integer;
+var
+  EnvVars: TStringList; // env vars in new block
+  Idx: Integer;         // loops thru env vars
+  PBuf: PChar;          // start env var entry in block
+begin
+  // String list for new environment vars
+  EnvVars := TStringList.Create;
+  try
+    // include current block if required
+    if IncludeCurrent then
+      GetAllEnvVars(EnvVars);
+    // store given environment vars in list
+    if Assigned(NewEnv) then
+      EnvVars.AddStrings(NewEnv);
+    // Calculate size of new environment block
+    Result := 0;
+    for Idx := 0 to Pred(EnvVars.Count) do
+      Inc(Result, Length(EnvVars[Idx]) + 1);
+    Inc(Result);
+    // Create block if buffer large enough
+    if (Buffer <> nil) and (BufSize >= Result) then
+    begin
+      // new environment blocks are always sorted
+      EnvVars.Sorted := True;
+      // do the copying
+      PBuf := Buffer;
+      for Idx := 0 to Pred(EnvVars.Count) do
+      begin
+        StrPCopy(PBuf, EnvVars[Idx]);
+        Inc(PBuf, Length(EnvVars[Idx]) + 1);
+      end;
+      // terminate block with additional #0
+      PBuf^ := #0;
+    end;
+  finally
+    EnvVars.Free;
+  end;
+end;
+*)
+(*
+function GetEnvironment: TStringList;
+var
+  Env : PAnsiChar;
+  P0, P1 : PChar;
+  S : AnsiString;
+begin
+  Result := TStringList.Create;
+  Env    := GetEnvironmentStrings;  // terminated by two #0
+  P0 := Env;
+  While P0^<>#0 do
+  begin
+    S := '';
+    P1 := P0;
+    While P1^<>#0 do
+    begin
+      S := S + P1^;
+      Inc(P1);
+    end;
+    Result.Append(S);
+    if (Pos('T_ENV_XCTDEV', S) = 1)
+       or
+       (Pos('XCTDIR', S) = 1)
+       or
+       (Pos('XCTDEV', S) = 1)
+    then
+    begin
+      MessageBox1(0, PChar(S), PChar('Message'), 0+MB_TASKMODAL);
+    end;
+    P0:= P1+1;
+  end;
+  FreeEnvironmentStrings(Env);
+end;
+
+function StringListToEnvBlockString(SL: TStringList): AnsiString;
+var
+  I : Integer;
+begin
+  Result := '';
+  for I:= 0 to SL.Count -1 do
+  begin
+    Result := Result + SL[I] + #0;
+  end;
+  Result := Result + #0;
+end;
+
+function CopyEnvStr : AnsiString;
+var
+  EnvL : TStringList;
+begin
+  EnvL := GetEnvironment;
+EnvL.Insert(0,'T_ENV_XCTDEV=Hallo');
+//  EnvL.Append('T_ENV_XCTDEV=Hallo');
+  Result := StringListToEnvBlockString(EnvL);
+  FreeAndNil(EnvL);
+end;
+*)
+
+function ProcessHasTerminated(hProcess: THandle): Boolean;
+var
+  lpExitCode: DWORD;
+begin
+  if GetExitCodeProcess(hProcess, lpExitCode)
+    then Result := (lpExitCode <> STILL_ACTIVE)
+    else Result := False;
+end;
+
+function ProcessExitCode(hProcess: THandle): DWORD;
+// 29.08.05 P.W
+begin
+  if not GetExitCodeProcess(hProcess, Result) then
+    Result := 1;
+end;
+
+(* use ShellApi
+// Launch Notepad.exe
+ShellExecute( Handle, 'open', 'c:\windows\notepad.exe', nil, nil, SW_SHOWNORMAL );
+
+// Launch Notepad.exe to open readme.txt
+ShellExecute( Handle, 'open', 'c:\windows\notepad.exe', 'c:\readme.txt', nil, SW_SHOWNORMAL );
+
+// Open C:\Download folder
+ShellExecute( Handle, 'open', 'c:\download', nil, nil, SW_SHOWNORMAL );
+
+// Open Word document
+ShellExecute( Handle, 'open', 'c:\docs\letter.doc', nil, nil, SW_SHOWNORMAL );
+
+// Open a URL with the default Web Browser
+ShellExecute( Handle, 'open', 'http://hianoto.net', nil, nil, SW_SHOWNORMAL );
+
+// Display a new e-mail with the default E-mail Client
+ShellExecute( Handle, 'open', PChar( 'mailto:hian@hianoto.net' ), nil, nil, SW_SHOWNORMAL );
+*)
+
+procedure CheckSetForegroundWindow(Wnd: HWND; IgnoreEnaVisFlg:Boolean=False);
+// 17.12.07 P.W
+// ensure the window we wait for is put to foreground
+// Modifications
+// 01.09.08 P.W: When Wnd is iconic use restore
+var
+  FG : HWND;
+  PID_WND, PID_FG : Integer;
+begin
+  if IsWindow(Wnd) and
+     ( (IsWindowEnabled(Wnd) and IsWindowVisible(Wnd))
+       or IgnoreEnaVisFlg ) // 02.07.08 P.W IgnoreEnaVisFlg for LaunchWaitTimeDlg (Window behind MainWnd of StartXct0 may be disabled)
+      then
+  begin
+    FG := GetForegroundWindow;
+    if (FG <> Wnd) then // if: 02.07.08 P.W
+    begin
+      GetWindowThreadProcessId(Wnd, @PID_WND);  // 02.07.08 P.W
+      GetWindowThreadProcessId(FG,  @PID_FG);   // 02.07.08 P.W
+
+      if (PID_WND <> PID_FG) then  // if: 02.07.08 P.W
+      begin
+        ProcessMessages_Any_Sleep(4, 10);   // 02.07.08 P.W
+        if IsIconic(Wnd) then               // 01.09.08 P.W
+        begin                               // this helps to activate a fullscreen console window!
+          ShowWindow(Wnd, SW_RESTORE);
+          ProcessMessages_Any_Sleep(4, 10);
+        end;
+
+        SetForegroundWindow(Wnd);
+        ProcessMessages_Any_Sleep(4, 10);   // 02.07.08 P.W
+      end;
+    end;
+  end;
+end;
+
+procedure DisableCloseButton(Wnd: HWND);
+// created: 08.09.05 P.W
+var
+  Flag: UINT;
+  WndSysMenu: THandle;
+begin
+exit;
+  WndSysMenu:=GetSystemMenu(Wnd,False);
+  if (WndSysMenu <> 0) then
+  begin
+    Flag:=MF_GRAYED;
+    EnableMenuItem(WndSysMenu,SC_CLOSE,MF_BYCOMMAND or Flag);
+    // but next right click enables the close button again! (Console App)
+    // additionally DeleteMenu cures the problem;
+    // but it needs the previous Enable Grayed  also to draw the button grayed!
+
+    DeleteMenu(WndSysMenu,SC_CLOSE,MF_BYCOMMAND);
+  end;
+end;
+
+procedure DisableMenuItem(Wnd: HWND; Item: Cardinal);
+// created: 02.07.08 P.W
+//const
+//Item: Cardinal = SC_CLOSE;
+//Item: Cardinal = SC_MINIMIZE;
+//Item: Cardinal = SC_MAXIMIZE;
+//Item: Cardinal = SC_MOVE;
+//Item: Cardinal = SC_SIZE;        // no size changing but minimize and maximize are possible
+var
+  Flag: UINT;
+  WndSysMenu: THandle;
+begin
+  WndSysMenu:=GetSystemMenu(Wnd,False);
+  if (WndSysMenu <> 0) then
+  begin
+    Flag:=MF_GRAYED;
+    EnableMenuItem(WndSysMenu,Item,MF_BYCOMMAND or Flag);
+    // but next right click enables the close button again! (Console App)
+    // additionally DeleteMenu cures the problem;
+    // but it needs the previous Enable Grayed  also to draw the button grayed!
+
+    DeleteMenu(WndSysMenu,Item,MF_BYCOMMAND);
+  end;
+end;
+
+procedure DisableConsoleButtons(Wnd: HWND);
+// created: 02.07.08 P.W
+begin
+  DisableMenuItem(Wnd, SC_CLOSE);
+  DisableMenuItem(Wnd, SC_MINIMIZE);
+  DisableMenuItem(Wnd, SC_MAXIMIZE);
+//DisableMenuItem(Wnd, SC_MOVE);
+//  DisableMenuItem(Wnd, SC_SIZE);
+end;
+
+function NameFromPath(Path: AnsiString): AnsiString;
+var
+  I: Integer;
+begin
+  Result := ExpandFileName(Path);
+  For I:=1 to Length(Result) do
+    case Result[I] of
+      ':': Result[I]:= '_';
+      '\': Result[I]:= '_';
+    end;
+  Result := StringReplace(Result, '__', '_', [rfReplaceAll, rfIgnoreCase] );  // 02.07.08 P.W
+end;
+//============================================================================
+
+function ConWndName_Def: AnsiString;
+begin
+  Result := GetXCTLaunchTitle('');
+end;
+
+function ConWndName_Def_WM: AnsiString;  // 11.09.08 P.W
+begin
+  Result := GetXCTLaunchTitle('WM');
+end;
+
+const
+  CREATE_BREAKAWAY_FROM_JOB = $01000000;  // 20.10.09 P.W
+
+function LaunchConsole(AppPath, Cmd_Line, CurDir, Title: pChar;
+              FullScreenFlg : Boolean           = True;
+              WaitWndFlg    : Boolean           = True;
+              ELO           : PExtLaunchOptions = nil   // ELO: 20.10.09 P.W
+              ):THandle;
+// returns lpProcessInformation.hProcess
+// CloseHandle(Result) should be done by caller when handle is no longer needed!
+// been added
+// modifications:
+// 17.12.07 P.W until 20.12.07 P.W:  call SetForegroundWindow(hwndLaunched);   BAD!
+// 25.03.08 P.W wait for launched app to create window from nearly 5 to 10 sec. increased
+//   under worse conditions "Launch continue waiting" came up and probably while waiting for user
+//   the creation of window has not been detected because the app (XbJob.exe) terminated during this
+//   time.
+// 11.09.08 P.W: avoid unwanted start of batches in fullscreenmode
+
+  function ContinueWaiting: Boolean;
+  // modifications:
+  // 09.06.05 P.W: MB_TASKMODAL added to avoid Message is behind other
+  //   app windows
+  // LaunchConsoleIgnoreWindow supported for use by LaunchXCT of Install.pas
+  var
+    Msg : AnsiString;
+  begin
+    Result := False;
+    if LaunchConsoleIgnoreWindow then EXIT; // 09.06.05 P.W
+    Msg := TraS('Launch; Continue Waiting?');
+    case MessageBox1(0, PChar(Msg), AppPath,
+                  MB_YESNOCANCEL+MB_ICONQUESTION+MB_TASKMODAL) of
+      IDYES:
+        begin
+          Result := True;
+        end;
+      IDABORT, IDCANCEL:
+        begin
+        end;
+      IDNO:
+        begin
+        end;
+    end;
+  end;
+// returns dwProcessId
+var
+  lpStartupInfo: TStartupInfo;
+  lpProcessInformation: TProcessInformation;
+  I : Integer;
+  CreateRes : Bool;
+  IsRegFullScreen,
+  AvoidUnwantedFullScreen, // 11.09.08 P.W
+  BatchFlg  : Boolean; // 02.07.08 P.W
+  OptBreakAway : Integer;
+// EnvStr : AnsiString;
+{------------------------------
+// tested but not used (Launched Fullscreen will be switched to windowed mode when Fullscreen is false)
+  NewCoord : TCoord;           // 11.09.08 P.W
+  ConOutHdl    : THandle;      // 11.09.08 P.W
+const
+ CONSOLE_FULLSCREEN_MODE = 1;  // 11.09.08 P.W
+ CONSOLE_WINDOWED_MODE   = 2;  // 11.09.08 P.W
+-------------------------------}
+begin
+  GetStartUpInfo(lpStartupInfo);
+
+  OptBreakAway := 0;                 // 20.10.09 P.W
+  if Assigned(ELO) then              // 20.10.09 P.W
+  begin
+    if ELO.BreakAwayFromJob then
+      OptBreakAway := 1;
+  end;
+
+  // detect launch of *.bat file 02.07.08 P.W:
+  BatchFlg := (Pos('.BAT',UpperCase(AppPath)) > 0);
+  if BatchFlg then
+  begin
+    BatchFlg := (Pos('.',UpperCase(AppPath)) = Pos('.BAT',UpperCase(AppPath))) ;
+
+  end;
+
+  IsRegFullScreen := IsRegStratecConsoleFullScreen;
+  FullScreenFlg := FullScreenFlg and BatchFlg and IsRegFullScreen;  // 02.07.08 P.W
+
+  AvoidUnwantedFullScreen := (Not FullScreenFlg) and BatchFlg and IsRegFullScreen;  // 11.09.08 P.W
+
+  lpStartupInfo.dwFlags := STARTF_USESHOWWINDOW    *1 +  //  $01  use wShowWindow
+                           STARTF_USECOUNTCHARS    *1 +  //  $08  for console use dwXCountChars..
+                           STARTF_USEFILLATTRIBUTE *0 +  //  $10  for console use dwFillAttribute
+                           STARTF_RUNFULLSCREEN    *0 +  //  $20
+                           STARTF_FORCEOFFFEEDBACK *1 +  //  $80
+                           STARTF_USESTDHANDLES    *0 +  // $100;
+                           0;
+  if FullScreenFlg then lpStartupInfo.dwFlags := lpStartupInfo.dwFlags or STARTF_RUNFULLSCREEN;
+    // ^-- This flag is only valid for console applications running on an x86 computer (not supported under VISTA)
+
+  lpStartupInfo.dwXCountChars   := ConWndWidth;   // seems not to work (STARTF_USECOUNTCHARS is set!)
+  lpStartupInfo.dwYCountChars   := ConWndHeight;   //   reason may be: Properties set for all windows with same name?
+
+  lpStartupInfo.wShowWindow     := SW_SHOW;
+
+  // needs  STARTF_USEFILLATTRIBUTE
+  // yellow: green+red; white: blue+green+red; black:none;
+  lpStartupInfo.dwFillAttribute := FOREGROUND_BLUE      *0 + // $01
+                                   FOREGROUND_GREEN     *1 + // $02
+                                   FOREGROUND_RED       *1 + // $04
+                                   FOREGROUND_INTENSITY *1 + // $08
+
+                                   BACKGROUND_BLUE      *1 + // $10
+                                   BACKGROUND_GREEN     *0 + // $20
+                                   BACKGROUND_RED       *0 + // $40
+                                   BACKGROUND_INTENSITY *0 + // $80
+                                   0;
+
+  if BatchFlg then    // if: 02.07.08 P.W
+  begin  // 02.07.08 P.W
+    if AvoidUnwantedFullScreen then // if: 11.09.08 P.W
+    begin // 11.09.08 P.W
+      // launch in Windowed Mode (Settings in registry written by StartXct0.exe FindMaximalConsoleFontSize)
+      lpStartupInfo.lpTitle := PChar(ConWndName_Def_WM);
+    end else
+    begin
+      lpStartupInfo.lpTitle := PChar(ConWndName_Def);
+    end;
+  end else
+  begin
+    lpStartupInfo.lpTitle := Title;  // don't free the original!
+  end;
+
+//EnvStr := CopyEnvStr;
+  CreateRes :=
+  CreateProcess(
+    //--- for WinXP: ---
+//    AppPath,               // lpApplicationName: PChar;
+//    CmdLine,               // lpCommandLine: PChar;
+    //--- for Win98 (and WinXP): ---
+    nil,                     // lpApplicationName: PChar;
+    AppPath,                 // must include commandline! // lpCommandLine: PChar;
+
+    nil,                     // lpProcessAttributes,
+    nil,                     // lpThreadAttributes: PSecurityAttributes;
+    False,                   // bInheritHandles: BOOL;
+    OptBreakAway * CREATE_BREAKAWAY_FROM_JOB or  // 20.10.09 P.W
+    CREATE_NEW_CONSOLE or CREATE_DEFAULT_ERROR_MODE, // may be zero if caller is win GUI app   // dwCreationFlags: DWORD;
+
+// some tests with environment under Win 98:
+// Results: only the ComSpec is used to launch if no Command.com is currently running
+// all or most others are ignored!
+//PChar(EnvStr),
+//PChar(AnsiString('XCTDEV=DevNix'#0'COMSPEC=C:\WINDOWS\COMMAND.COM'#0'XCTDIR=nix'#0)),
+//PChar(AnsiString('XCTDIR=DirNix'#0'XCTDEV=DevNix'#0)),
+    nil,                     // lpEnvironment: Pointer;
+
+    CurDir,                  // lpCurrentDirectory: PChar;
+    lpStartupInfo,           // const lpStartupInfo: TStartupInfo;
+    lpProcessInformation);   // var lpProcessInformation: TProcessInformation): BOOL; stdcall;
+
+  // so we now the thread but not the window!
+  // wait until window is open and search it
+  // search for a window of the dwTreadID with name not empty:
+  hwndLaunched := 0;     // set by SearchEnumWndProc if found
+  GlbLaunchedThreadId := lpProcessInformation.dwThreadId;
+  Result := lpProcessInformation.hProcess;
+
+  if CreateRes then
+  begin
+    if WaitWndFlg then
+    Repeat
+      For I := 1 to 200 do // wait maximal 10 sec that launched process has created its window! // 100 (5s) -> 200 (10s) 25.03.08 P.W
+      begin
+        Sleep(50);
+        EnumWindows(@SearchEnumWndProc, GlbLaunchedThreadId);  // callback "SearchEnumWndProc" sets hwndLaunched
+        // use EnumThreadWindows  // is only fine for nonconsole apps.!
+        if (hwndLaunched <> 0) then BREAK;
+        if ProcessHasTerminated(Result) then BREAK;  // for wscript Test.vbs ...  // here also since: 02.07.08 P.W
+      end;
+      if ProcessHasTerminated(Result) then BREAK;  // for wscript Test.vbs ...  (may have terminated before window is detected)
+    Until (hwndLaunched <> 0) or (not ContinueWaiting);
+
+    If IsWindow(hwndLaunched) and BatchFlg then // 02.07.08 P.W
+    begin
+      //DisableCloseButton(hwndLaunched);
+      DisableConsoleButtons(hwndLaunched);
+      //if not SetWindowText(hwndLaunched, Title)  // does not work for console  and returns no error
+      //  then ShowMessageFmt_(SysErrorMessage(GetLastError));
+
+      FreeConsole;
+      AttachConsole(lpProcessInformation.dwProcessId);
+      SetConsoleTitle(Title);
+
+      {------------------------------------
+      // Tested but not used (too many screen mode switches)
+      if (not FullScreenFlg) and IsIconic(hwndLaunched) then  // 11.09.08 P.W
+      begin // FullScreen not wanted but launched in Fullscreen mode (may be demanded by Registry settings)
+        ConOutHdl := GetStdHandle(STD_OUTPUT_HANDLE);
+        if ConOutHdl <> 0 then
+        begin
+          NewCoord.X := ConWndWidth;
+          NewCoord.Y := ConWndHeight;
+          if not SetConsoleDisplayMode(ConOutHdl, CONSOLE_WINDOWED_MODE, @NewCoord) then
+            ShowMessageFmt_('SetConsoleDisplayMode failed: "%s"', [SysErrorMessage(GetLastError)]);
+        end;
+      end;
+      -------------------------------------}
+
+      FreeConsole;
+    end;
+
+//   here SetForegroundWindow is a bad idea!
+//     when second time comming back from Analysis the
+//     Windowed Dos-XMenu.exe does not accept Enter or Mouseclick (other keys work fine!)
+//
+//    if IsWindow(hwndLaunched) then
+//      SetForegroundWindow(hwndLaunched);     // 17.12.07 P.W until 20.12.07 P.W     // BAD!
+
+
+    // CloseHandle(lpProcessInformation.hProcess); // Should be done by caller (use Result)
+    CloseHandle(lpProcessInformation.hThread) ;    // 30.10.07 P.W
+  end else
+  begin            // 30.10.07 P.W
+    Result := 0;
+    GlbLaunchedThreadId := 0;
+  end;
+end;
+
+procedure LaunchConsoleProc(AppPath, CmdLine, CurDir, Title: pChar; FullScreenFlg:Boolean=True);
+// 30.10.07 P.W
+begin
+  CloseHandle(LaunchConsole(AppPath, CmdLine, CurDir, Title, FullScreenFlg));
+end;
+
+function UseLaunchConsole(var hProcess: THandle; AppPath, CmdLine, CurDir, Title: AnsiString;
+  FullScreenFlg:Boolean{=True}; HideWndFlg:Boolean=False; WaitWndFlg:Boolean=True;
+  ELO           : PExtLaunchOptions = nil   // ELO: 20.10.09 P.W
+  ): HWND;
+// for use by StartWin98
+// CurDir may not be empty?
+// caller should call CloseHandle(hProcess)!     // added to all callers 30.10.07 P.W 
+var
+  Sav_hwndLaunched        : HWND;
+  Sav_GlbLaunchedThreadId : DWORD;
+begin
+  Sav_hwndLaunched        := hwndLaunched;
+  Sav_GlbLaunchedThreadId := GlbLaunchedThreadId;
+
+  hwndLaunched            := 0;  // is needed as Global by EnumWindows Callback
+  GlbLaunchedThreadId     := 0;  // is needed as Global by EnumWindows Callback
+
+  if (CmdLine <> '') then
+  begin
+    AppPath := AppPath + ' ' + CmdLine;
+    CmdLine := '';
+  end;
+  hProcess:=  LaunchConsole(pChar(AppPath), pChar(CmdLine), pChar(ETPD(CurDir)),
+                   pChar(Title), FullScreenFlg, WaitWndFlg, ELO);
+  Result := hwndLaunched;
+
+  hwndLaunched            := Sav_hwndLaunched;
+  GlbLaunchedThreadId     := Sav_GlbLaunchedThreadId;
+end;
+
+procedure LaunchQuick(AppPath, CmdLine, CurDir, Title: AnsiString;
+          ELO: PExtLaunchOptions = nil);
+var
+  hProcess: THandle;
+begin
+  if CurDir = '' then CurDir := '.';
+  UseLaunchConsole(hProcess, AppPath, CmdLine, CurDir, Title,  False, False, True, ELO);
+  CloseHandle(hProcess);
+end;
+
+procedure LaunchNotePad(fName: AnsiString; WaitFlg:Boolean=False);
+var
+  Wnd : HWND;
+begin
+  Wnd := CallFindWindow(Format('%s - Editor', [ExtractFileName(ExpandFileName(fName))]));
+  if (Wnd <> 0) then
+  begin
+    SetForegroundWindow(Wnd);
+  end else
+  begin
+    if WaitFlg then
+      ConsoleLaunchWait('Notepad.exe' , '"'+fName+'"', '.', '')  // ! This will not wait when the file is already open!
+    else
+      LaunchQuick      ('Notepad.exe' , '"'+fName+'"', '.', '');
+  end;
+end;
+
+procedure LaunchNotePad_Refresh(fName: AnsiString; WaitFlg:Boolean=False);
+// 25.02.09 P.W
+var
+  Wnd : HWND;
+begin
+  Wnd := CallFindWindow(Format('%s - Editor', [ExtractFileName(ExpandFileName(fName))]));
+  if (Wnd <> 0) then
+  begin
+    SetForegroundWindow(Wnd);
+    SendMessage(Wnd, WM_Close, 0, 0);  // allows user to save changes!
+  end;
+  begin
+    if WaitFlg then
+      ConsoleLaunchWait('Notepad.exe' , '"'+fName+'"', '.', '')  // ! This will not wait when the file is already open!
+    else
+      LaunchQuick      ('Notepad.exe' , '"'+fName+'"', '.', '');
+  end;
+end;
+
+function ConsoleLaunchWait(AppPath, CmdLine, CurDir, Title: AnsiString; FullScreenFlg:Boolean=False; ChkForeGrnd:Boolean=False): Boolean;
+// 10.06.05 P.W
+// copy of LaunchWait for console apps
+// which do not use modul Forms to avoid blow up:
+// during wait Application.ProcessMessages not called!
+// modifications:
+// 29.08.05 P.W proceddure to function, returns false if exitcode is not zero
+// 17.12.07 P.W if ChkForeGrnd is true call CheckSetForeGroundWindow
+var
+  hProcess: THandle;
+  Res  : DWORD;
+  WndL : HWND;
+
+begin
+  Result := False;  // 29.08.05 P.W
+  if IsConsole then
+  begin
+    if Title = ''
+      then Title := Format(TraS('Waiting that "%s" terminates ...'), [AppPath]);
+
+    Writeln(Title);
+  end;
+  WndL := UseLaunchConsole(hProcess, AppPath, CmdLine, CurDir, Title, FullScreenFlg);
+  Repeat
+    Res := WaitForSingleObject(hProcess, 200);
+
+    if ChkForeGrnd then
+      CheckSetForegroundWindow(WndL, True);     // 17.12.07 P.W   // True: 02.07.08 P.W
+
+{$Ifdef DELPHI}
+    Application.ProcessMessages;   // needs Forms.pas which blows up console if compiled with
+                                   // conditional define "Delphi"
+{$ENDIF}
+    NonDelphiApplication_ProcessMessages;  // 02.07.08 P.W   (for StartXct0.exe)
+
+  Until (Res <> WAIT_TIMEOUT)
+{$Ifdef DELPHI}
+  or (Application.Terminated)
+{$ENDIF}
+  or NonDelphiApplication_Terminated  // 02.07.08 P.W   (for StartXct0.exe)
+  ;
+
+  if IsConsole then
+    Writeln(TraS('Waiting ready'));
+
+  Result := (ProcessExitCode(hProcess) = 0);  // 29.08.05 P.W
+  CloseHandle(hProcess);       // 30.10.07 P.W
+end;
+
+procedure LaunchWaitTimeDlg(Msg: String='');
+// 10.06.05 P.W for use by StartXctCon.exe to replace TimeChk.exe
+//   which used Date and Time of Commandline
+// ! what is not handled: When TimeDate Dialog is already open: a second process is started which only activates the dialog and
+//  then terminates. So ConsoleLaunchWait returns immediate in this case!
+// further infos using rundll32.exe see "Info\Rundll32 Funktionen.doc"
+begin
+  // from http://www.chami.com/tips/delphi/052698D.html
+  ConsoleLaunchWait(
+    'rundll32.exe shell32.dll,Control_RunDLL timedate.cpl',
+    '', '.', Msg,
+    False,       // FullscreenFlg
+    True);       // ChkForeGrnd
+end;
+
+{$Ifdef DELPHI}
+function CreateFileFromArr(const FileName:String; Lines: Array of String): Boolean;
+var
+  List: Classes.TStringList;
+  I : Integer;
+begin
+  Result := False;
+  List := Classes.TStringlist.Create;
+  for I := Low(Lines) to High(Lines) do
+    List.Append(Lines[I]);
+  try
+    List.SaveToFile(FileName);
+    Result := True;
+  except
+    on E: Exception do ShowMessage(E.Message);
+  end;
+  FreeAndNil(List);
+end;
+
+procedure LaunchWait(AppPath, CmdLine, CurDir, Title: AnsiString; FullScreenFlg:Boolean{=False}; HideWndFlg:Boolean=False);
+// Modifications:
+// 01.09.08 P.W: CheckSetForeGroundWindow to ensure window we wait for is set to foreground
+var
+  hProcess: THandle;
+  Wnd : HWND;
+  Res : DWORD;
+begin
+  Wnd := UseLaunchConsole(hProcess, AppPath, CmdLine, CurDir, Title, FullScreenFlg, HideWndFlg);
+  if HideWndFlg then
+    ShowWindow(Wnd, SW_Hide);      // 02.07.08 P.W
+
+//  WaitForSingleObject(hProcess, INFINITE);
+  Repeat
+    Res := WaitForSingleObject(hProcess, 200);
+
+    if (Assigned(Application.MainForm)) and (GetForegroundWindow = Application.MainForm.Handle) and (not HideWndFlg) then  // 01.09.08 P.W
+    begin
+      CheckSetForegroundWindow(Wnd);
+    end;
+
+
+    Application.ProcessMessages;   // needs Forms.pas which blows up console if compiled with
+                                   // conditional define "Delphi"
+  Until (Res <> WAIT_TIMEOUT) or (Application.Terminated);
+  CloseHandle(hProcess);       // 30.10.07 P.W
+end;
+
+procedure ActivateConsoleFullScreen(HConsoleWnd: HWND; FullScreen : Boolean);
+  forward;
+
+procedure ReadlnHaltMessagesToMemo(Memo: TMemo);
+// 09.07.08 P.W
+var
+  I : Integer;
+begin
+  for I := 0 to Length(ReadlnHaltMessages) -1 do
+    Memo.Lines.Append(ReadlnHaltMessages[I]);
+end;
+
+function AppModal_Start: Pointer;
+// 08.07.09 P.W part of ShowModal
+begin
+  CancelDrag;
+  if GetCapture <> 0 then SendMessage(GetCapture, WM_CANCELMODE, 0, 0);
+  ReleaseCapture;
+  Application.ModalStarted;
+  Result := DisableTaskWindows(0);
+end;
+
+procedure AppModal_End(WindowList: Pointer);
+// 08.07.09 P.W part of ShowModal
+// WindowList is result from previous call of AppModal_Start
+begin
+  EnableTaskWindows(WindowList);
+  Application.ModalFinished;
+end;
+
+function LaunchWaitForm(AppPath, CmdLine, CurDir, Title: AnsiString;
+            FullScreenFlg: Boolean{=False};
+            HideWndFlg: Boolean = False; LaunchedTitle: AnsiString = ''): DWORD;
+// modifications:
+// 17.12.07 P.W call CheckSetForeGroundWindow when Covering Form is ForeGroundWindow
+// 08.07.09 P.W new parameter LaunchedTitle to allow enable the launched window again when HideWndFlg is true
+//   further if the LaunchedTitle is already open then bring this window to front and do not try to launch the app again
+// 27.11.09 P.W: Procedure to Function Returns ExitCode
+   procedure CheckParameterRepairMode(aForm: TForm);
+   // 09.07.08 P.W
+   var
+     aMemo : TMemo;
+   begin
+     if ParameterRepairMode then
+     begin
+       aMemo := TMemo.Create(aForm);
+       aMemo.Parent := aForm;
+       aMemo.Align  := alClient;
+       aMemo.ScrollBars := ssBoth;
+       aMemo.WordWrap := False;
+       aMemo.Color := clBtnFace;
+       ReadlnHaltMessagesToMemo(aMemo);
+     end;
+   end;
+
+var
+  hProcess         : THandle;
+  Res              : DWORD;
+  Wnd              : HWND;
+  aForm            : TForm;
+  LaunchFullScreen : Boolean;
+  WantFgWnd        : HWND;       // 08.07.09 P.W
+  PID_WantFgWnd    : Integer;    // 08.07.09 P.W
+//  WindowList       : Pointer;    // 08.07.09 P.W
+   // for test with AppModal_Start, but disabled app does not activate the aForm
+   // so the launched window is not activated by click on aForm
+begin
+  aForm := TForm.Create(nil);
+  aForm.Parent      := nil;
+  if Title = '' then Title := AppPath + ' ' + CmdLine;
+  aForm.Caption     := Format(TraS('Waiting that "%s" terminates ...'), [Title]);
+  CheckParameterRepairMode(aForm);   // 09.07.08 P.W
+
+  aForm.WindowState := wsMaximized;
+  aForm.Show;
+
+  if (Win32Platform = VER_PLATFORM_WIN32_WINDOWS)
+    then LaunchFullScreen := FullScreenFlg
+    else LaunchFullScreen := False;
+
+  Wnd      := 0;  // 08.07.09 P.W
+  hProcess := 0;  // 08.07.09 P.W
+
+  if (LaunchedTitle <> '') then // 08.07.09 P.W
+  begin   // when window with desired title already exists:
+    WantFgWnd := CallFindWindow(LaunchedTitle, WB_True);  // visible windows only
+    if IsWindow(WantFgWnd) then
+    begin
+      GetWindowThreadProcessId(WantFgWnd, @PID_WantFgWnd);
+      hProcess := OpenProcess(PROCESS_ALL_ACCESS, True, PID_WantFgWnd);
+      if ProcessHasTerminated(hProcess)
+        then hProcess := 0
+        else CheckSetForegroundWindow(WantFgWnd);
+    end;
+  end;
+
+  if hProcess = 0 then  // if: 08.07.09 P.W
+    Wnd :=
+      UseLaunchConsole(hProcess, AppPath, CmdLine, CurDir, Title, LaunchFullScreen, HideWndFlg);
+
+  try
+//ShowMessageFmt_('LaunchWaitForm(%s, %s, %s, %s, %d, %d', [AppPath, CmdLine, CurDir, Title, Ord(LaunchFullScreen), Ord(HideWndFlg)]);
+    if HideWndFlg then              // 02.07.08 P.W
+    begin
+      ShowWindow(Wnd, SW_Hide);
+    end;
+    WantFgWnd     := 0;                // 08.07.09 P.W
+    //WindowList := AppModal_Start;   // 08.07.09 P.W  for test only
+
+    if FullScreenFlg and (not LaunchFullScreen) then
+    begin
+//    PostAltEnter(Wnd);  // no longer since 14.12.07 P.W
+    end;
+//  WaitForSingleObject(hProcess, INFINITE);
+    Repeat
+      Res := WaitForSingleObject(hProcess, 200);
+
+      if (WantFgWnd = 0) and (LaunchedTitle <> '') then           // 08.07.09 P.W
+      begin
+        WantFgWnd := CallFindWindow(LaunchedTitle);
+      end;
+
+      if (aForm.WindowState <> wsMaximized) or
+         (not aForm.Visible)
+       then
+      begin
+        if not HideWndFlg then  // if: 02.07.08 P.W
+        begin
+         // ActivateConsoleFullScreen(Wnd, True);   // until 02.07.08 P.W does not help under XP and troubles under Vista
+        end;
+      end;
+
+      if (aForm.WindowState <> wsMaximized) then  // if: 02.07.08 P.W
+        aForm.WindowState := wsMaximized;
+      if not aForm.Visible then  // if: 02.07.08 P.W
+        aForm.Show;              //   if to avoid this brings under Vista the Wnd to background! (troubles without ActivateConFullScr.)
+
+      if (GetForegroundWindow = aForm.Handle) then  // 17.12.07 P.W
+        if HideWndFlg then   // if: 02.07.08 P.W
+        begin  // try to activate the launched Application again 08.07.09 P.W
+          if (WantFgWnd <> 0) then                     // 08.07.09 P.W
+          begin
+            if IsWindow(WantFgWnd) and IsWindowVisible(WantFgWnd)
+              then CheckSetForegroundWindow(WantFgWnd)
+              else WantFgWnd := 0;
+          end;
+        end else
+        begin
+          CheckSetForegroundWindow(Wnd);
+        end;
+
+      Application.ProcessMessages;
+    Until (Res <> WAIT_TIMEOUT) or (Application.Terminated);
+
+    if HideWndFlg then                   // 02.07.08 P.W
+    begin
+      if IsWindow(Wnd) then
+        ShowWindow(Wnd, SW_Show);
+    end;
+  finally
+    //AppModal_End(WindowList);            // 08.07.09 P.W  for test only
+    Result := ProcessExitCode(hProcess);  // 27.11.09 P.W
+
+    CloseHandle(hProcess);               // 30.10.07 P.W
+    FreeAndNil(aForm);
+  end;
+end;
+
+const
+  TmpBat = 'TmpInst.bat';  // needs TmpInst.pif under Windows 98!
+                           // TmpInst.pif requests environment size to be 2048 bytes
+procedure CreateLaunchWaitTmpBat(AppPath, CmdLine, CurDir: AnsiString);
+// call SetEnv.bat before AppPath, this needs enoug environment space
+// which is achieved under Win98 only with a correct *.pif file for TmpInst.bat !
+//
+begin
+  if (Win32Platform <= VER_PLATFORM_WIN32_WINDOWS) then // Win98 only since 14.12.07 P.W
+  if Pos('.EXE', UpperCase(AppPath)) > 0 then
+  begin
+    AppPath := 'StartSys /W '+ AppPath; // the only chance waiting
+               // under Win98 that Win32 apps terminate!
+  end;
+  if FileExists(ITPD(CurDir)+'SetEnv.bat') then     // if : 16.01.08 P.W
+  begin
+    CreateFileFromArr(ITPD(CurDir)+ TmpBat,[
+      '@Call SetEnv.bat',
+      AppPath+' '+CmdLine,   // last executed line if *.bat ! (use Call if *.bat to continue)
+//'@Pause',
+      '']);
+  end else
+  begin                                             // 16.01.08 P.W
+    CreateFileFromArr(ITPD(CurDir)+ TmpBat,[
+      AppPath+' '+CmdLine,   // last executed line if *.bat ! (use Call if *.bat to continue)
+      '']);
+  end;
+end;
+
+function LaunchWaitSE_Compiler(AppPath, CmdLine, CurDir, Title: AnsiString): Boolean;
+// 07.01.09 P.W
+begin
+  CreateFileFromArr(ITPD(CurDir)+ TmpBat,[
+    AppPath+' '+CmdLine,   // last executed line if *.bat ! (use Call if *.bat to continue)
+//   '@if Errorlevel 1 Pause',  // hides exitcode!
+    '']);
+  Result := ConsoleLaunchWait(ITPD(CurDir)+ TmpBat, '', CurDir, Title, False);
+end;
+
+procedure LaunchWaitSE(AppPath, CmdLine, CurDir, Title: AnsiString; FullScreenFlg:Boolean{=False}; HideWndFlg: Boolean);
+// call SetEnv.bat before AppPath, this needs enough environment space
+// which is achieved under Win98 only with a correct *.pif file for TmpInst.bat !
+//
+begin
+  CreateLaunchWaitTmpBat(AppPath, CmdLine, CurDir);
+  LaunchWait(ITPD(CurDir)+ TmpBat, '', CurDir, Title, FullScreenFlg, HideWndFlg);
+end;
+
+function LaunchWaitSEF(AppPath, CmdLine, CurDir, Title: AnsiString;
+            FullScreenFlg: Boolean{=False};
+            HideWndFlg: Boolean; LaunchedTitle: AnsiString = ''): DWORD;
+// call SetEnv.bat before AppPath, this needs enoug environment space
+// which is achieved under Win98 only with a correct *.pif file for TmpInst.bat !
+//
+// Modifications
+// 27.11.09 P.W: procedure to function return ExitCode
+begin
+  CreateLaunchWaitTmpBat(AppPath, CmdLine, CurDir);
+  Result := LaunchWaitForm(ITPD(CurDir)+ TmpBat, '', CurDir, Title, FullScreenFlg, HideWndFlg, LaunchedTitle);
+end;
+
+procedure DeleteFiles(Path, Mask: String);
+var
+  SR : TSearchRec;
+begin
+  if (0 = FindFirst(ITPD(Path)+Mask, faAnyFile, SR)) then
+  begin
+    repeat
+      if ((SR.Attr and faDirectory) = 0) then
+        DeleteFile(ITPD(Path)+SR.Name);
+    until (0 <> FindNext(SR));
+    FindClose(SR);
+  end;
+end;
+
+function FileAppendString(aName, Msg: AnsiString): Boolean;
+var
+  SL : TStringList;
+begin
+  Result := False;
+  try
+  SL := TStringList.Create;
+  if FileExists(aName) then
+  begin
+    try
+      SL.LoadFromFile(aName);
+    except
+    end;
+  end else
+  begin
+    SL.Text := Msg;
+  end;
+  SL.SaveToFile(aName);
+  Result := True;
+  except
+    Result := False;
+  end;
+end;
+
+function IsNetDrive(const Path: AnsiString): Boolean;
+// 01.09.08 P.W
+var
+  RootPathName: AnsiString;
+  DT : TDriveType;
+begin
+  RootPathName := Path[1]+':\';
+  DT := TDriveType(GetDriveType(PChar(RootPathName)));
+  Result := (dtNetwork = DT);
+end;
+
+function callGetVolumeInformation(Root: AnsiString): Bool;
+// use this call to detect drives that have no disk  and avoid the exception message box
+      // A:\ and F:\ make problems!  (Windows - no disk ...):
+      // ---------------------------
+      // Windows - Kein Datenträger
+      // ---------------------------
+      // Exception Processing Message c0000013 Parameters 75b0bf7c 4 75b0bf7c 75b0bf7c
+      // ---------------------------
+      // Abbrechen   Wiederholen   Weiter
+      // ---------------------------
+// Calling this function may take several seconds in case of non conected local PC (Drive X, Y in local area network)!
+var
+  VolumeSerialNumber : DWORD;
+
+  lpVolumeNameBuffer            : PChar;
+  nVolumeNameSize               : DWORD;
+  lpVolumeSerialNumber          : PDWORD;
+  lpMaximumComponentLength,
+  lpFileSystemFlags             : DWORD;
+  lpFileSystemNameBuffer        : PChar;
+  nFileSystemNameSize           : DWORD;
+begin
+//function GetVolumeInformation(
+//  lpRootPathName: PChar;
+//  lpVolumeNameBuffer: PChar;
+//  nVolumeNameSize: DWORD;
+//  lpVolumeSerialNumber: PDWORD;
+//  var lpMaximumComponentLength,
+//      lpFileSystemFlags        : DWORD;
+//  lpFileSystemNameBuffer       : PChar;
+//  nFileSystemNameSize          : DWORD
+//    ): BOOL; stdcall;
+
+
+  nVolumeNameSize      := MAX_PATH+1;
+  GetMem(lpVolumeNameBuffer, nVolumeNameSize);
+
+  VolumeSerialNumber   := 0;
+  lpVolumeSerialNumber := @VolumeSerialNumber;
+
+  lpMaximumComponentLength := 0;
+  lpFileSystemFlags        := 0;
+
+  nFileSystemNameSize  := MAX_PATH+1;
+  GetMem(lpFileSystemNameBuffer, nFileSystemNameSize);
+
+  Result :=
+    GetVolumeInformation(PChar(Root),
+      lpVolumeNameBuffer,
+      nVolumeNameSize,
+      lpVolumeSerialNumber,
+      lpMaximumComponentLength,
+      lpFileSystemFlags,
+      lpFileSystemNameBuffer,
+      nFileSystemNameSize);
+
+  FreeMem(lpVolumeNameBuffer);
+  FreeMem(lpFileSystemNameBuffer);
+end;
+
+
+function GetDrivesString(DriveTypes: TDriveTypes=DrivesAll; WithMedia:Boolean=True ): String;
+// 11.11.08 P.W to here from Install.pas
+// from filectrl.pas procedure TDriveComboBox.BuildList;
+// 11.11.08 P.W: new parameter WithMedia:Boolean=True
+// 27.08.09 P.W: avioid "Window is not responding" and later overwrites second window
+var
+  DriveNum: Integer;
+  DriveChar: Char;
+  DriveType: TDriveType;
+  DriveBits: set of 0..25;
+
+//  procedure AddDrive(const VolName: string; Obj: TObject);
+//  begin
+//    Items.AddObject(Format('%s: %s',[DriveChar, VolName]), Obj);
+//  end;
+  procedure AddDriveChar(DriveChar: Char; DriveType: TDriveType);
+  begin
+    If (DriveTypes = []) or (DriveType in DriveTypes) then
+      Result := Result + DriveChar;
+  end;
+
+  function CallGetDriveType(RootPathName: AnsiString): UINT;
+  begin
+    Result := GetDriveType(PChar(RootPathName));
+    if Result = 0 then;
+  end;
+
+begin
+  Result := '';
+  Integer(DriveBits) := GetLogicalDrives;
+  for DriveNum := 0 to 25 do
+  begin
+    if not (DriveNum in DriveBits) then Continue;
+    DriveChar := Char(DriveNum + Ord('a'));
+    if WithMedia then
+    begin
+      ShowMessageMs(
+        Format(TraS('Reading Volume Information of Drive "%s:"'),
+           [Upcase(DriveChar)])+sLineBreak+TraS('Please wait...'),
+        100, 'Information', False, 3); // 27.08.09 P.W
+      Application.ProcessMessages;                                             // 27.08.09 P.W
+      if (not callGetVolumeInformation(DriveChar+driveDelim+PathDelim)) then // may be time consuming!
+      begin
+        Application.ProcessMessages;  // 27.08.09 P.W
+        Continue;
+      end;
+      Application.ProcessMessages;    // 27.08.09 P.W
+    end;
+    DriveType := TDriveType(CallGetDriveType(DriveChar + ':\'));
+//    if TextCase = tcUpperCase then
+    DriveChar := Upcase(DriveChar);
+
+    AddDriveChar(DriveChar, DriveType);
+
+    case DriveType of
+      dtFloppy:  ; // Items.AddObject(DriveChar + ':', FloppyBMP);
+      dtFixed:   ; // AddDrive(VolumeID(DriveChar), FixedBMP);
+      dtNetwork: ; // AddDrive(NetworkVolume(DriveChar), NetworkBMP);
+      dtCDROM:   ; // AddDrive(VolumeID(DriveChar), CDROMBMP);
+      dtRAM:     ; // AddDrive(VolumeID(DriveChar), RAMBMP);
+    end;
+  end;
+end;
+
+
+
+function GetDiskInfo(aFileName: AnsiString; QuietFlg:Boolean=False): PDiskInfoRec;
+// 11.11.08 P.W
+var
+  Msg : AnsiString;
+begin
+  GetMem(Result, SizeOf(Result^));
+  FillChar(Result^, SizeOf(Result^), #0);
+  Result.ValidFlg := True;
+
+  Result.OSVersInfo.dwOSVersionInfoSize := SizeOf(Result.OSVersInfo);
+  if not GetVersionEx(Result.OSVersInfo) then
+  begin
+    Result.ValidFlg := False;
+    Exit;
+  end;
+
+  { Check number of bytes per cluster }
+  Result.Drive := ExtractFileDrive(aFileName);
+  if Result.Drive[Length(Result.Drive)]<>'\' then Result.Drive := Result.Drive+'\';
+  Result.Drive := ITPD(Result.Drive);
+  if not GetDiskFreeSpace(PChar(Result.Drive),
+                          Result.SectorPerCluster,
+                          Result.BytesPerSector,
+                          Result.NumberOfFreeClusters,
+                          Result.TotalNumberOfClusters) then
+  begin
+    if not QuietFlg then
+    begin
+      Msg := SysErrorMessage(GetLastError) + sLineBreak + '"' + Result.Drive + '"';
+      MessageBox(0, PChar(Msg), '', MB_OK or MB_ICONERROR);
+    end;
+    Result.ValidFlg   := False;
+    Exit;
+  end;
+  Result.ClusterSize := Result.SectorPerCluster * Result.BytesPerSector;
+end;
+
+function GetRealFileSize_UseDiskInfoRec (const aFileName : AnsiString; const PDIR: PDiskInfoRec; AssumeExist:Boolean=False; SR_Size:Integer=0) : Int64;
+var
+  FileSize              : Cardinal;
+  RealSize              : Cardinal;
+  FileHandle            : Cardinal;
+  ErrFlg : Boolean;                     // 11.11.08 P.W
+begin
+  Result     := -1;
+  ErrFlg     := False;                  // 11.11.08 P.W
+  FileHandle := 0;
+  if PDIR = nil then EXIT;              // 11.11.08 P.W
+  if not PDIR.ValidFlg then EXIT;       // 11.11.08 P.W
+  { Check file }
+  if not AssumeExist then               // if: 11.11.08 P.W
+    if not FileExists(aFileName) then Exit;
+//  { Check version of operating system }
+//  OSVersInfo.dwOSVersionInfoSize := SizeOf(OSVersInfo);
+//  if not GetVersionEx(OSVersInfo) then Exit;
+  { Windows NT, 2000, XP, 2003 }
+  if PDIR.OSVersInfo.dwPlatformId = VER_PLATFORM_WIN32_NT then
+  begin
+//    FileSize := GetCompressedFileSize(PAnsiChar(aFileName), @FileSize);
+FileSize := SR_Size;
+    { Check for errors }
+    if FileSize=$FFFFFFFFthen
+    begin
+      if SR_Size = 0 then                    // if: 11.11.08 P.W
+        MessageBox(0, PChar(SysErrorMessage(GetLastError)), '', MB_OK or MB_ICONERROR);
+      if SR_Size > 0 then                    // 11.11.08 P.W
+        FileSize := SR_Size
+      else
+        ErrFlg     := True;
+    end;
+  end else
+  { Windows 95, 98, ME }
+    try
+      FileHandle := CreateFile(PChar(aFileName),
+                               GENERIC_READ,
+                               FILE_SHARE_READ,
+                               nil,
+                               OPEN_EXISTING,
+                               FILE_ATTRIBUTE_NORMAL,
+                               0);
+      FileSize   := GetFileSize(FileHandle,@FileSize);
+      { Check for errors }
+      if FileSize=$FFFFFFFF then
+      begin
+        if SR_Size = 0 then                    // if: 11.11.08 P.W
+          MessageBox(0, PChar(SysErrorMessage(GetLastError)), '', MB_OK or MB_ICONERROR);
+        if SR_Size > 0 then                    // 11.11.08 P.W
+          FileSize := SR_Size
+        else
+          ErrFlg     := True;
+      end;
+  finally
+    FileClose(FileHandle);
+  end;
+  { Check number of bytes per cluster }
+//  Drive := ExtractFileDrive(aFileName);
+//  if Drive[Length(Drive)]<>'\' then Drive := Drive+'\';
+//  if not GetDiskFreeSpace(PChar(Drive),
+//                          SectorPerCluster,
+//                          BytesPerSector,
+//                          NumberOfFreeClusters,
+//                          TotalNumberOfClusters) then
+//  begin
+//    MessageBox(0, PChar(SysErrorMessage(GetLastError)), '', MB_OK or MB_ICONERROR);
+//    ErrFlg     := True;                  // 11.11.08 P.W
+//    Exit;
+//  end;
+//  ClusterSize := SectorPerCluster * BytesPerSector;
+  { Calculate real size of file }
+  if not ((FileSize mod PDIR.ClusterSize) = 0) then
+  begin
+   RealSize := ((FileSize div PDIR.ClusterSize) * PDIR.ClusterSize) + PDIR.ClusterSize
+  end else
+  begin
+   RealSize := FileSize;
+  end;
+  { Return the real size }
+  if not ErrFlg then      // if: 11.11.08 P.W
+    Result := RealSize;
+end;
+
+function GetRealFileSize (const aFileName : AnsiString; SR_Size:Integer=0) : Int64;
+// from "http://www.delphipraxis.net/topic37226.html" at 11.11.08 P.W
+{ - Returns real size of a file on the disk (in bytes)                       }
+{ - aFileName is the name of the file that shall be checked, including path  }
+{ - Works with every version of Windows - but under Win 9x the result may be }
+{   inaccurate because GetDiskFreeSpace returns an incorrect value           }
+{   (See Microsoft Platform SDK for details)                                 }
+{ - Also works with compressed files                                         }
+{ - If an error occurs, the Result is negative                               }
+var
+  ClusterSize           : Cardinal;
+  SectorPerCluster      : Cardinal;
+  BytesPerSector        : Cardinal;
+  NumberOfFreeClusters  : Cardinal;
+  TotalNumberOfClusters : Cardinal;
+  FileSize              : Cardinal;
+  RealSize              : Cardinal;
+  FileHandle            : Cardinal;
+  OSVersInfo            : OSVersionInfo;
+  Drive                 : AnsiString;
+  ErrFlg                : Boolean;      // 11.11.08 P.W
+begin
+  Result     := -1;
+  ErrFlg     := False;                  // 11.11.08 P.W
+  FileHandle := 0;
+  { Check file }
+  if not FileExists(aFileName) then Exit;
+  { Check version of operating system }
+  OSVersInfo.dwOSVersionInfoSize := SizeOf(OSVersInfo);
+  if not GetVersionEx(OSVersInfo) then Exit;
+  { Windows NT, 2000, XP, 2003 }
+  if OSVersInfo.dwPlatformId = VER_PLATFORM_WIN32_NT then
+  begin
+    FileSize := GetCompressedFileSize(PAnsiChar(aFileName), @FileSize);
+    { Check for errors }
+    if FileSize=$FFFFFFFFthen
+    begin
+      if SR_Size = 0 then                    // if: 11.11.08 P.W
+        MessageBox(0, PChar(SysErrorMessage(GetLastError)), '', MB_OK or MB_ICONERROR);
+      if SR_Size > 0 then                    // 11.11.08 P.W
+        FileSize := SR_Size
+      else
+        ErrFlg     := True;
+    end;
+  end else
+  { Windows 95, 98, ME }
+    try
+      FileHandle := CreateFile(PChar(aFileName),
+                               GENERIC_READ,
+                               FILE_SHARE_READ,
+                               nil,
+                               OPEN_EXISTING,
+                               FILE_ATTRIBUTE_NORMAL,
+                               0);
+      FileSize   := GetFileSize(FileHandle,@FileSize);
+      { Check for errors }
+      if FileSize=$FFFFFFFF then
+      begin
+        if SR_Size = 0 then                    // if: 11.11.08 P.W
+          MessageBox(0, PChar(SysErrorMessage(GetLastError)), '', MB_OK or MB_ICONERROR);
+        if SR_Size > 0 then                    // 11.11.08 P.W
+          FileSize := SR_Size
+        else
+          ErrFlg     := True;
+      end;
+  finally
+    FileClose(FileHandle);
+  end;
+  { Check number of bytes per cluster }
+  Drive := ExtractFileDrive(aFileName);
+  if Drive[Length(Drive)]<>'\' then Drive := Drive+'\';
+  if not GetDiskFreeSpace(PChar(Drive),
+                          SectorPerCluster,
+                          BytesPerSector,
+                          NumberOfFreeClusters,
+                          TotalNumberOfClusters) then
+  begin
+    MessageBox(0, PChar(SysErrorMessage(GetLastError)), '', MB_OK or MB_ICONERROR);
+    ErrFlg     := True;                  // 11.11.08 P.W
+    Exit;
+  end;
+  ClusterSize := SectorPerCluster * BytesPerSector;
+  { Calculate real size of file }
+  if not ((FileSize mod ClusterSize) = 0) then
+  begin
+   RealSize := ((FileSize div ClusterSize) * ClusterSize) + ClusterSize
+  end else
+  begin
+   RealSize := FileSize;
+  end;
+  { Return the real size }
+  if not ErrFlg then      // if: 11.11.08 P.W
+    Result := RealSize;
+end;
+
+function GetRealFileSize_Secure (const Path: AnsiString; const SR: TSearchRec) : Int64; overload;
+// 11.11.08 P.W
+begin
+   Result := GetRealFileSize(ITPD(Path)+SR.Name, SR.Size);
+    // maybe Unicode name in SR.Name as "????????.txt"
+   if Result < 0 then
+     Result := SR.Size;
+
+end;
+
+function GetRealFileSize_Secure (const Path: AnsiString; const SR: TSearchRec;
+             const PDIR: PDiskInfoRec; AssumeExist:Boolean=False): Int64; overload;
+// 11.11.08 P.W
+begin
+   Result := GetRealFileSize_UseDiskInfoRec(ITPD(Path)+SR.Name, PDIR, AssumeExist, SR.Size);
+    // maybe Unicode name in SR.Name as "????????.txt"
+   if Result < 0 then
+     Result := SR.Size;
+
+end;
+
+function GetRealFileSize_Secure (const FileName: AnsiString; Size: Int64; const PDIR: PDiskInfoRec; AssumeExist:Boolean=False): Int64; overload;
+// 11.11.08 P.W
+begin
+   Result := GetRealFileSize_UseDiskInfoRec(FileName, PDIR, AssumeExist, Size);
+    // maybe Unicode name in SR.Name as "????????.txt"
+   if Result < 0 then
+     Result := Size;
+
+end;
+
+function CallInfoWanted(CI: TCallInfo): Boolean;
+begin
+  Result := (CI.InfLevLim=0) or (CI.Level <= CI.InfLevLim);
+end;
+
+procedure IncFolderSizeRec(var ValRec: TFolderSizeRec; const AddRec: TFolderSizeRec);
+// 11.11.08 P.W
+begin
+  Inc(ValRec.SizeNorm, AddRec.SizeNorm);
+  Inc(ValRec.SizeUsed, AddRec.SizeUsed);
+  ValRec.MaxSizeNorm := Max(ValRec.MaxSizeNorm,  AddRec.MaxSizeNorm );
+  ValRec.MaxSizeUsed := Max(ValRec.MaxSizeUsed,  AddRec.MaxSizeUsed );
+  Inc(ValRec.Files,    AddRec.Files);
+  Inc(ValRec.Folders,  AddRec.Folders);
+end;
+
+procedure FolderSizeRecAddFile(var FSR: TFolderSizeRec; FileName: String; PDIR: PDiskInfoRec=nil);
+var
+  Size,
+  UsedSize: Int64;
+  PDIR_WasNil: Boolean;
+begin
+  if PDIR=nil then
+  begin
+    PDIR_WasNil := True;
+    PDIR := GetDiskInfo(FileName);
+  end else
+  begin
+    PDIR_WasNil := False;
+  end;
+
+
+  FileName := ExpandFileName(FileName);
+  PDIR := GetDiskInfo(FileName);
+  Size := FileSizeInt64(FileName);
+
+    Inc(FSR.SizeNorm, Size);
+    UsedSize := GetRealFileSize_Secure(FileName, Size, PDIR, False);
+    Inc(FSR.SizeUsed, UsedSize);
+
+    FSR.MaxSizeNorm := Max(FSR.MaxSizeNorm,  Size);
+    FSR.MaxSizeUsed := Max(FSR.MaxSizeUsed,  UsedSize );
+
+    Inc(FSR.Files);
+
+  if PDIR_WasNil then
+  begin
+    PDIR.Drive := '';
+    FreeMem(PDIR);
+  end;
+end;
+
+
+function FolderSize(DirName: String; CI: TCallInfo; PDIR: PDiskInfoRec=nil): TFolderSizeRec;
+// 11.11.08 P.W
+  procedure AddFile(SR: TSearchRec);
+  var
+    UsedSize: Int64;
+  begin
+    Inc(Result.SizeNorm, Sr.Size);
+    UsedSize := GetRealFileSize_Secure(DirName, Sr, PDIR, True);
+    Inc(Result.SizeUsed, UsedSize);
+
+    Result.MaxSizeNorm := Max(Result.MaxSizeNorm,  SR.Size);
+    Result.MaxSizeUsed := Max(Result.MaxSizeUsed,  UsedSize );
+
+    Inc(Result.Files);
+  end;
+var
+  SR : TSearchRec;
+  PDIR_WasNil: Boolean;
+begin
+  if PDIR=nil then
+  begin
+    PDIR_WasNil := True;
+    PDIR := GetDiskInfo(DirName);
+  end else
+  begin
+    PDIR_WasNil := False;
+  end;
+
+  Inc(CI.Level);
+  Result := EmptyFolderSizeRec;
+
+  if Assigned(WinToolsMsgHook) and CallInfoWanted(CI) then
+    WinToolsMsgHook(Format(TraS('Detect size of folder "%s"'), [DirName]));
+  DirName := ITPD(DirName);
+  if (0 = FindFirst(DirName+'*.*', faAnyFile, SR)) then
+  begin
+    repeat
+      If ((SR.Attr and faDirectory) <> 0) then
+      begin
+        If  (SR.Name <> '.') and (SR.Name <> '..') then
+        begin
+          IncFolderSizeRec(Result, FolderSize(DirName+Sr.Name, CI, PDIR));
+          Inc(Result.Folders, 1);
+        end;
+      end else
+      begin
+        AddFile(SR);
+      end;
+    until (0 <> FindNext(SR));
+    FindClose(SR);
+  end;
+  if PDIR_WasNil then
+  begin
+    PDIR.Drive := '';
+    FreeMem(PDIR);
+  end;
+end;
+
+function FolderSize(DirName: String): TFolderSizeRec;
+begin
+  Result := FolderSize(DirName, CallInfoOff);
+end;
+
+function DeleteFolder(DirName: String; CI: TCallInfo): Boolean;
+// 11.11.08 P.W (from Install.pas DelTree)
+Var
+  SR : TSearchRec;
+begin
+  Inc(CI.Level);
+  if Assigned(WinToolsMsgHook) and CallInfoWanted(CI) then
+    WinToolsMsgHook(Format(TraS('Delete folder "%s"'), [DirName]));
+  DirName := ITPD(DirName);
+  if (0 = FindFirst(DirName+'*.*', faAnyFile, SR)) then
+  begin
+    repeat
+      If ((SR.Attr and faDirectory) <> 0) then
+      begin
+        If  (SR.Name <> '.') and (SR.Name <> '..') then
+          DeleteFolder(DirName+Sr.Name, CI);
+      end else
+      begin
+        DeleteFile(DirName+Sr.Name);
+      end;
+    until (0 <> FindNext(SR));
+    FindClose(SR);
+  end;
+  Result := RemoveDir(DirName);
+end;
+
+function DeleteFolder(DirName: String): Boolean;
+begin
+  Result := DeleteFolder(DirName, CallInfoOnce);
+end;
+
+function FillCopyMsgRec(Level: Integer; const SrcFolder, DstFolder, fName, Mask: String; Size: Int64): TCopyMsgRec;
+begin
+  Result.Level := Level;
+  Result.SrcFolder := SrcFolder;
+  Result.DstFolder := DstFolder;
+  Result.fName := fName;
+  Result.Mask := Mask;
+  Result.Size := Size;
+
+end;
+
+
+
+function CopyFolder(
+           const SourceFolder,
+           TargetFolder:String;
+           CI : TCallInfo;
+           Mask:String='*.*';
+           SubFlg:Boolean=True;
+           MsgFunc: TMsgFunc=nil;  // assigned MsgFunc must return true to continue!
+           ExcludeMask:String=''   // 18.01.09 P.W
+           ): Boolean;
+// Modifications:
+// 18.01.09 P.W: New parameter ExcludeMask
+var
+  SR: TSearchRec;
+
+  function IsExcluded: Boolean;
+  // 18.01.09 P.W
+  // uses ExcludeMask and SR.Name
+  // returns true when file matches mask
+  begin
+    if (SR.Name = '') then
+      Result := False
+    else
+      Result := MatchesMask(SR.Name, ExcludeMask);
+  end;
+
+  procedure CheckErrorMessage;
+  // 27.08.09 P.W
+  var
+    Msg : AnsiString;
+  begin
+    if not Result then
+    begin
+      Msg := Format(TraS('Error could not copy "%s" from "%s" to "%s"'), [SR.Name, SourceFolder, TargetFolder]);
+      if Assigned(WinToolsMsgHook)
+        then WinToolsMsgHook(Msg)
+        else ShowMessageFmt_(Msg);
+    end;
+  end;
+
+begin
+  Inc(CI.Level);
+  Result := DirectoryExists(ETPD(SourceFolder));
+//  if BreakFlg then exit;
+  if Assigned(WinToolsMsgHook) and CallInfoWanted(CI) then
+  begin
+    if SubFlg then
+      WinToolsMsgHook(Format(TraS('Copy folder "%s" to "%s"'), [SourceFolder, TargetFolder]))
+    else
+      WinToolsMsgHook(Format(TraS('Copy files "%s" to "%s"'), [ITPD(SourceFolder)+Mask, ITPD(TargetFolder)]));
+  end;
+  Result := Result and
+    ForceDirectories(TargetFolder); // ExcludesTrailingPathDelimiter
+  if Result and (0= SysUtils.FindFirst(ITPD(SourceFolder)+Mask, faAnyFile, SR)) then
+  begin
+    Repeat
+//      if BreakFlg then exit;
+      If ((SR.Attr and faDirectory) <> 0) then
+      begin
+        if SubFlg and (SR.Name <> '.') and (SR.Name <> '..') then
+        begin
+          Result := Result and
+            CopyFolder(
+              ITPD(SourceFolder)+SR.Name,
+              ITPD(TargetFolder)+SR.Name,
+              CI,
+              Mask,
+              SubFlg,
+              MsgFunc,
+              ExcludeMask);  // E.: 18.01.09 P.W
+
+           CheckErrorMessage; // 27.08.09 P.W
+        end;
+      end else
+      begin  // here we receive also *.lnk files
+        if not IsExcluded then   // if not IsExcluded: 18.01.09 P.W
+        begin
+          if Assigned(MsgFunc) then
+          begin
+            Result := Result and MsgFunc(FillCopyMsgRec(CI.Level, SourceFolder, TargetFolder, SR.Name, Mask, SR.Size));
+          end;
+          Result := Result and
+            CallCopyFile_Sized(
+              ITPD(SourceFolder)+SR.Name,
+              ITPD(TargetFolder)+SR.Name,
+              SR.Size);
+           CheckErrorMessage; // 27.08.09 P.W
+        end
+      end;
+    Until (SysUtils.FindNext(SR) <> 0) or (not Result);
+    SysUtils.FindClose(SR);
+  end;
+end;
+
+function CopyFolder(
+           const SourceFolder,
+           TargetFolder:String;
+           Mask:String='*.*';
+           SubFlg:Boolean=True): Boolean;
+begin
+  Result := CopyFolder(SourceFolder, TargetFolder, CallInfoEver, Mask, SubFlg);
+end;
+
+function FolderTree(const Folder: AnsiString; var Folders: TStringList; Level:Integer=0): Boolean;
+// 07.01.09 P.W
+// Modifications:
+// 25.02.09 P.W added parameter Level (default = 0 for compatibility)
+//   Level = -n: ( n = 1, 2, ...) return only folders of this level
+//   Level =  0: return all folders
+//   Level =  n: ( n = 1, 2, ...) return all folders up to this level
+//-------------------------------------------------------
+// example 1:
+//     Folder = "C:\Temp"         // Level 1
+//     Level  = 3
+// returns:
+//     C:\Temp                    // Level 1
+//     C:\Temp\Sub1               // Level 2
+//     C:\Temp\Sub2
+//     C:\Temp\Sub3
+//     C:\Temp\Sub1\Sub1a         // Level 3
+//     C:\Temp\Sub1\Sub1b
+//-------------------------------------------------------
+// example 1:
+//     Folder = "C:\Temp"
+//     Level  = -3
+// returns:
+//     C:\Temp\Sub1\Sub1a         // Level 3
+//     C:\Temp\Sub1\Sub1b
+//-------------------------------------------------------
+var
+  SR: TSearchRec;
+begin
+  if not Assigned(Folders) then
+    Folders := TStringList.Create;
+
+
+  if (Level <> 0) then  // if: 25.02.09 P.W
+  begin
+    Result := False;
+    if (Level < 0) then
+    begin // only return folders that have a special level
+      Inc(Level);
+      if Level = 0 then
+      begin
+        Folders.Append(Folder);
+        EXIT;
+      end;
+    end else
+    begin // only return folders up to special level
+      Dec(Level);
+      Folders.Append(Folder);  
+      if Level = 0 then
+      begin
+        EXIT;
+      end;
+    end;
+  end else
+  begin
+    Folders.Append(Folder);  // original
+  end;
+
+  if (0= SysUtils.FindFirst(ITPD(Folder)+'*.*', faDirectory, SR)) then
+  begin
+    Repeat
+//      if BreakFlg then exit;
+      If ((SR.Attr and faDirectory) <> 0) then
+        if (SR.Name <> '.') and (SR.Name <> '..') then
+          FolderTree(ITPD(Folder)+SR.Name, Folders, Level);
+    Until (SysUtils.FindNext(SR) <> 0);
+    SysUtils.FindClose(SR);
+  end;
+  Result := (Folders.Count > 0);
+end;
+
+function GetFilesMasked(const Folder: AnsiString; const Masks: Array of AnsiString; Level:Integer=0; AddPathFlg:Boolean=True): TStringList;
+// 07.01.09 P.W
+// Modifications:
+// 25.02.09 P.W: Parameter Level for use by FolderTree added (default = 0 for compatibility)
+//   Missing Folders.free added
+var
+  Folders : TStringList;
+  F, M : Integer;
+  SR : TSearchRec;
+  Path : AnsiString;
+begin
+  Result  := TStringList.Create;
+
+  Folders := TStringList.Create;
+  FolderTree(Folder, Folders, Level); // Level: 25.02.09 P.W
+  for F := 0 to Folders.Count -1 do
+  begin
+    for M := Low(Masks) to High(Masks) do
+    begin
+      Path := ITPD(Folders[F]);
+      if (0 = FindFirst(Path+Masks[M], faAnyFile, SR)) then
+      begin
+        repeat
+          if ((SR.Attr and faDirectory) = 0) then
+          begin
+            if AddPathFlg then
+              Result.Append(Path+SR.Name)
+            else
+              Result.Append(SR.Name);
+          end;
+        until (0 <> FindNext(SR));
+        FindClose(SR);
+      end;
+    end;
+  end;
+  Folders.Free;     // 25.02.09 P.W
+end;
+
+function DeleteFileList(FList: TStringList): Boolean;
+// 07.01.09 P.W
+var
+  I : Integer;
+  Res : Boolean;
+begin
+  Result := True;
+  for I := 0 to FList.Count -1 do
+  begin
+    Res := DeleteFile(FList[I]);
+    Result := Result and Res;
+  end;
+end;
+
+function DeleteFilesSubMasked(const Folder: AnsiString; const Masks: Array of AnsiString): Boolean;
+// 07.01.09 P.W
+var
+  FList : TStringList;
+begin
+  FList := GetFilesMasked(Folder, Masks);
+  Result := DeleteFileList(FList);
+  FList.Free;
+end;
+
+function FileContentEqual(const NameA, NameB: AnsiString): Boolean;
+  function ContentEqual: Boolean;
+  // Read files of same size and compare content binary
+  var
+    BufA,   BufB   : Array [0..4097] of Byte;
+    FHdlA,  FHdlB  : Integer;
+    NReadA, NReadB : Integer;
+    Equal  : Boolean;
+    function BufEqu: Boolean;
+    var
+      I : Integer;
+    begin
+      Result := True;
+      For I := 0 to NReadA -1 do
+        if BufA[I] <> BufB[I] then
+        begin
+          Result := False;
+          Break;
+        end
+    end;
+  begin
+    Result := False;
+    FHdlA := 0; // 30.09.05 P.W
+    FHdlB := 0; // 30.09.05 P.W
+    try
+      FHdlA := FileOpen(NameA, fmOpenRead+fmShareDenyWrite); // "> 0" is ok
+      FHdlB := FileOpen(NameB, fmOpenRead+fmShareDenyWrite); // "> 0" is ok
+      If (FHdlA > 0) and (FHdlB > 0) then
+      begin
+        Repeat
+          NReadA := FileRead(FHdlA, BufA, SizeOf(BufA));
+          NReadB := FileRead(FHdlB, BufB, SizeOf(BufB));
+          Equal := (NReadA = NReadB) and BufEqu;
+        until (not Equal) or (NReadA = 0);
+        Result := Equal;
+      end else
+      begin  // cannot read
+        Result := False;
+      end;
+    finally
+      if (FHdlA > 0) then FileClose(FHdlA);
+      if (FHdlB > 0) then FileClose(FHdlB);
+    end;
+  end;
+var
+  ExistsA, ExistsB : Boolean;
+  SrA, SrB : TSearchRec;
+begin
+  ExistsA := (0 = FindFirst(NameA, faAnyFile, SrA));
+  if ExistsA then FindClose(SrA);
+  ExistsB := (0 = FindFirst(NameB, faAnyFile, SrB));
+  if ExistsB then FindClose(SrB);
+
+  If (ExistsA and ExistsB) then
+  begin
+    if SrA.Size = SrB.Size then
+    begin  // same size so compare content:
+      Result := ContentEqual;
+    end else
+    begin
+      Result := False; // Files differ by size
+    end;
+  end else
+  begin // one ore two do not exist:
+    Result := (ExistsA = ExistsB); // true if both do not exist!
+  end;
+
+end;
+
+{$ENDIF}
+
+//============================================================================
+
+
+procedure PostAltEnter(hWndCons: HWND);
+begin
+  PostMessage(hwndCons, WM_SysKeyDown, VK_RETURN, $201C0001);// WM_SysKeyDown "ALT-ENTER"
+    //              pos      31     24 23     16 15        7       0
+    //                       v       v v       v v         v       v
+    // $201C0001 := bin      0010 0000 0001 1100 0000 0000 0000 0001
+    //              hex      2    0    1    C    0    0    0    1
+    //  repeat count =$001                       ---- ---- ---- ----
+    //  scan   Code  =$ 1c             ---- ----
+    //  extended key =   0           -
+    //  reserved                - ---
+    //  context code =   1     -
+    //  prev. key st.=   0    -
+    //  trans. state =   0   -
+  Sleep(1);  // 15.12.04 P.W
+end;
+
+procedure LaunchedPostAltEnter;
+begin
+  if (Win32Platform >= VER_PLATFORM_WIN32_NT) then
+  begin
+    PostAltEnter(hwndLaunched);
+  end else
+  begin
+    SetForegroundWindow(hwndLaunched);  // for Win98 Console
+    Sleep(200);
+  end;
+end;
+
+procedure ForceForegroundWindow(lnHWND: HWND; ShowMode: Integer= SW_SHOWDEFAULT);
+// enhanced: works under WinXP also for console in fullscreen!
+// we get the focus and the taskbarbutton for the console stays alive:
+//  press and console again in fullscreen
+// works also for Win98, but sometimes the taskbar console button stays in pressed state!
+
+  procedure ForceForegroundWindow_0(lnHWND: HWND);
+  // is not working if console is active window!    (but this may not detected directly)
+  var
+    nForeThread, nAppThread: DWord;
+  begin
+    nForeThread := GetWindowThreadProcessId(GetForegroundWindow);
+    nAppThread  := GetCurrentThreadId;
+
+    IF nForeThread <> nAppThread then
+    begin  // will be used under Windows XP when back from Analysis to Database
+//MessageBox1(0, PChar('Debug ForceForeGroundWindow _0 AttachThreadInput'), PChar(''), 0+MB_TASKMODAL);  // !!!!! debugging!
+      AttachThreadInput(nForeThread, nAppThread, True);   // removed for debugging! !!!!!!!!!!!!!!1
+      Sleep(1);  // 15.12.04 P.W
+      BringWindowToTop(lnHWND);
+      Sleep(1);  // 15.12.04 P.W
+      ShowWindowAsync(lnHWND, ShowMode);
+      Sleep(1);  // 15.12.04 P.W
+      AttachThreadInput(nForeThread, nAppThread, False);  // removed for debugging! !!!!!!!!!!!!!!1
+    end else
+    begin
+      Sleep(1);  // 15.12.04 P.W
+      ShowWindowAsync(lnHWND, ShowMode);
+      Sleep(1);  // 15.12.04 P.W
+    end;
+  end;
+var
+  HForeWnd : HWND;
+begin
+  if lnHWND = 0 then EXIT;
+
+  HForeWnd  := GetForegroundWindow;
+  if HForeWnd = lnHWND then EXIT;
+
+  ForceForegroundWindow_0(lnHWND);
+  if (GetForeGroundWindow = HForeWnd) then  
+  begin  // failed, reason may be HForeWnd is console;
+    ShowWindowAsync(HForeWnd, SW_HIDE); // needs Async else did not help! helps even if fullscreen
+    Sleep(1);  // 15.12.04 P.W
+    ForceForegroundWindow_0(lnHWND);
+    Sleep(1);  // 15.12.04 P.W
+    ShowWindowAsync(HForeWnd, SW_SHOWNA);
+    Sleep(1);  // 15.12.04 P.W
+  end;
+end;
+
+procedure ActivateConsoleFullScreen(HConsoleWnd: HWND; FullScreen : Boolean);
+// this activates a console in fullscreen mode
+//  starting from one of the following states:
+//    a) minimized (and not in fullscreen)
+//    b) in fullscreen (minimized=IsIconic=True!)
+//    c) hidden
+//    d) maximized
+//    e) normal
+begin
+//Beep;
+
+  if IsIconic(HConsoleWnd) then // console may be in fullscreen!
+  begin
+    ShowWindowAsync(HConsoleWnd, SW_SHOWDEFAULT);  // does not work on Console in fullscreen!
+                                              // but a minimized console is shown
+    Sleep(1);  // 15.12.04 P.W
+  end;
+  SetForegroundWindow(HConsoleWnd);           // a fullscreen console is activated
+  Sleep(1);  // 15.12.04 P.W
+
+  if FullScreen then
+  if not IsIconic(HConsoleWnd) then
+    LaunchedPostAltEnter;                     // a normal mode console is set to fullscreen
+
+  if (GetForegroundWindow <> HConsoleWnd) then
+    ForceForegroundWindow(hwndLaunched);
+
+{ this is "repairs" the "SetForeGroundWindow" Bug in LaunchConsole
+  // --- Minimize and Normal may be unwanted but they are neccessary to avoid
+  // that console window is partly disabled: Mouse Click and Enter
+  ShowWindow(HConsoleWnd, SW_MINIMIZE);   // 20.12.07 P.W
+  ShowWindow(HConsoleWnd, SW_NORMAL);     // 20.12.07 P.W
+}
+//Beep;
+end;
+
+//============================================================================
+function AlreadyLaunched_Mutex(var hMutex : THANDLE; MutexName:AnsiString): Boolean;
+// hMutex is output!
+var
+  ResGetLastError : DWORD;
+begin
+  hMutex := CreateMutex(nil, False, PChar(MutexName));
+  ResGetLastError := GetLastError;
+  Result:= (hMutex = 0) or (ResGetLastError <> 0); // if allreay exists
+  if Result then
+  begin
+    if (hMutex <> 0) then CloseHandle(hMutex);
+    hMutex := 0;
+  end;
+end;
+//============================================================================
+var
+  HwndGetMyWindow : HWND = 0;
+function SearchMyWindowEnumWndProc(WndHwnd: HWND; lparam: LPARAM): BOOL; stdcall;
+// Callback for EnumdWindows
+// Check for ThreadId identical to GetCurrentThreadId
+var
+  ThreadId: DWORD;
+begin
+  ThreadId := Windows.GetWindowThreadProcessId(WndHwnd);
+  if (ThreadId = Windows.GetCurrentThreadId) then
+  begin
+    Result := (GetWindowTitle(WndHwnd, False)='');// continue if empty  // False: terminates enumeration
+    HwndGetMyWindow := WndHWnd;
+  end else
+  begin
+    Result := True;   // True: continues enumeration
+  end;
+end;
+
+function GetMyWindow: HWND;
+begin
+  HwndGetMyWindow := 0;   // set by SearchMyWindowEnumWndProc
+  EnumWindows(@SearchMyWindowEnumWndProc, 0);
+  Result := HwndGetMyWindow;
+end;
+//============================================================================
+
+var
+  HwndFindWindow : HWND = 0;
+  FindWindowName : AnsiString = '';
+function FindWindowEnumWndProc(WndHwnd: HWND; lparam: LPARAM): BOOL; stdcall;
+// Callback for EnumdWindows
+// search for FindWindowName
+var
+  WndName : AnsiString;
+  Ok : Boolean;
+begin
+  Result := True;   // True: continues enumeration
+  WndName := GetWindowTitle(WndHwnd, False);
+  if (AnsiCompareFileName(WndName, FindWindowName)=0) then
+  begin
+    case TWantBool(lparam) of
+      WB_False: Ok := not IsWindowVisible(WndHWnd);
+      WB_True:  Ok := IsWindowVisible(WndHWnd);
+      else      Ok := True;
+    end;
+    if Ok then
+    begin
+      HwndFindWindow := WndHWnd;
+      Result := False; // False: terminates enumeration
+    end;
+  end;
+end;
+
+function CallFindWindow(WindowName: AnsiString; WantVis:TWantBool=WB_FalseOrTrue): HWND;
+var
+  lPar: LPARAM;
+begin
+  HwndFindWindow := 0;   // set by FindWindowEnumWndProc
+  FindWindowName := WindowName;
+  EnumWindows(@FindWindowEnumWndProc, Ord(WantVis));
+  Result := HwndFindWindow;
+end;
+//============================================================================
+
+procedure WriteLaunchedInfo(InfoName: AnsiString);
+var
+  fOut : Text;
+begin
+  {$I-}
+  Assign (fOut, InfoName);
+  rewrite(fOut);
+  writeln(fOut, '[XCT Console Info]');
+  writeln(fOut, 'ThreadId=',GlbLaunchedThreadId);
+  writeln(fOut, 'HwndCons=',hwndLaunched);
+  close  (fOut);
+  IoResult;
+  {$I+}
+end;
+
+function  LaunchedInfoGetHandle(var ThreadId : DWORD): HWND;    overload;
+var
+  InfoName: AnsiString;
+  fInp : Text;
+  Str1, Str2, Str3 : AnsiString;
+//  ThreadId : DWORD;
+begin
+  InfoName := LaunchedInfoName;
+{$I-}
+  Assign (fInp, InfoName);
+  reset  (fInp);
+  Readln (fInp, Str1); // '[XCT Console Info]');
+  Readln (fInp, Str2); // 'ThreadId=',GlbLaunchedThreadId);
+  Readln (fInp, Str3); // 'HwndCons=',hwndLaunched);
+  close  (fInp);
+{$I+}
+  If IoResult = 0 then
+  begin
+    ThreadId := StrToIntDef  (Copy(Str2, 10, Length(Str2)-9), 0);
+    Result := StrToInt64Def(Copy(Str3, 10, Length(Str3)-9), 0);
+  end else
+    Result := 0;
+end;
+
+function  LaunchedInfoGetHandle: HWND;  overload;
+var
+  ThreadId : DWORD;
+begin
+  Result := LaunchedInfoGetHandle(ThreadId);
+end;
+
+procedure HideLaunchedConsole;
+var
+  HwndCons : HWND;
+begin
+ if (Win32Platform = VER_PLATFORM_WIN32_WINDOWS) then EXIT;
+
+  HwndCons := LaunchedInfoGetHandle;
+  ShowWindowAsync(HwndCons, SW_HIDE);
+  Sleep(1);  // 15.12.04 P.W
+//  ShowWindowAsync(HwndCons, SW_SHOWNA);  // a hidden console does not continue?
+end;
+
+procedure ShowNaLaunchedConsole;
+var
+  HwndCons : HWND;
+begin
+  HwndCons := LaunchedInfoGetHandle;
+//  ShowWindowAsync(HwndCons, SW_HIDE);
+  ShowWindowAsync(HwndCons, SW_SHOWNA);  // a hidden console does not continue?
+  Sleep(1);  // 15.12.04 P.W
+end;
+
+procedure ShowLaunchedConsole;
+var
+  HwndCons : HWND;
+begin
+  HwndCons := LaunchedInfoGetHandle;
+//  ShowWindowAsync(HwndCons, SW_HIDE);
+  ShowWindowAsync(HwndCons, SW_SHOW);  // a hidden console does not continue?
+  Sleep(1);  // 15.12.04 P.W
+end;
+
+procedure ActivateConsole(HwndCons : HWND; ThreadId : DWORD; FullScreen: Boolean);
+begin
+  if IsWindow(HwndCons) then
+    if (GetWindowThreadProcessId(HwndCons) = ThreadId) then
+//    if (GetForeGroundWindow <> HwndCons) then   // WinXP assumes wrongly that the console is in foreground!!
+      begin
+        ShowWindowAsync(HwndCons, SW_Show);
+        Sleep(1);  // 15.12.04 P.W
+        ActivateConsoleFullScreen(HwndCons, FullScreen);
+        Sleep(1);  // 15.12.04 P.W
+      end;
+end;
+
+procedure ActivateLaunchedInfo(InfoName: AnsiString; FullScreen: Boolean);
+var
+  HwndCons : HWND;
+  ThreadId : DWORD;
+begin
+  HwndCons := LaunchedInfoGetHandle(ThreadId);
+  ActivateConsole(HwndCons, ThreadId, FullScreen);
+end;
+
+procedure PostAltEnterLaunchedInfo;
+var
+  HwndCons : HWND;
+begin
+  HwndCons := LaunchedInfoGetHandle;
+
+  if IsWindow(HwndCons) then
+    PostAltEnter(HwndCons);
+end;
+
+procedure PostAltEnter_CheckFullScreen(HwndCons : HWND; fsFlg: Boolean);
+var
+  IsFullScreenFlg : Boolean;
+begin
+  if IsWindow(HwndCons) then
+  begin
+    IsFullScreenFlg := IsIconic(HwndCons); // state is Minimized if Fullscreen!
+    if IsFullScreenFlg <> fsFlg then
+      PostAltEnter(HwndCons);
+  end;
+end;
+
+procedure PostAltEnterLaunchedInfo_Check(fsFlg: Boolean);
+begin
+  PostAltEnter_CheckFullScreen(LaunchedInfoGetHandle, fsFlg);
+end;
+
+{
+procedure ForceBringToFront(hwnd: THandle=0); // original; presses buttons!
+// errors detected:
+//   a) mouse_event(MOUSEEVENT_MOVE must be used to position the mouse
+//   b) the form must stay alive until the mouseevent has been processed!
+//   c) then when corrected: try to leave the mouse where she was originally
+//   d) SetForeGroundWindow is troublesome when an other modal window is in use!
+
+  // (W) 2001 Daniel Rolf
+  // http://www.finecode.de
+  // rolf@finecode.de
+var
+  hlp: TForm;
+begin
+  hlp := TForm.Create(nil);
+  try
+    hlp.BorderStyle := bsNone;
+    hlp.SetBounds(0, 0, 1, 1);
+    hlp.FormStyle := fsStayOnTop;
+    hlp.Show;  // removed p.W
+
+// the mouse event may presses buttons where the mouse pointer just is! P.W
+    mouse_event(MOUSEEVENTF_ABSOLUTE or MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+    mouse_event(MOUSEEVENTF_ABSOLUTE or MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+    SetForegroundWindow(hwnd);
+  finally
+    hlp.Free;
+  end;
+end;
+}
+{$Ifdef DELPHI}
+var
+  ForceBringToFrontRuns : Boolean = False;
+procedure ForceBringToFront_0;
+  // idea (create a small Form and send a mouseclick to it) is from
+  // (W) 2001 Daniel Rolf
+  // http://www.finecode.de
+  // rolf@finecode.de
+  // corrections made 21.12.04 P.W:
+  // a) create form at mousepos with a small additional frame to avoid mouse moves outside
+  // b) add Application.processmessages before the small Form is removed
+  // c) avoid use of SetForeGroundWindow which may cover a modal window by the wanted window
+  //    but it may not be processed because the modal has the focus
+// mdodifications:
+// 17.06.05 P.W:
+// use Screen.ActiveForm.Handle and GetForegroundWindow
+// 07.02.07 P.W: when screen is powered down some calls to OS-shell fail: like Mouse_CursorPos
+label
+  To_Exit;
+var
+  hlp: TForm;
+  MousePos : TPoint;
+begin
+  if ForceBringToFrontRuns then EXIT;
+  ForceBringToFrontRuns := True;
+  try     // try 1
+    if Assigned(Screen.ActiveForm) then // does not reflect ModalDialogboxes!
+      if (GetForegroundWindow = Screen.ActiveForm.Handle)
+        then goto To_Exit; // 17.06.05 P.W
+
+  //  Beep;
+      hlp := TForm.Create(nil);
+    try     // try 2
+      hlp.BorderStyle := bsNone;
+      hlp.FormStyle := fsStayOnTop;
+
+      MousePos := Mouse_CursorPos;
+
+      hlp.SetBounds(MousePos.X-25, MousePos.Y-25, 1+50, 1+50);  // a bit larger to avoid mouse
+                                                                // moves outside before next proc.
+      hlp.Show;
+
+  //  the mouse event may presses buttons where the mouse pointer just is! P.W
+  //  does generate a click at the current mouse position! (use MouseEvent_Move to define new pos)
+      mouse_event(MOUSEEVENTF_ABSOLUTE or MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+      mouse_event(MOUSEEVENTF_ABSOLUTE or MOUSEEVENTF_LEFTUP,   0, 0, 0, 0);
+
+      Application.ProcessMessages;   // before we throw away the hlp.form
+
+    finally // try 2
+      FreeAndNil(Hlp);
+    end;    // try 2
+   To_Exit:
+    if MsgDelayWindow <> 0 then  // 17.06.05 P.W
+    begin
+      SetForegroundWindow(MsgDelayWindow);
+    end;
+  finally // try 1
+    ForceBringToFrontRuns := False;
+  end;    // try 1
+end;
+
+procedure ForceBringToFront;
+// 07.02.07 P.W: when screen is powered down some calls to OS-shell fail: like Mouse_CursorPos
+// frame around original ForceBringToFront renamed to ForceBringToFront_0 to ignore exceptions
+begin
+  try
+    ForceBringToFront_0;
+  except;
+    // ignore exceptions  // maybe Mouse_CursorPos fails
+  end;
+
+
+end;
+
+function Mouse_CursorPos: TPoint;
+// 18.11.09 P.W
+// Replace Mouse.CursorPos by Mouse_CursorPos everywhere to avoid
+//   exceptions when computer is locked
+begin
+  Try
+    Result := Mouse.CursorPos;
+  except
+    Result := Point(0, 0);
+  end;
+end;
+
+{$ENDIF}
+
+//==============================================================================
+
+function  SignalMutexName: AnsiString;
+begin
+  Result := UpperCase('MutexStartXctCon '+NameFromPath(LaunchName));
+//  Writeln('"', Result, '"');
+end;
+
+
+//==============================================================================
+//const                    // 20.12.07 P.W
+//  PipeName = '\\.\pipe\StartXctCon';  // until 13.12.07 P.W (seconc console window stays hidden when two apps launched)
+
+function PipeName: PChar;
+// modifications:
+// 13.12.07 P.W const to functuon to include Lauchname to allow two XCT apps (in different folders) may be launched independently
+//    function NameFromPath(N:String): String;
+//    // backward compatibility with 6.00 E:
+//    begin
+//      Result := '';
+//    end;
+var
+  S : AnsiString;
+begin
+  S := '\\.\pipe\StartXctCon'+NameFromPath(LaunchName);
+  Result := PChar(S);
+end;
+
+//var
+//  NPipeHndl     : THandle = INVALID_HANDLE_VALUE;
+//  NPipeFileHndl : THandle = INVALID_HANDLE_VALUE;
+function ConsoleCreatePipe: THandle;
+// not under Win 98!
+begin
+  if (Win32Platform < VER_PLATFORM_WIN32_NT) then
+  begin
+    Result := INVALID_HANDLE_VALUE;
+    EXIT;
+  end;
+//function CreateNamedPipe(lpName: PChar;
+//  dwOpenMode, dwPipeMode, nMaxInstances, nOutBufferSize, nInBufferSize, nDefaultTimeOut: DWORD;
+//  lpSecurityAttributes: PSecurityAttributes): THandle; stdcall;
+  Result :=
+  CreateNamedPipe(   // not under Win 98!
+    PipeName,                                   // lpName
+    PIPE_ACCESS_DUPLEX,                         // dwOpenMode
+    PIPE_TYPE_BYTE or PIPE_NOWAIT,              // dwPipeMode
+           //   PIPE_TYPE_BYTE     : not with CallNamedPipe!
+           //   PIPE_TYPE_MESSAGE
+           //   PIPE_NOWAIT  : allows read return immediately,
+           //      but client uses createfile here this mode is not supported
+           //      so the client has to use PeekNamedPipe
+    1,                                          // nMaxInstances
+    1024,                                       // nOutBufferSize
+    1024,                                       // nInBufferSize
+    100,                                        // nDefaultTimeOut
+    nil);                                       // lpSecurityAttributes
+
+  if (Result = INVALID_HANDLE_VALUE) then
+  begin
+  end else
+  begin
+  end;
+
+end;
+
+function ConsoleReadPipe_Handle(const NPipeHndl: THandle): THandle;
+const
+  nNumberOfBytesToRead = SizeOf(Result);
+var
+  lpNumberOfBytesRead: DWORD;
+begin
+  if (NPipeHndl <> INVALID_HANDLE_VALUE) then
+  begin
+    ReadFile(
+      NPipeHndl,
+      Result,
+      nNumberOfBytesToRead,
+      lpNumberOfBytesRead,
+      nil);
+  end;
+  if (nNumberOfBytesToRead <> lpNumberOfBytesRead) then Result := 0;
+end;
+
+procedure ConsoleClosePipe(var NPipeHndl: THandle);
+begin
+  if (NPipeHndl <> INVALID_HANDLE_VALUE) then
+  begin
+    CloseHandle(NPipeHndl);
+    NPipeHndl := INVALID_HANDLE_VALUE;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+
+function CreatePipeFile: THandle;
+begin
+(*
+function CreateFile(
+  lpFileName: PChar;
+  dwDesiredAccess,
+  dwShareMode: DWORD;
+  lpSecurityAttributes: PSecurityAttributes;
+  dwCreationDisposition,
+  dwFlagsAndAttributes: DWORD;
+  hTemplateFile: THandle): THandle; stdcall;
+*)
+  Result :=
+   CreateFile(
+       PipeName,
+       GENERIC_READ    + GENERIC_WRITE,
+       FILE_SHARE_READ + FILE_SHARE_WRITE,
+       nil,
+       OPEN_EXISTING,
+       FILE_ATTRIBUTE_NORMAL,
+       0);
+  if (Result = INVALID_HANDLE_VALUE) then
+  begin
+  end;
+end;
+
+procedure WritePipeFile(const NPipeFileHndl: THandle; const Buf; const NumBytesToWrite: DWORD);
+var
+  NumBytesWritten: DWORD;
+begin
+  if (NPipeFileHndl <> INVALID_HANDLE_VALUE) then
+  begin
+//function WriteFile(hFile: THandle; const Buffer; nNumberOfBytesToWrite: DWORD;
+//  var lpNumberOfBytesWritten: DWORD; lpOverlapped: POverlapped): BOOL; stdcall;
+    WriteFile(
+      NPipeFileHndl,
+      Buf,
+      NumBytesToWrite,
+      NumBytesWritten,
+      nil);
+
+    if (NumBytesToWrite <> NumBytesWritten) then
+    begin
+    end else
+    begin
+    end;
+  end;
+end;
+
+procedure WritePipeFile_Handle(const NPipeFileHndl, HandleToWrite: THandle);
+begin
+  WritePipeFile(NPipeFileHndl, HandleToWrite, SizeOf(HandleToWrite));
+end;
+
+procedure ClosePipeFile(var NPipeFileHndl : THandle);
+begin
+  if (NPipeFileHndl <> INVALID_HANDLE_VALUE) then
+  begin
+    CloseHandle(NPipeFileHndl);
+    NPipeFileHndl := INVALID_HANDLE_VALUE;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+
+function OpenWaitMutex: THandle;
+begin
+  Result := OpenMutex(MUTEX_ALL_ACCESS or SYNCHRONIZE, False, PChar(SignalMutexName));
+  if (Result <> 0) then
+  begin
+    if (WaitForSingleObject(Result, 1000) = WAIT_OBJECT_0) then
+    begin  // we own the mutex and its state is not signaled
+       // caller now may do the critical things
+       // and must call then ReleaseMutex and CloseHandle
+    end else
+    begin
+      ReleaseMutex(Result);
+      CloseHandle(Result);
+      Result := 0;
+    end;
+  end else
+  begin
+  end;
+end;
+
+procedure CloseMutex(var hMutex: THandle);
+begin
+  if (hMutex <> 0) then
+  begin
+    ReleaseMutex(hMutex);
+    CloseHandle(hMutex);
+  end;
+end;
+
+//------------------------------------------------------------------------------
+procedure SyncWritePipeFile_Handle(Handle: THandle);
+var
+  NPipeFileHndl : THandle;
+  hMutex        : THandle;
+begin
+  hMutex := OpenWaitMutex;
+  // v--- protected area ---
+    NPipeFileHndl := CreatePipeFile;         // win 98 : 11.2 sec
+    WritePipeFile_Handle(NPipeFileHndl, Handle);
+    ClosePipeFile(NPipeFileHndl);
+  // ^--- protected area ---
+  CloseMutex(hMutex);
+end;
+
+function SyncConsoleReadPipe_Handle(var NPipeHndl: THandle; const hMutex: THandle): THandle;
+begin
+  if (Win32Platform < VER_PLATFORM_WIN32_NT) then
+  begin
+    Result := 0;
+    EXIT;
+  end;
+//  NPipeHndl := ConsoleCreatePipe; // at start of console program
+//  hMutex := CreateMutex(nil, False, PChar(SignalMutexName)); // at start of console by IsLaunched
+
+  if (WaitForSingleObject(hMutex, 1000) = WAIT_OBJECT_0) then
+  begin
+  end else
+  begin
+  end;
+  Result := ConsoleReadPipe_Handle(NPipeHndl);
+  if (Result <> 0) then
+  begin  // client created and closed pipe; for reuse the server has to do the same
+    ConsoleClosePipe(NPipeHndl);     // pipe may no longer be used!
+    NPipeHndl := ConsoleCreatePipe;  // create new for next process
+  end;
+  ReleaseMutex(hMutex);
+
+//  if hMutex <> 0 then CloseHandle(hMutex);
+//  ConsoleClosePipe(NPipeHndl);    // at end   of console program
+end;
+//==============================================================================
+procedure CheckHiddenConsoleFullScreenOff;
+// Problem: when called several times the return from Diagnose (XCTDIRECTOR) to Database is delayed
+//  comes from use of ShowWindowAsync, ShowWindow does not lead to the problem.
+var
+  HwndCons : HWND;
+begin
+  if (Win32Platform = VER_PLATFORM_WIN32_WINDOWS) then EXIT;
+  HwndCons := LaunchedInfoGetHandle;
+  if IsWindow(HwndCons) then
+  begin
+    ShowWindowAsync(HwndCons, SW_SHOW);  // a hidden console does not continue?
+    Sleep(1);  // 15.12.04 P.W
+    if IsIconic(HwndCons) then
+    begin
+      PostAltEnter(HwndCons);
+    end;
+    ShowWindowAsync(HwndCons, SW_HIDE);
+    Sleep(1);  // 15.12.04 P.W
+  end;
+end;
+
+procedure ActivateDelphi(lnHWND: HWND);
+begin
+  if (Win32Platform < VER_PLATFORM_WIN32_NT) then
+  begin
+    EXIT;
+  end;
+
+  SyncWritePipeFile_Handle(lnHWND); // send lnHWND to StartXctCon    // win 98 consumes 11 sec!
+
+
+  CheckHiddenConsoleFullScreenOff;
+  {
+  ShowLaunchedConsole;  // needed for Analysis post Meas Ct!
+  PostAltEnterLaunchedInfo_Check(False); // for old Dos programs in graph mode which bring to fullscreen
+  HideLaunchedConsole;
+  //}
+
+EXIT;
+
+  HideLaunchedConsole;
+  ForceForegroundWindow(lnHWND, SW_MAXIMIZE);
+end;
+
+{-----------------------------------------
+The WaitForSingleObject function returns when one of the following occurs:
+
+·	The specified object is in the signaled state.  // Mutex is not owned
+·	The time-out interval elapses.
+
+WaitForSingleObject with ...
+...Mutex:
+  The CreateMutex or OpenMutex function returns the handle.
+  A mutex object's state is signaled when it is not owned by any thread.
+  The wait function requests ownership of the mutex for the calling thread,
+  changing the mutex's state to nonsignaled when ownership is granted.
+To own a mutex use:
+  openmutex and use WaitForSingleObject
+------------------------------------------}
+procedure SignalFullScreen(fsFlg: Boolean = True);  // used by FullScreen.pas
+begin
+  PostAltEnterLaunchedInfo_Check(fsFlg);
+end;
+
+function  IsLaunched(var hMutex : THANDLE): Boolean;  overload;
+// hMutex is output!
+begin
+  Result := AlreadyLaunched_Mutex(hMutex, SignalMutexName);
+end;
+
+function  IsLaunched: Boolean;                         overload;
+var
+  hMutex : THandle;
+begin
+  hMutex := 0;
+  Result := IsLaunched(hMutex);  // hMutex is output!
+  if (hMutex <> 0) then CloseHandle(hMutex);  // if not result
+end;
+
+//var
+//  Flg : Boolean = False;
+procedure ChkPrintJob;  // support Print for XSetPar LV_Tools LvPrint 22.03.05 P.W
+// assumes active directory is XCTDIR!
+var
+  hProcess: THandle;
+begin
+  If FileExists(LVJobName) then
+  begin
+//MessageBox1(0, 'ChkPrintJob EXISTS!', 'INFO', MB_OK+MB_TASKMODAL);
+    Sleep(200);
+    UseLaunchConsole(hProcess, 'SERV\DelphiTools.exe', '/LV_JOB', '.', '', False, False, False);
+    CloseHandle(hProcess);       // 30.10.07 P.W
+//    LaunchWait
+//    PrintTextFile(LVJobName, '');
+//    DeleteFile(LVJobName);
+  end else
+  begin
+//if not Flg then
+//begin
+//  MessageBox1(0, PChar(AnsiString(LvJobName)), 'ChkPrintJob JN ', MB_OK+MB_TASKMODAL);
+//  MessageBox1(0, PChar(AnsiString(ExpandFileName('.'))), 'Chk . ', MB_OK+MB_TASKMODAL);
+//  MessageBox1(0, PChar(AnsiString(ExpandFileName(LvJobName))), 'Chk  EXP JN', MB_OK+MB_TASKMODAL);
+//  Flg := True;
+//end;
+//Beep;
+//Sleep(2000);
+  end;
+end;
+
+
+(***
+Hide start button
+Use this procedure to hide (AVisible=True) or show (AVisible=False) the start button: 
+
+procedure TForm1.HideStartButton(AVisible: Boolean);
+var
+  Tray,Child,StartButtonHandle: HWnd;
+  C: array[0..127] of Char;
+  S: string;
+begin
+  Tray:=FindWindow('Shell_TrayWnd',nil);
+  Child:=GetWindow(Tray,GW_CHILD);
+  while Child<>0 do
+  begin
+    if GetClassName(Child,C,SizeOf(C))>0 then
+    begin
+      S:=StrPas(C);
+      if UpperCase(S)='BUTTON' then
+      begin
+        StartButtonHandle:=Child;
+        if AVisible then ShowWindow(Child,1)
+        else ShowWindow(Child,0);
+      end;
+    end;
+    Child:=GetWindow(Child,GW_HWNDNEXT);
+  end;
+end;
+***)
+
+{
+procedure DebSound(SoundNo : Integer = 0; SoundRep: Integer = 1; DelayMs : Integer = 100);
+var
+  Ready : Boolean;
+begin
+  Repeat
+    Case SoundNo of
+      0: MessageBeep(MB_OK);               // 0x00
+      1: MessageBeep(MB_ICONHAND);         // 0x10
+      2: MessageBeep(MB_ICONQUESTION);     // 0x20  // Quiet?
+      3: MessageBeep(MB_ICONEXCLAMATION);  // 0x30
+      4: MessageBeep(MB_ICONASTERISK);     // 0x40
+    end;
+    Dec(SoundRep);
+    Ready := (SoundRep <= 0);
+    if not Ready then Sleep(DelayMs);
+  until Ready
+end;
+
+procedure DebSound_NoWindow;
+begin
+  DebSound(3, 2, 150);
+end;
+
+procedure DebSound_Activate;
+begin
+  DebSound(4, 3, 100);
+end;
+
+procedure DebSound_Ready;
+begin
+  DebSound(0, 5, 150);
+  DebSound(4, 1, 100);
+end;
+}
+
+procedure LaunchXCT;
+// use by StartXctCon.exe to launch the XCT 6.00 Software via Start01.bat
+// StartXctCon has its own Console (will be hidden)
+// Start01.bat gets its own Console which will be visible / hidden
+//   depending what is just running: invisible when Delphi App else Visible
+//   but for win 98 the switch visible makes problems:
+//   Under Win 98 the XCT Console remains hidden post analysis!
+// We stay here until XCT console is closed
+// if XCT is already running (detected using a mutex)
+// then we activate the XCT console and terminate
+const
+  LoopSleep = 100;   // msec
+  DelayedStartMs = 1000;
+  ActivateXctRequestCtrStart = 1 + (DelayedStartMs div LoopSleep);  // delayed start
+var
+  MonitorWnd,
+  ChkHwnd      : HWND;
+  hMutex       : THandle;
+  NPipeHndl    : THandle;
+  ActivateXctRequestCtr : Integer;
+  LaunchedWindowVisible : Boolean;
+  LaunchTitle : AnsiString;   // 08.10.07 P.W
+begin
+  ChkHwnd      := 0;
+  MonitorWnd   := 0;
+  hMutex       := 0;
+  ActivateXctRequestCtr := 0;
+
+  If IsLaunched(hMutex) then     // hMutex is output!
+  begin
+    if IsConsole then
+    begin
+//      Writeln('Stratec XCT software has already been started!');
+//      Writeln('"', LaunchName, '"');
+    end;
+//    Sleep(2500);
+//    Sleep(500);
+//    ShowNaLaunchedConsole;
+    ActivateLaunchedInfo('',True);  // if StartWin98.exe or copy of it: sends WM_ForceWindow
+    Sleep(1); // without sleep the other window (in test: Start01.bat in Pause) not come up
+    EXIT;
+  end else
+  begin
+    if IsConsole then
+    begin
+      Writeln(TraS('Used to launch Stratec XCT software'));
+      Writeln(TraS('Do not close this window!'));
+    end;
+  end;
+
+  NPipeHndl := ConsoleCreatePipe; // at start of console program
+//MessageBox1(0, 'ChkPrintJob 2', 'INFO', MB_OK+MB_TASKMODAL);
+
+  LaunchedWindowVisible := True;
+  if IsConsole then
+  begin
+    ShowWindowAsync(GetMyWindow, SW_HIDE); // hides Console of StartXctCon
+    Sleep(1);  // 15.12.04 P.W
+  end;
+
+//  LaunchConsole(PChar(LaunchName), '', PChar(LaunchDir), PChar(XctConLaunchTitle), FullScreen); // u.: 08.10.07 P.W
+
+  LaunchTitle := GetXCTLaunchTitle(LaunchDir);                                                    // s.: 08.10.07 P.W
+  LaunchConsoleProc(PChar(LaunchName), '', PChar(LaunchDir), PChar(LaunchTitle), FullScreen);         // s.: 08.10.07 P.W
+      // ^...Proc 30.10.07 P.W
+
+  FullScreen := IsFullScreen(hwndLaunched);    // 06.09.05 P.W
+  DisableCloseButton(hwndLaunched);  // 08.09.05 P.W
+
+  WriteLaunchedInfo(LaunchedInfoName);
+  Sleep(100);
+//MessageBox1(0, 'ChkPrintJob 2', 'INFO', MB_OK+MB_TASKMODAL);
+  While (hwndLaunched <> 0) and IsWindow(hwndLaunched) do  // as long as window is not closed
+  begin
+    Sleep(LoopSleep);
+    ChkPrintJob;  // support Print for XSetPar LV_Tools LvPrint 22.03.05 P.W
+    if (MonitorWnd = 0)// if: 27.06.05 P.W for XctDirector monitor
+                       // the first app until closed do not swap to monitor
+                       // other delphi Apps inbetween launched
+                       // by this there is no need to hide the Inter\Launch
+    then
+    begin
+      ChkHwnd := SyncConsoleReadPipe_Handle(NPipeHndl, hMutex); // changes NPipeHndl if Result <> 0!
+         // XP: ChkHwnd is the window handle of each started Delphi GUI-App
+         //     via ActivateDelphi
+    end;
+    if (ChkHwnd <> 0) then    // ChkHwnd is ever zero under Win98!
+    begin
+      MonitorWnd := ChkHWnd;
+      //from ActivateDelphi :
+        //PostAltEnter_CheckFullScreen(hwndLaunched, false); // not from invisible console!
+        //ShowWindowAsync(hwndLaunched, SW_HIDE); // not from invisible console!
+      ActivateXctRequestCtr := 0;  // Clear Request
+    end;
+    if (ActivateXctRequestCtr > 0) then
+    begin
+      Dec(ActivateXctRequestCtr);
+      if (ActivateXctRequestCtr = 0) then
+      begin  // now activate the XCT Console
+        ActivateConsole(hwndLaunched, GlbLaunchedThreadId, FullScreen);
+      end;
+    end;
+    if (MonitorWnd <> 0) then  // Win98: MonitorWnd is 0!
+    begin
+      if isWindow(MonitorWnd) then
+      begin
+      end else
+      begin
+        MonitorWnd := 0;
+        //from ActivateXct :
+            //ShowLaunchedConsole; // not from invisible console!
+            // ActivateConsole works, but is time consuming!:
+        //   ActivateConsole(hwndLaunched, GlbLaunchedThreadId, FullScreen);
+        ActivateXctRequestCtr := ActivateXctRequestCtrStart;  // for delayed Activation if neccessary
+      end;
+    end else
+    begin  // for Win98 try to detect LaunchedWindow becomes visible to ActivateXctRequestCtr
+      if IsConsole and (Win32Platform = VER_PLATFORM_WIN32_WINDOWS) then
+      begin
+        if IsWindowVisible(hwndLaunched) then
+        begin
+          If not LaunchedWindowVisible then
+          begin  // Changed from Hidden to Visible
+            ActivateXctRequestCtr := ActivateXctRequestCtrStart;  // for delayed Activation if neccessary
+//ShowMessage('Win98 XctCon from Hidden to Visible');
+          end;
+          LaunchedWindowVisible := True;
+        end else
+        begin
+          ActivateXctRequestCtr := 0;  // Clear Request
+          LaunchedWindowVisible := False;
+        end;
+      end;
+    end;
+  end;
+  if hMutex <> 0 then CloseHandle(hMutex);
+  ConsoleClosePipe(NPipeHndl);    // at end   of console program
+end;
+
+/////////////////////////////////////////////////////////
+
+function TestPrinterStatus(LPTPort: Word): Byte;
+{
+  Pass in the LPT port number you want to check & get the following back:
+  01h - Timeout
+  08h - I/O Error
+  10h - Printer selected
+  20h - Out of paper
+  40h - Printer acknowledgement
+  80h - Printer not busy (0 if busy)
+
+  Note:
+  This function doesn't work under NT, it gives an access violation
+  from the DOS interrupt call.
+}
+// printer connected : $90; not connected $30
+var
+  Status: byte;
+  CheckLPT: word;
+begin
+  Status := 0;
+  if (Win32Platform >= VER_PLATFORM_WIN32_NT) then
+  begin
+//    ShowMessage('TestPrinterStatus not supported for WinNT...');
+    Result := Status;
+    Exit;
+  end;
+
+  if (LPTPort >= 1) and (LPTPort <= 3) then
+  begin
+    CheckLPT := LPTPort - 1;
+    asm
+      mov dx, CheckLPT;
+      mov al, 0;
+      mov ah, 2;
+      int 17h;
+      mov &Status, ah;
+    end;
+  end;
+  Result := Status;
+end;
+
+function MayPrintLpt(LPTPort: Word): Boolean;
+const
+  PS_TimeOut     = $01; //- Timeout
+  PS_IOError     = $08; // - I/O Error
+  PS_Selected    = $10; // - Printer selected
+  PS_OutOfPaper  = $20; // - Out of paper
+  PS_Acknowledge = $40; // - Printer acknowledgement
+  PS_NotBusy     = $80; // - Printer not busy (0 if busy)
+
+var
+  Status : Byte;
+begin
+  if (Win32Platform >= VER_PLATFORM_WIN32_NT) then
+  begin
+    Result:=True; // TestPrinterStatus not possible,
+                  // but no problem: WinXP does not wait eternal
+  end else
+  begin
+    Status := TestPrinterStatus(LPTPort);
+    Result := ((Status and PS_TimeOut    ) =  0) and
+              ((Status and PS_IoError    ) =  0) and
+              ((Status and PS_Selected   ) <> 0) and
+              ((Status and PS_OutOfPaper ) =  0) and
+              ((Status and PS_NotBusy    ) <> 0);
+  end;
+
+end;
+
+function CenterRect(CR, WA: TRect): TRect;
+var
+  CW, CH : Integer;
+begin
+  CW := CR.Right  - CR.Left;
+  CH := CR.Bottom - CR.Top;
+  Result.Left   := ((WA.Left + WA.Right ) - CW) div 2;
+  Result.Top    := ((WA.Top  + WA.Bottom) - CH) div 2;
+  Result.Right  := Result.Left + CW;
+  Result.Bottom := Result.Top  + CH;
+end;
+
+function CenterRectTopPref(CR, WA: TRect): TRect;
+var
+  CW, CH, WW, WH, DW, DH : Integer;
+begin
+  CW := CR.Right  - CR.Left;
+  CH := CR.Bottom - CR.Top;
+
+  WW := WA.Right  - WA.Left;
+  WH := WA.Bottom - WA.Top;
+
+  DW := WW - CW;
+  DH := WH - CH;
+
+  Result.Left   := WA.Left + (DW div 2);
+  Result.Top    := WA.Top + (Min(DW, DH) div 2);
+  Result.Right  := Result.Left + CW;
+  Result.Bottom := Result.Top  + CH;
+end;
+
+function CenterRectTop(CR, WA: TRect): TRect;
+var
+  CW, CH, WW, WH, DW, DH : Integer;
+begin
+  CW := CR.Right  - CR.Left;
+  CH := CR.Bottom - CR.Top;
+
+  WW := WA.Right  - WA.Left;
+  WH := WA.Bottom - WA.Top;
+
+  DW := WW - CW;
+  DH := WH - CH;
+
+  Result.Left   := WA.Left + (DW div 2);
+  Result.Top    := WA.Top;
+  Result.Right  := Result.Left + CW;
+  Result.Bottom := Result.Top  + CH;
+end;
+
+function GetWorkAreaPrim: TRect; // primary monitor
+begin
+  SystemParametersInfo(SPI_GETWORKAREA, 0, @Result, 0);
+end;
+
+function RegKeyName_ConWndName_Parent: AnsiString; // s.: 08.10.07 P.W
+begin
+  Result := '\Console';
+end;
+
+function RegKeyName_ConWndName_Def: AnsiString; // s.: 08.10.07 P.W
+begin
+  Result := RegKeyName_ConWndName_Parent + '\' + ConWndName_Def;
+end;
+
+function RegKeyName_ConWndName(const ConWndName: AnsiString): AnsiString; // 11.09.08 P.W
+begin
+  Result := RegKeyName_ConWndName_Parent + '\' + ConWndName;
+end;
+
+
+function IsRegStratecConsoleFullScreen: Boolean;
+// 02.07.08 P.W
+const
+  KeyRoot : HKEY = HKEY_CURRENT_USER;
+  KeyRootS       = 'HKEY_CURRENT_USER';
+var
+  Reg: TRegistry;
+  function Registry_ReadInteger_Def(const Name: AnsiString; DefVal: Integer): Integer;
+  begin
+    if Reg.ValueExists(Name) then
+      Result := Reg.ReadInteger(Name)
+    else
+      Result := DefVal;
+  end;
+
+var
+  FullScreen: Integer;
+begin
+  Result := False;
+  try
+    Reg := TRegistry.Create(KEY_READ);
+    try
+      Reg.RootKey := KeyRoot;
+      // False because we do not want to create key if it doesn't exist
+      if Reg.OpenKey(RegKeyName_ConWndName_Def, False) then
+      begin
+        FullScreen := Registry_ReadInteger_Def('FullScreen' , -1);
+
+      end else
+      begin
+        FullScreen := -1;
+      end;
+
+      if FullScreen = -1 then
+      begin
+        if Reg.OpenKey(RegKeyName_ConWndName_Parent, False) then
+        begin
+          FullScreen := Registry_ReadInteger_Def('FullScreen' , -1);
+
+        end else
+        begin
+          FullScreen := -1;
+        end;
+      end;
+
+      Result := (FullScreen > 0);
+
+
+      finally
+        Reg.Free;
+      end;
+    except
+      on E: Exception do
+        Result := False;
+    end;
+
+end;
+
+function FindMaximalConsoleFontSize(LaunchDir: AnsiString; ForceSearchFontSize:Boolean=False): Integer;
+// 02.07.08 P.W
+// Modifications:
+// 24.07.08 P.W: Avoid TstBatch created more than once in the hope to solve the problem:
+// ---  Cannot create file "D:\XCT55IMP\Inter\TstBATCH.bat".
+// ---    Der Prozess kann nicht auf die Datei zugreifen, da sie von einem anderen Prozess verwendet wird
+// 11.09.08 P.W: if "Stratec XCT Console" uses fullscreen mode then a copy
+//   "Stratec XCT Console (WM)" is created where fullscreen is off
+var
+  OrigFullScreen: Integer;
+  TestBatchCreated: Boolean;
+
+  function TstDir: AnsiString;
+  begin
+    Result := ETPD(LaunchDir);
+  end;
+
+  function WorkAreaPrim_Width: Integer;
+  var
+    WR : TRect;
+  begin
+    WR := GetWorkAreaPrim;
+    Result := WR.Right - WR.Left;
+  end;
+
+  function WorkAreaPrim_Height: Integer;
+  var
+    WR : TRect;
+  begin
+    WR := GetWorkAreaPrim;
+    Result := WR.Bottom - WR.Top;
+  end;
+
+  const
+    KeyRoot : HKEY = HKEY_CURRENT_USER;
+    KeyRootS       = 'HKEY_CURRENT_USER';
+    ConWnd_WindowSize = ConWndWidth + ConWndHeight shl 16;
+
+  function FontSizeMatchesWorkArea(const ConWinName: AnsiString; var FontSize: Integer): Boolean;
+  var
+    Reg: TRegistry;
+    WAW, WAH, WAFS, WS, Fixed: Integer;
+    function Registry_ReadInteger_Def(const Name: AnsiString; DefVal: Integer): Integer;
+    begin
+      if Reg.ValueExists(Name) then
+        Result := Reg.ReadInteger(Name)
+      else
+        Result := DefVal;
+    end;
+
+  begin
+    Result := False;
+    try
+      Reg := TRegistry.Create(KEY_READ);
+      try
+        Reg.RootKey := KeyRoot;
+        // False because we do not want to create key if it doesn't exist
+        if Reg.OpenKey(RegKeyName_ConWndName_Def, False) then
+        begin
+          FontSize := Registry_ReadInteger_Def('FontSize'           , 24 shl 16) shr 16; // ,             FontSize shl 16);
+          WAW      := Registry_ReadInteger_Def('Stratec_WA_Width'   ,  0); // ,,     WorkAreaPrim_Width);
+          WAH      := Registry_ReadInteger_Def('Stratec_WA_Height'  ,  0); // ,,    WorkAreaPrim_Height);
+          WAFS     := Registry_ReadInteger_Def('Stratec_WA_FontSize', 24 shl 16) shr 16; // ,,  FontSize shl 16);
+          WS       := Registry_ReadInteger_Def('WindowSize'         ,  0);
+          Fixed    := Registry_ReadInteger_Def('Stratec_Fixed'      ,  0);
+
+          Result :=
+           (Fixed <> 0) or
+          ((FontSize = WAFS) and (WAW = WorkAreaPrim_Width) and (WAH = WorkAreaPrim_Height) and (WS = ConWnd_WindowSize));
+        end;
+      finally
+        Reg.Free;
+      end;
+    except
+      on E: Exception do
+        Result := False;
+    end;
+  end;
+
+  const
+    FaceName   = 'Lucida Console';
+    FontFamily = 54;
+    //FullScreen =  0;   // Windowed = 0; FullScreen = 1;
+
+  procedure Registry_ConWindowFontSize_Copy(ConWinNameSrc, ConWinNameDest: AnsiString; FullScreenDest:Boolean=False);
+  var
+    RegS, RegD: TRegistry;  // Source, Destination
+    function RegCopyIntDef(const Name: AnsiString; DefVal: Integer): Integer;
+    begin
+      if RegS.ValueExists(Name) then
+        Result := RegS.ReadInteger(Name)
+      else
+        Result := DefVal;
+      RegD.WriteInteger(Name, Result);
+    end;
+    function RegCopyStrDef(const Name, DefVal: AnsiString): AnsiString;
+    begin
+      if RegS.ValueExists(Name) then
+        Result := RegS.ReadString(Name)
+      else
+        Result := DefVal;
+      RegD.WriteString(Name, Result);
+    end;
+  begin
+    try
+      RegS := TRegistry.Create(KEY_READ);
+      RegD := TRegistry.Create(KEY_WRITE);
+      try
+        RegS.RootKey := KeyRoot;
+        RegD.RootKey := KeyRoot;
+        // CanCreate = False because we do want to create key if it doesn't exist:
+        if RegS.OpenKey(RegKeyName_ConWndName(ConWinNameSrc), False) then
+        begin
+          // CanCreate = True because we do want to create key if it doesn't exist:
+          if RegD.OpenKey(RegKeyName_ConWndName(ConWinNameDest), True) then
+          begin
+            RegCopyIntDef('CodePage',             437);          // needed for japan!
+            RegCopyIntDef('CursorSize',           8);
+            RegCopyIntDef('FontFamily',           FontFamily);
+            RegCopyStrDef('FaceName',             FaceName);
+            RegCopyIntDef('FontWeight',           400);
+            RegCopyIntDef('WindowSize',           ConWnd_WindowSize);
+            RegCopyIntDef('FontSize',             20 shl 16);
+
+//          RegCopyIntDef('FullScreen',           0);
+            if FullScreenDest then
+              RegD.WriteInteger('FullScreen',     1)
+            else
+              RegD.WriteInteger('FullScreen',     0);
+
+            RegCopyIntDef('WindowPosition',       0);
+          end;
+        end
+      finally
+        RegS.Free;
+        RegD.Free;
+      end;
+    except
+      on E: Exception do        // 16.01.08 P.W
+        ShowMessageFmt_
+          ('%s in copy %s "%s" -> "%s"',
+            [E.Message, KeyRootS, ConWinNameSrc, ConWinNameDest]);
+    end;
+  end;
+
+  procedure Registry_ConWindowFontSize(ConWinName: AnsiString; FontSize: Integer; ReadyFlg: Boolean; ConWRect: TRect);
+
+//  ValNamePos  = 'WindowPosition'; // REG_DWORD    // LowWord: X ; HighWord Y coordinate
+//  ValNameSize = 'WindowSize';     // REG_DWORD    // LowWord: X ; HighWord Y
+//  ValFontSize = 'FontSize';       // REG_DWORD    //              HighWord FontSize
+//  ValForWorkAreaExtend = 'ForWorkAreaExtend'; // REG_DWORD // added by stratec
+
+    procedure CreateKeyValue;
+    var
+      Reg: TRegistry;
+      CR : TRect;
+    begin
+      try
+        Reg := TRegistry.Create(KEY_WRITE);
+        try
+          Reg.RootKey := KeyRoot;
+          // True because we do want to create key if it doesn't exist
+          if Reg.OpenKey(RegKeyName_ConWndName_Def, True) then
+          begin
+            Reg.WriteInteger('CodePage',             437);          // needed for japan!
+            Reg.WriteInteger('CursorSize',           8);
+            Reg.WriteInteger('FontFamily',           FontFamily);
+            Reg.WriteString ('FaceName',             FaceName);
+            Reg.WriteInteger('FontWeight',           400);
+            Reg.WriteInteger('WindowSize',           ConWnd_WindowSize);
+            Reg.WriteInteger('FontSize',             FontSize shl 16);
+            if ReadyFlg then
+            begin
+              CR := CenterRectTopPref(ConWRect, GetWorkAreaPrim);
+              Reg.WriteInteger('FullScreen',           OrigFullScreen);
+              Reg.WriteInteger('WindowPosition',       CR.Left + CR.Top shl 16);
+              Reg.WriteInteger('Stratec_WA_Width',     WorkAreaPrim_Width);
+              Reg.WriteInteger('Stratec_WA_Height',    WorkAreaPrim_Height);
+              Reg.WriteInteger('Stratec_WA_FontSize',  FontSize shl 16);
+              Reg.WriteInteger('Stratec_Fixed',        0);  // 1: Check at start of StartXct is disabled
+            end else
+            begin
+              Reg.WriteInteger('WindowPosition',       4000); // outside visible area
+              Reg.WriteInteger('FullScreen',           0);  // 0 for optimizing fontsize of windowed mode!
+            end;
+          end;
+        finally
+          Reg.Free;
+        end;
+      except
+        on E: Exception do        // 16.01.08 P.W
+          ShowMessageFmt_
+            ('%s "%s%s"; Name "%s"; Value "%d"',
+              [E.Message, KeyRootS, RegKeyName_ConWndName_Def, 'FontSize', FontSize]);
+      end;
+    end;
+  begin
+    CreateKeyValue;
+  end;
+
+  function TestFontSize(FontSize: Integer; var ConWRect: TRect): TPoint;
+
+    function StartTestBatch: HWND;
+      function TstBatch: AnsiString;
+      begin
+        Result := ITPD(TstDir) + 'Inter\TstBATCH.bat';
+        if not TestBatchCreated then                  // if: 24.07.08 P.W
+          ForceDirectories(ExtractFileDir(Result));
+      end;
+
+    var
+      SL : TStringList;
+    begin // StartTestBatch
+
+      if not TestBatchCreated then                    // if: 24.07.08 P.W
+      begin
+        TestBatchCreated := True; // 24.07.08 P.W
+        SL := TStringList.Create;
+        try                       // 24.07.08 P.W
+          SL.Append('@Echo Optimizing Console FontSize');
+          SL.Append('@Pause');
+          SL.Append('@Pause');
+          SL.SaveToFile(TstBatch);
+        except  // ignore errors  // 24.07.08 P.W
+          TestBatchCreated := False;
+        end;                      // 24.07.08 P.W
+        SL.Free;
+      end;
+
+      LaunchConsoleProc(PChar(TstBatch), '', PChar(TstDir), PChar(ConWndName_Def), False);
+      Result := Debug_GetHwndLaunched;
+  //    ShowWindow(Result, SW_HIDE);
+  //    Sleep(1000);
+    end;  // StartTestBatch
+
+    function WndGetDeltaFrame(Wnd: HWND): TPoint;
+    var
+      R0, CR, RW : TRect;
+      W0, H0, WC, HC, WW, HW : Integer;
+    begin // WndGetDeltaFrame
+      if IsWindow(Wnd) then
+      begin
+        RW := GetWorkAreaPrim;
+        WW := RW.Right  - RW.Left;
+        HW := RW.Bottom - RW.Top;
+
+        GetWindowRect(Wnd, R0);
+        W0 := R0.Right  - R0.Left;
+        H0 := R0.Bottom - R0.Top;
+
+        Windows.GetClientRect(Wnd, CR);
+        WC := CR.Right  - CR.Left;
+        HC := CR.Bottom - CR.Top;
+        Result.X := W0 - WC;
+        Result.Y := H0 - HC;
+
+        if (WW < W0) then Result .X := - Result.X;
+        if (HW < H0) then Result .Y := - Result.Y;
+      end else
+      begin
+        Result := Point(0, 0);
+      end;
+    end;  // WndGetDeltaFrame
+
+  var
+    ConWnd : HWND;
+  begin  // TestFontSize
+    Registry_ConWindowFontSize(ConWndName_Def, FontSize, False, Rect(0,0,0,0));
+    ConWnd := StartTestBatch;
+    Result := WndGetDeltaFrame(ConWnd);
+    GetWindowRect(ConWnd, ConWRect);
+    While IsWindow(ConWnd) do
+    begin
+      PostMessage(ConWnd, WM_CLOSE, 0, 0);
+      Sleep(10);
+    end;
+  end;   // TestFontSize
+
+  function SearchNewFontSize: Integer;
+  var
+    FS, DFS : Integer;
+    DF1, DF : TPoint;
+    CR, ConWRect : TRect;
+    Ready : Boolean;
+    FSMaxBelow, FSMinAbove : Integer;
+    procedure CheckDivReady;
+    begin
+      if (DFS > 1) then
+        DFS := DFS div 2
+      else
+        Ready := True;
+    end;
+  begin // SearchNewFontSize
+    If IsRegStratecConsoleFullScreen then
+      OrigFullScreen := 1
+    else
+      OrigFullScreen := 0;
+
+    TestBatchCreated := False;  // 24.07.08 P.W
+
+    FSMinAbove := 100;  // limits search of fontsize in case of error
+    FSMaxBelow :=   0;
+    DF1 := TestFontSize(1, CR);
+    DFS := 16;
+    FS  := 16;
+    Ready := False;
+    Repeat
+      DF := TestFontSize(FS, CR);
+      if PointsEqual(DF1, DF) then
+      begin
+        FSMaxBelow := Max(FSMaxBelow, FS);
+        if FSMaxBelow = FS then
+          ConWRect := CR;
+        If (FS + DFS) >= FSMinAbove then
+          CheckDivReady;
+
+        if not Ready then
+          Inc(FS, DFS);
+      end else
+      begin
+        CheckDivReady;
+        FSMinAbove := Min(FSMinAbove, FS);
+        Dec(FS, DFS);
+      end;
+    until Ready;
+    Registry_ConWindowFontSize(ConWndName_Def, FS, True, ConWRect);
+
+    Result := FS;
+  end;  // SearchNewFontSize
+begin // FindMaximalConsoleFontSize
+  if ForceSearchFontSize or (not FontSizeMatchesWorkArea(ConWndName_Def, Result)) then
+    Result := SearchNewFontSize;
+  if IsRegStratecConsoleFullScreen then
+    Registry_ConWindowFontSize_Copy(ConWndName_Def, ConWndName_Def_WM); // 11.09.08 P.W
+end;  // FindMaximalConsoleFontSize
+
+function SecondsIdle: Double;
+var
+   liInfo: TLastInputInfo;
+begin
+   liInfo.cbSize := SizeOf(TLastInputInfo) ;
+   GetLastInputInfo(liInfo) ;
+   Result := (GetTickCount - liInfo.dwTime) / 1000;
+end;
+
+
+
+/////////////////////////////////////////////////////////
+
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  BreakFlg     := False;
+  FillChar(CallInfoOff, SizeOf(CallInfoOff), #0);
+  CallInfoOff.InfLevLim := -1;
+  FillChar(CallInfoEver, SizeOf(CallInfoEver), #0);
+  CallInfoEver.InfLevLim := 0;
+  FillChar(CallInfoOnce, SizeOf(CallInfoOnce), #0);
+  CallInfoOnce.InfLevLim := 1;
+  FillChar(CallInfoTwice, SizeOf(CallInfoTwice), #0);
+  CallInfoTwice.InfLevLim := 2;
+
+  ConsoleFlg  := False;         // set  by StartXctCon.pas
+  FindWindowName := '';
+  ForceBringToFrontRuns := False;
+  FullScreen  := False;  // false for Win98
+  GlbLaunchedThreadId := 0;
+  HwndFindWindow := 0;
+  HwndGetMyWindow := 0;
+  hwndLaunched        := 0;
+  LaunchConsoleIgnoreWindow := False; // 09.06.05 P.W
+  LaunchDir_0 := '';  // use without trailingPathDelimiter
+  NonDelphiApplication_ProcessMessages_Proc := nil;  // 02.07.08 P.W
+  NonDelphiApplication_Terminated_Func      := nil;  // 02.07.08 P.W
+//OEM_ANSI_437 : Array[0 .. 255] of Char =
+  WinToolsMsgHook := nil;
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Init  part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+ if (Win32Platform = VER_PLATFORM_WIN32_WINDOWS) then
+  FullScreen:=False;
+
+{$Ifdef DELPHI}
+  HintWindow_BugFix;  // 23.04.08 P.W
+{$ENDIF}
+
+// FindMaximalConsoleFontSize(LaunchDir);
+// DebSound_NoWindow;
+// DebSound_Activate;
+// DebSound_Ready;
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+ if (Win32Platform = VER_PLATFORM_WIN32_WINDOWS) then
+  FullScreen:=False;
+
+{$Ifdef DELPHI}
+  HintWindow_BugFix;  // 23.04.08 P.W
+{$ENDIF}
+
+// FindMaximalConsoleFontSize(LaunchDir);
+// DebSound_NoWindow;
+// DebSound_Activate;
+// DebSound_Ready;
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+
+
+end.
+
+
+
