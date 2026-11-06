@@ -1,0 +1,478 @@
+unit JpgUse;
+
+interface
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms, Math,
+  jpeg;
+  // further info: SDK PropertyItem GetAllPropertyItems
+type
+  TFileStreamC = class(TFileStream)
+  public
+    function Read(var Buffer; Count: Longint): Longint; override;
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
+  TStreamC = class(TStream)
+  private
+    OrigStream : TStream;
+    function GetSize: Int64; override;
+    procedure SetSize(NewSize: Longint); overload; override;
+    procedure SetSize(const NewSize: Int64); overload; override;
+  public
+    function Seek(Offset: Longint; Origin: Word): Longint; overload; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; overload; override;
+    constructor Create(aOrigStream: TStream);
+    function Read(var Buffer; Count: Longint): Longint; override;
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
+  TJpgcOpenMode = (JPGC_Normal, JPGC_SoftGray, JPGC_Soft2Gray);
+
+  TJPEGImageC = class(TJPEGImage)
+  public
+    procedure LoadFromFile(const Filename: AnsiString);  override;
+    procedure SaveToFile(const Filename: AnsiString);  override;
+
+    procedure LoadFromStream(Stream: TStream); override;   // necessary for using ZipMstr: LoadGraphic from Stream
+   // procedure SaveToStream(Stream: TStream); override;
+  end;
+
+  TZipImage = class(TBitmap)
+  // aims:  a) support *.zip files during OpenPictureDialog
+  //        b) avoid OpenPictureDialog sending an Exception when selecting a *.zip file
+  public
+    procedure LoadFromFile(const Filename: AnsiString);  override;
+    procedure SaveToFile(const Filename: AnsiString);  override;
+
+    procedure LoadFromStream(Stream: TStream); override;   // necessary for using ZipMstr: LoadGraphic from Stream
+   // procedure SaveToStream(Stream: TStream); override;
+  end;
+
+var
+  JpgcOpenMode : TJpgcOpenMode = JPGC_Normal;
+
+function  JpgCreationDate(fName: AnsiString): TDateTime;
+procedure GraphicSaveAsJpgC(Graphic: TGraphic; JpgcName: String; Quality: Integer=100);
+procedure GraphicSaveAsJpg (Graphic: TGraphic; JpgName: String; Quality: Integer=100);
+procedure PictureSaveAsJpgC(Picture: TPicture; JpgcName: String);
+function RegisterJpgc: Boolean;
+FUNCTION JPEGSentinelsAreOK(CONST Filename:  TFilename):  BOOLEAN;
+
+Implementation
+
+uses
+  BmpUse;
+  const Unit_Name = 'JpgUse'; // 03.05.24 P.W
+
+// from "http://www.efg2.com/Lab/Library/Delphi/Graphics/JPEGSentinels.pas.txt"
+// copied 07.09.07 P.W  
+// Avoid JPEG Error #52:
+// Verify first two bytes of JPEG are $FFD8 (little endian $D8FF)
+// Verify last two bytes of JPEG are $FFD9 (little endian $D9FF)
+FUNCTION JPEGSentinelsAreOK(CONST Filename:  TFilename):  BOOLEAN;
+  VAR
+    FileStream:  TFileStream;
+    w1        :  WORD;     // a "word" is always 2 bytes long
+    w2        :  WORD;
+BEGIN
+  ASSERT(SizeOf(WORD) = 2);
+
+  RESULT := FileExists(Filename);
+
+  IF   RESULT
+  THEN BEGIN
+    FileStream := TFileStream.Create(Filename, fmOpenRead OR fmShareDenyNone);
+    TRY
+      FileStream.Seek(0, soFromBeginning); // use seek or position
+      FileStream.Read(w1,2);
+
+      FileStream.Position := FileStream.Size - 2;
+      FileStream.Read(w2,2)
+    FINALLY
+      FileStream.Free
+    END;
+
+    RESULT := (w1 = $D8FF) AND (w2 = $D9FF);
+  END
+END;
+
+procedure InvertBuffer(var Buffer; Count: Longint);
+type
+  TByteArr = Array[0..MaxInt-1] of Byte;
+var
+   I : Integer;
+begin
+   for I := 0 to Count -1 do
+     TByteArr(Buffer)[I] := not TByteArr(Buffer)[I];
+end;
+
+function  JpgCreationDate(fName: AnsiString): TDateTime;
+// scan start of file for strings like "2004:10:31 10:04:46"                               // date (of modification?)
+// date is found three times! 2nd time like "2004:10:31 10:04:46 2004:10:31 10:04:46"      // Original date and digitizing date
+// first date may be photoshop change or load date
+// proper implementation would use GDIPLUS.DLL: PropertyItem GetAllPropertyItems
+//   but sdk documentation is only for C++ code and the GDIPLUS.DLL is found in folders like:
+//   "C:\WINDOWS\WinSxS\x86_Microsoft.Windows.GdiPlus_6595b64144ccf1df_1.0.0.0_x-ww_8d353f13"
+//   "C:\WINDOWS\WinSxS\x86_Microsoft.Windows.GdiPlus_6595b64144ccf1df_1.0.2600.2180_x-ww_522f9f82"
+//   and so the use of GDIPLUS.DLL seems to be unreliable
+const
+  Msk_0 = '####:##:## ##:##:##';  // !access Msk_0[1] is invalid!
+  //       yyyy mm dd hh mm ss
+  //       1    6  9  12 15 18
+  Msk : AnsiString = Msk_0;       // for access Msk[1]
+  LenMsk = Length(Msk_0);
+var
+  InDate : Boolean;
+  TstString : String;
+  LenTst : Integer;
+  Dates : Array of String;
+
+  function DateStringToDateTime(DateStr: String): TDateTime;
+  var
+    ST : TSystemTime;
+  begin
+    FillChar(ST, SizeOf(ST), #0);
+    ST.wYear      := StrToIntDef(Copy(DateStr,  1, 4), 0);
+    ST.wMonth     := StrToIntDef(Copy(DateStr,  6, 2), 0);
+    ST.wDay       := StrToIntDef(Copy(DateStr,  9, 2), 0);
+    ST.wHour      := StrToIntDef(Copy(DateStr, 12, 2), 0);
+    ST.wMinute    := StrToIntDef(Copy(DateStr, 15, 2), 0);
+    ST.wSecond    := StrToIntDef(Copy(DateStr, 18, 2), 0);
+    Result := SystemTimeToDateTime(ST);
+  end;
+
+  procedure NoDate;
+  begin
+    TstString := '';
+    LenTst    := 0;
+    InDate    := False;
+  end;
+
+  procedure DateReady;
+  var
+    Len : Integer;
+  begin
+    Len := Length(Dates)+1;
+    SetLength(Dates, Len);
+    Dates[Len -1] := TstString;
+    NoDate;
+  end;
+
+  function NumWanted: Boolean;
+  begin
+    Result := ((LenTst < LenMsk) and (Msk[LenTst+1] = '#'));
+    if (not Result) then NoDate;
+    if Result then InDate := True;
+  end;
+
+  function DateSepWanted: Boolean;
+  begin
+    Result := (LenTst < LenMsk) and (Msk[LenTst+1] = ':');
+    if (not Result) then NoDate;
+  end;
+
+  function BlankWanted: Boolean;
+  begin
+    Result := (LenTst < LenMsk) and (Msk[LenTst+1] = ' ');
+    if (not Result) then NoDate;
+  end;
+
+  procedure AddCh(Ch: Char);
+  begin
+    TstString := TstString + Ch;
+    LenTst    := LenTst + 1;
+    if (LenTst = LenMsk) then DateReady;
+  end;
+
+  procedure ChkNumber (Ch: Char);
+  begin
+    if NumWanted then AddCh(Ch);
+  end;
+
+  procedure ChkBlank  (Ch: Char);
+  begin
+    if BlankWanted then AddCh(Ch);
+  end;
+
+  procedure ChkDateSep(Ch: Char);
+  begin
+    if DateSepWanted then AddCh(Ch);
+  end;
+
+const
+  BfS = 1024;
+var
+  Bf                  : Array [0..Bfs-1] of char;
+  iFHdl               : Integer;
+  I, iFileLength, rem, rd, iBytesRead, Len : Integer;
+begin
+
+    iFHdl := FileOpen(fName, fmOpenRead);
+    iFileLength := FileSeek(iFHdl,0,2);
+    FileSeek(iFHdl,0,0);
+
+    rem := iFileLength;
+    rd  := Min(rem, BfS);
+
+    iBytesRead := FileRead(iFHdl, Bf, rd);
+
+    SetLength(Dates, 0);
+    NoDate;
+    for I := 0 to iBytesRead -1 do
+    begin
+      case Bf[I] of
+        '0'..'9' : ChkNumber (BF[I]);
+        ' '      : ChkBlank  (BF[I]);
+        ':'      : ChkDateSep(BF[I]);
+        else       NoDate;
+      end;
+    end;
+
+    FileClose(iFHdl);
+
+    Len := Length(Dates);
+    if Len = 0 then
+    begin
+      Result := 0;
+    end else
+    begin
+      Result := DateStringToDateTime(Dates[Len -1]);
+    end;
+
+end;
+
+function TFileStreamC.Read(var Buffer; Count: Longint): Longint;
+begin
+  Result := FileRead(FHandle, Buffer, Count);
+  if Result = -1 then Result := 0;
+  InvertBuffer(Buffer, Count);
+end;
+
+function TFileStreamC.Write(const Buffer; Count: Longint): Longint;
+var
+  BufferInv: Pointer;
+begin
+  GetMem(BufferInv, Count);
+  Move(Buffer, BufferInv^, Count);
+  InvertBuffer(BufferInv^, Count);
+  Result := FileWrite(FHandle, BufferInv^, Count);
+  if Result = -1 then Result := 0;
+  FreeMem(BufferInv, Count);
+end;
+
+{ TStreamC }
+
+constructor TStreamC.Create(aOrigStream: TStream);
+begin
+  OrigStream := aOrigStream;
+end;
+
+function TStreamC.GetSize: Int64;
+begin
+  Result := OrigStream.Size;
+end;
+
+function TStreamC.Read(var Buffer; Count: Integer): Longint;
+begin
+  Result := OrigStream.read(Buffer, Count);
+  InvertBuffer(Buffer, Count);
+end;
+
+procedure TStreamC.SetSize(NewSize: Integer);
+begin
+  OrigStream.Size := NewSize;
+end;
+
+function TStreamC.Seek(Offset: Integer; Origin: Word): Longint;
+begin
+  Result := OrigStream.Seek(Offset, Origin);
+end;
+
+function TStreamC.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  Result := OrigStream.Seek(Offset, Origin);
+end;
+
+procedure TStreamC.SetSize(const NewSize: Int64);
+begin
+  OrigStream.Size := NewSize;
+end;
+
+function TStreamC.Write(const Buffer; Count: Integer): Longint;
+var
+  BufferInv: Pointer;
+begin
+  GetMem(BufferInv, Count);
+  Move(Buffer, BufferInv^, Count);
+  InvertBuffer(BufferInv^, Count);
+  Result := OrigStream.Write(Buffer, Count);
+  FreeMem(BufferInv, Count);
+end;
+
+procedure TJPEGImageC.LoadFromFile(const Filename: AnsiString);
+var
+  Stream: TStream;
+begin
+  Stream := TFileStreamC.Create(Filename, fmOpenRead or fmShareDenyWrite);
+  try
+    LoadFromStream(Stream);
+  finally
+    Stream.Free;
+  end;
+
+  case JpgcOpenMode of
+    JPGC_Normal:   ;
+    JPGC_SoftGray:  BmpSoftGray32(Bitmap);
+    JPGC_Soft2Gray: begin
+                      BmpSoft2Gray32(Bitmap);
+                      BmpFramed32(Bitmap, Bitmap.Width div 4, Bitmap.Height div 4);
+                    end;
+  end;
+
+end;
+
+procedure TJPEGImageC.SaveToFile(const Filename: AnsiString);
+var
+  Stream: TStream;
+begin
+  Stream := TFileStreamC.Create(Filename, fmCreate);
+  try
+    SaveToStream(Stream);
+  finally
+    Stream.Free;
+  end;
+end;
+
+procedure TJPEGImageC.LoadFromStream(Stream: TStream);
+var
+  StreamC : TStream;
+begin
+  if (Stream is TFileStreamC) then
+  begin
+    inherited;
+  end else
+  if (Stream is TStreamC) then
+  begin
+    inherited;
+  end else
+  begin
+    StreamC := TStreamC.Create(Stream);
+    inherited LoadFromStream(StreamC);
+    FreeAndNil(StreamC);
+  end;
+
+end;
+
+procedure GraphicSaveAsJpgC(Graphic: TGraphic; JpgcName: String; Quality: Integer=100);
+var
+  JPEGImageC : TJPEGImageC;
+begin
+    JpgcName := ChangeFileExt(JpgcName, '.jpgc');
+
+    JPEGImageC := TJPEGImageC.Create;
+    try
+      JPEGImageC.Assign(Graphic);
+      JPEGImageC.CompressionQuality := Quality;   // works only if graphic is not a JPG!
+      ForceDirectories(ExtractFileDir(JpgcName));
+      JPEGImageC.SaveToFile(JpgcName);
+    except
+      JPEGImageC.Free;
+      raise;
+    end;
+    JPEGImageC.Free;
+end;
+
+
+procedure GraphicSaveAsJpg(Graphic: TGraphic; JpgName: String; Quality: Integer=100);
+var
+  JPEGImage : TJPEGImage;
+begin
+
+    JPEGImage := TJPEGImage.Create;
+    try
+      JPEGImage.Assign(Graphic);
+      JPEGImage.CompressionQuality := Quality;  // works only if graphic is not a JPG!
+      ForceDirectories(ExtractFileDir(JpgName));
+      JPEGImage.SaveToFile(JpgName);
+    except
+      JPEGImage.Free;
+      raise;
+    end;
+    JPEGImage.Free;
+end;
+
+
+procedure PictureSaveAsJpgC(Picture: TPicture; JpgcName: String);
+begin
+  GraphicSaveAsJpgC(Picture.Graphic, JpgcName, 100);
+end;
+
+var
+  JpgcRegistered : Boolean = False;
+function RegisterJpgc: Boolean;
+// returns true first time other times false
+begin
+  Result := False;
+
+  If JpgcRegistered then EXIT;
+
+  TPicture.RegisterFileFormat('jpgc','JPEGC Image File', TJPEGImageC);
+  JpgcRegistered := True;
+  Result := True;
+end;
+
+{ TZipImage }
+
+procedure TZipImage.LoadFromFile(const Filename: AnsiString);
+begin
+  Exit;
+
+end;
+
+procedure TZipImage.LoadFromStream(Stream: TStream);
+begin
+  Exit;
+
+end;
+
+procedure TZipImage.SaveToFile(const Filename: AnsiString);
+begin
+  Exit;
+
+end;
+
+procedure RegisterZip;
+begin  // aims:  a) support *.zip files during OpenPictureDialog
+       //        b) avoid OpenPictureDialog sending an Exception when selecting a *.zip file
+
+  TPicture.RegisterFileFormat('zip','Zip Image File', TZipImage);
+end;
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  JpgcOpenMode : TJpgcOpenMode = JPGC_Normal;
+//JpgcRegistered : Boolean = False;  // not!
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Init  part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+//  RegisterJpgc;
+  RegisterZip;
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+//  RegisterJpgc;
+  RegisterZip;
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.
+

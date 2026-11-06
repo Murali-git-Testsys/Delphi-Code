@@ -1,0 +1,345 @@
+// created 06.04 P.W
+// aim zoomed drawing of XCT Image (for RoiDialog)
+unit FramePaint;
+
+interface
+
+uses
+  GlbType, // 01.04.05 P.W for AsciiExpSep and FixSem
+  RectGlb,
+  GraphGlb,
+  Math,
+  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  Dialogs, ComCtrls, StdCtrls, ExtCtrls;
+
+type
+  TScrollEvent = procedure(Sender: TObject; var dx, dy: Double) of object;
+
+  TfrmPaint = class(TFrame)
+    sbHori: TScrollBar;
+    sbVert: TScrollBar;
+    updZoom: TUpDown;
+    imgPaint: TImage;
+    pnlImgPaint: TPanel;
+    constructor Create(AOwner: TComponent); override;
+    procedure FrameResize(Sender: TObject);
+    procedure sbHoriChange(Sender: TObject);
+    procedure sbVertChange(Sender: TObject);
+    procedure imgPaintScrolled(Sender: TObject; var dx, dy: Double);
+  private
+    sbHoriChange_Active : Boolean;// = False;
+    sbVertChange_Active : Boolean;// = False;
+    PixPerWorldX,
+    PixPerWorldY  : Double;
+    sbHoriLastPos : Integer;
+    sbVertLastPos : Integer;
+    FScaleFactor: Double;
+    FOnScrolling: TScrollEvent;
+    FWantSquared: Boolean;
+    FRDrawn: TRect;   // Drawn Part of World
+    FRWorld: TRect;   // World Limits
+    FRDispl: TRect;   // Used Display
+    FRObjec: TRect;   // Rectangle surrounding the object
+                      // use to limit zoom Scroll to parts
+                      // containing information
+    procedure SetOnScrolling(const Value: TScrollEvent);
+    procedure SetWantSquared(const Value: Boolean);
+    procedure ScrollImage(var x, y, dx, dy: Double);
+    procedure ScaleScrollbars;
+    procedure SetRDrawn(const Value: TRect);
+    procedure SetRWorld(const Value: TRect);
+    procedure SetRDispl(const Value: TRect);
+    procedure SetRObjec(const Value: TRect);
+  public
+    procedure PositionControls;
+    procedure InitScrollbars;
+    property OnScrolling: TScrollEvent  read FOnScrolling write SetOnScrolling;
+    property WantSquared: Boolean read FWantSquared write SetWantSquared default False;
+    property RWorld : TRect read FRWorld write SetRWorld;
+    property RDrawn : TRect read FRDrawn write SetRDrawn;
+    property RDispl : TRect read FRDispl write SetRDispl;
+    property RObjec : TRect read FRObjec write SetRObjec;
+    procedure UpdateScalings;
+  end;
+
+
+implementation
+
+//uses RoiDialog;
+
+
+{$R *.dfm}
+
+constructor TfrmPaint.Create(AOwner: TComponent);
+begin
+  inherited;
+  sbHoriChange_Active := False;
+  sbVertChange_Active := False;
+  FScaleFactor := 2.0;
+  PixPerWorldX := 1.0;
+  PixPerWorldY := 1.0;
+  WantSquared  := False;
+  OnScrolling  := imgPaintScrolled;
+  FRDrawn      := Rect(0,0, 10, 10);
+  FRWorld      := Rect(0,0, 10, 10);
+  FRDispl      := Rect(0,0, 10, 10);
+  FRObjec      := Rect(0,0, 10, 10);
+end;
+
+procedure TfrmPaint.InitScrollbars;
+begin
+  // Sliders to middle position
+  sbHoriLastPos   := -1;
+  sbHori.Position := sbHori.Max div 2;
+  sbVertLastPos   := -1;
+  sbVert.Position := sbVert.Max div 2;
+end;
+
+procedure TfrmPaint.ScaleScrollbars;
+  procedure SetSB(var SB: TScrollBar; Pos, Max, PgSiz: Double);
+  begin
+    SB.Min      := 0;
+    SB.PageSize := 0; // SB.Max may not be set to less but PageSize!
+    SB.Max      := Round(Max);
+    SB.PageSize := Round(Min(PgSiz, SB.Max));
+    SB.Position := Min(Round(Pos), SB.Max-SB.PageSize );
+    SB.SmallChange := SB.PageSize div 50;
+    SB.LargeChange := SB.PageSize div 5;
+  end;
+var
+//  SfX,
+//  SfY,
+//  RVP, // relativ visible part of world
+  PCW, // Pixel for complete World at current Zoom
+  PPW, // Pixel per Worldstep
+  Pos : Double;
+  sbHoriChange_Active_Sav : Boolean;
+  sbVertChange_Active_Sav : Boolean;
+begin
+  sbHoriChange_Active_Sav := sbHoriChange_Active;
+  sbVertChange_Active_Sav := sbVertChange_Active;
+
+  // avoid that Set of Scrollbars starts scrolling the
+  // image which again starts setting the scrollbars ...
+  sbHoriChange_Active := True;
+  sbVertChange_Active := True;
+
+  //--- Horzontal Scrollbar "X": ---
+//  SfX := RectWidth(RWorld) / RectWidth(RDrawn);
+//  RVP := SfX * (imgPaint.Width / pnlImgPaint.Width);
+  PCW := (1.0 * RectWidth(RWorld)) *
+           (RectWidth(RDispl) / RectWidth(RDrawn));
+  PPW := PCW / RectWidth(RWorld);
+  PixPerWorldX := PPW;
+  Pos := (RDrawn.Left * PPW) - imgPaint.Left ;
+  SetSB(SbHori,
+        Pos,                 // Pos    [Pixels]
+        PCW,                 // Max    [Pixels]
+        pnlImgPaint.Width);  // PgSiz  [Pixels]
+
+  //--- Vertical Scrollbar "Y": ---
+//  SfY := RectHeight(RWorld) / RectHeight(RDrawn);
+//  RVP := SfY * (imgPaint.Height / pnlImgPaint.Height);
+  PCW := (1.0 * RectHeight(RWorld)) *
+           (RectHeight(RDispl) / RectHeight(RDrawn));
+  PPW := PCW / RectHeight(RWorld);
+  PixPerWorldY := PPW;
+  Pos := (RDrawn.Top * PPW) - imgPaint.Top ;
+  SetSB(SbVert,
+        Pos,                 // Pos    [Pixels]
+        PCW,                 // Max    [Pixels]
+        pnlImgPaint.Height); // PgSiz  [Pixels]
+
+
+  sbHoriChange_Active := sbHoriChange_Active_Sav;
+  sbVertChange_Active := sbVertChange_Active_Sav;
+end;
+
+procedure TfrmPaint.PositionControls;
+// frmPaint contains:
+//  - pnlImgPaint
+//      - imgPaint
+//  - sbHori
+//  - sbVert
+//  - updZoom
+const
+  PanelFrame = 3;
+   // bevel is ignored by alClient of imgPaint.Width?
+   // coordinates ignore the bevel!
+var
+  sbDxy : Integer; // Height of sbHori, Width of sbVert
+  frmClH, frmClW : Integer; // Frame ClientArea Heigth & Width
+  // sbVert:       ^   // dy
+  //               |
+  //               v
+  // sbHori: [<-->]    // dx
+begin
+  if WantSquared then
+  begin
+//ShowMessageFmt('FramePaint.pas; PositionControls; W: %d; H:%d', [Width, Height]);
+    Width         := Height;  // for quadratic area
+  end;
+  sbDxy           := sbHori.Height; //sbHori.Height as master
+  sbVert.Width    := sbDxy;
+  updZoom.Width   := sbDxy;
+  updZoom.Height  := sbDxy;
+
+  frmClH          := ClientHeight;
+  frmClW          := ClientWidth;
+
+  sbHori.Top      := frmClH - sbDxy;
+  sbHori.Left     := 0;
+  sbHori.Width    := frmClW - sbDxy;
+
+  sbVert.Top      := 0;
+  sbVert.Left     := frmClW - sbDxy;
+  sbVert.Height   := frmClH - sbDxy;
+
+  updZoom.Top     := sbHori.Top;
+  updZoom.Left    := sbVert.Left;
+
+
+  pnlimgpaint.Align  := alCustom;
+  pnlimgPaint.Left   := PanelFrame;
+  pnlimgPaint.Top    := PanelFrame;
+  pnlimgPaint.Width  := frmClW - sbDxy  - 2*PanelFrame;
+  pnlimgPaint.Height := frmClH - sbDxy  - 2*PanelFrame;
+
+
+  imgPaint.Left := 0; // independent of bevel width
+  imgPaint.Top  := 0;
+
+  ScaleScrollBars;
+end;
+
+procedure TfrmPaint.FrameResize(Sender: TObject);
+begin
+  PositionControls;
+end;
+
+procedure TfrmPaint.SetOnScrolling(const Value: TScrollEvent);
+begin
+  FOnScrolling := Value;
+end;
+
+procedure TfrmPaint.imgPaintScrolled(Sender: TObject; var dx, dy: Double);
+begin
+  ShowMessageFmt('TfrmPaint.imgPaintScrolled dx: %d'+FixSem+' dy: %d',
+    [dx, dy]);
+end;
+
+procedure TfrmPaint.ScrollImage(var x, y, dx, dy: Double);
+// scroll imgPaint
+// in case of small visible area (= pnlImgPaint)
+// but avoid parts of visible area without imgPaint
+// dx: output in relative drawn world
+var
+  xflg, yflg : boolean;
+  xl, yt: Integer;
+begin
+  xflg := (dx <> 0);
+  yflg := (dy <> 0);
+  x  := x - ((RDrawn.Left-RWorld.Left) * PixPerWorldX);
+  y  := y - ((RDrawn.Top -RWorld.Top ) * PixPerWorldY);
+  // xl, yt = left and top position of imgPaint :
+  //  may be zero or negative, to move image paint
+  //  in the smaller Panel, limit:
+  xl := - Min(imgPaint.Width   - PnlImgPaint.Width,  Max(0, Round(x)));
+  yt := - Min(imgPaint.Height  - PnlImgPaint.Height, Max(0, Round(y)));
+  dx := x + xl; // remain scroll need repaint bitmap
+  dy := y + yt; // remain scroll need repaint bitmap
+  // convert dx dy from display pixel to
+  // relative part of drawn world
+  dx := (dx / PixPerWorldX); // WorldSteps
+  dx := dx / RectWidth(RDrawn);
+  dy := (dy / PixPerWorldY); // WorldSteps
+  dy := dy / RectHeight(RDrawn);
+
+  if xflg then
+    imgPaint.Left := xl;
+  if yflg then
+    imgPaint.Top  := yt;
+
+  if not xflg then dx := 0;
+  if not yflg then dy := 0;
+
+end;
+
+procedure TfrmPaint.sbHoriChange(Sender: TObject);
+var
+  x, y, dx, dy : Double;
+begin
+  if sbHoriChange_Active then EXIT;
+  sbHoriChange_Active := True;
+  if (sbHoriLastPos > -1) then
+  begin
+    x  := sbHori.Position;
+    y  := sbVert.Position;
+    dx := x - sbHoriLastPos;
+    dy := 0;
+    ScrollImage(x, y, dx, dy);
+    if assigned(FOnScrolling) then
+    begin
+      FOnScrolling(Sender, dx, dy);
+    end;
+  end;
+  sbHoriLastPos := sbHori.Position;
+  sbHoriChange_Active := False;
+end;
+
+procedure TfrmPaint.sbVertChange(Sender: TObject);
+var
+  x, y, dx, dy : Double;
+begin
+  if sbVertChange_Active then EXIT;
+  sbVertChange_Active := True;
+  if (sbVertLastPos > -1) then
+  begin
+    x  := sbHori.Position;
+    y  := sbVert.Position;
+    dx := 0;
+    dy := y - sbVertLastPos;
+    ScrollImage(x, y, dx, dy);
+    if assigned(FOnScrolling) then
+    begin
+      FOnScrolling(Sender, dx, dy);
+    end;
+  end;
+  sbVertLastPos := sbVert.Position;
+  sbVertChange_Active := False;
+end;
+
+procedure TfrmPaint.SetWantSquared(const Value: Boolean);
+begin
+  FWantSquared := Value;
+end;
+
+procedure TfrmPaint.SetRDrawn(const Value: TRect);
+begin
+  FRDrawn := Value;
+end;
+
+procedure TfrmPaint.SetRWorld(const Value: TRect);
+begin
+  FRWorld := Value;
+end;
+
+procedure TfrmPaint.SetRDispl(const Value: TRect);
+begin
+  FRDispl := Value;
+end;
+
+procedure TfrmPaint.SetRObjec(const Value: TRect);
+begin
+  FRObjec := Value;
+end;
+
+procedure TfrmPaint.UpdateScalings;
+// now use the information stored in
+// RDrawn, RWorld, RDispl, RObjec
+// to scale scrollbars ...
+begin
+  ScaleScrollbars;
+end;
+
+end.

@@ -1,0 +1,773 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+(*.++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Module Name/Vers.:GLBPATH
+Date/Author      :{08.02.96 Michael Welsch}
+Description      :global path definitions project XCT 5.2x, shared by all
+                  All Pathes must be backslash ended!
+
+Date/Modification:23.02.96 P.W: Const XctDirBat introduced
+Date/Modification:07.03.96 P.W: Const LocSvShowBat introduced
+Date/Modification:08.05.96 Michael Welsch
+     LocLogDir                      = 'LOG\';
+     LocOptFile                     = 'INIT\OTIONS.INI'; implemented
+{24.05.96 Michael Welsch}
+LocUserDir implemented
+{25.07.96 P.W}   : ImageTempNamePart... implemented
+{26.07.96 P.W}   : HardcopyToDiskName/0 implemented
+{27.11.96 P.W}   : Support XCTDEV comparable to XCTDIR
+     XCTDIR and XCTDEV must be defined always and end with a backslash!
+     Added: LocDevSnrFile, XCTDEV,
+{05.02.97 P.W}   : Modify XCTDEVPRE: '.\DEV\' --> 'DEV\'
+{11.04.97 P.W}   : new: AddGrpIndicator
+{11.06.97 MW}    : new: ACT_CLTFile= LocInterDir+'ACT_CLT.INI'
+{06.08.97 P.W}   : Init global
+{14.09.00 P.W}   : ErrMsgHalt:
+                    a) Unit A_XCTDIR defines AcceptInvalidXctDir (False)
+                    b) Unit 0_XCTDIR sets    AcceptInvalidXctDir to True
+                       if used as first used Unit of an program
+                       to allow an undefined value of
+                       environment variable XCTDIR
+{01.10.00 P.W}   : Halt -> ReadlnHalt
+{10.04.01 P.W}   : define LocAsciiExpDir & LocSpecResFile
+{23.10.01 P.W}   : def. LocTempDir & LocTempScrDir
+{21.01.02 P.W}   : def. LocTempScrSpikeDir
+{19.02.02 P.W}   : def. LocTempComXFilDir
+{04.06.02 P.W}   : added
+  PatNrPathBasis
+  Function PatNrPath
+  Function PatMeasNrPath
+{05.07.02 P.W}
+  GlbPatNr and GlbMeasNr defined (default to zero)
+  New Function GetFilScrOutPath
+    returns PatMeasNrPath(GlbPatNr, GlbMeasNr)
+    instead of LocTempScrDir when GlbPatNr and GlbMeasNr both > 0
+04.12.02 P.W added: XbJobIniName
+28.04.03 P.W added: XbJobTxtName
+18.07.03 P.W added: LocTempFltImgDir
+19.07.05 P.W added XbJobInpName
+28.07.06 P.W added Function PatNrFolderPossible; from GetFilScrOutPath;
+20.12.07 P.W for AppStratec ScreenNameMask supports CtNumber in Path
+14.10.08 P.W for WaitSec: WaitSecTxtName
+15.10.08 P.W PrinterColorCheckBoxName
+25.08.09 P.W: Handling of TestPathFlg and ServiceFlg from FemGlb to GlbDecs and GlbPath
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.*)
+Unit GlbPath;
+
+INTERFACE
+
+Uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  HaltUnit,
+  Param_StrUnit,
+  GlbType,           // 20.12.07 P.W
+  ComNames,
+  MsgBox,            // 17.06.05 P.W
+  SysUtils, Classes, StrUtils,
+  Windows,
+  A_XCTDir,
+  Dos,
+  GlbDecs,      {01.10.00 P.W}
+  StrTool;      {04.06.02 P.W}
+
+
+Const
+  ScreenExpMaskStr    = 'SC%s.jpg';      // %s needed for enumeration
+  ScreenExpMaskDir    = 'SC*.jpg';       // *  needed for search
+  XctDirBat           = '%' + XCTDIRVAR + '%';        {23.02.96 P.W}
+  XCTDEVVAR           = 'XCTDEV';                     {27.11.96 P.W}
+  XCTDEVPRE           = 'DEV\'; {".\DEV\" --> "DEV\":  05.02.97 P.W}
+  XctDevBat           = XCTDEVPRE + '%' + XCTDEVVAR + '%'; {27.11.96 P.W}
+  ErrScrDirPart       = 'ERRSCR';
+  {---------------------------------------------------------------}
+  { Dir must be backslash ended! }
+
+var
+  XCTDir              : PathStr  = '.\';
+  XCTDev              : PathStr  = XCTDEVPRE + 'XCT2000\'; {27.11.96 P.W}
+  XCTDevAbs           : PathStr  = XCTDEVPRE + 'XCT2000\'; //28.04.05 P.W
+  LocDevSnrFile       : PathStr  = XCTDEVPRE + 'XCT2000\'+'DEVICE.SNR';
+                                      {^-- DEVICE.SNR: 1/2!}  {27.11.96 P.W}
+const
+  GlbInitDir_0        = 'INIT\';                      {_0: 06.08.97 P.W}
+var
+  GlbInitDir          : PathStr  = GlbInitDir_0;
+const
+  GlbIniFile_0        = 'INIT\GLOBAL.INI';            {_0: 06.08.97 P.W}
+var
+  GlbIniFile          : PathStr  = GlbIniFile_0;
+const
+  GlbDevTypDir_0      = 'INIT\Typ\';                  {_0: 06.08.97 P.W}
+var
+  GlbDevTypDir        : PathStr  = GlbDevTypDir_0;
+const
+  GlbGraphDir_0       = 'GRAPH\';                     {_0: 06.08.97 P.W}
+var
+  GlbGraphDir         : PathStr  = GlbGraphDir_0;
+const
+  GlbResDir_0         = 'RES\';                       {_0: 06.08.97 P.W}
+  ResHelpSub          = 'Help\';                        // 08.04.08 P.W
+var
+  GlbResDir           : PathStr  = GlbResDir_0; {Res:Language Resources}
+  GlbHelpDir          : PathStr  = GlbResDir_0 + ResHelpSub;  // 08.04.08 P.W
+{  HardcopyToDiskName0            =  'Inter\HardCopy.Pic';  {26.07.96 P.W}
+{  HardcopyToDiskName  : PathStr  =  HardcopyToDiskName0;   {26.07.96 P.W}
+{    ^-- u.: 21.01.02 P.W}
+  {---}
+const
+  LocLogDir                      = 'LOG\';
+  LocUserDir                     = 'USER\';    {24.05.96 Michael Welsch}
+  LocAsciiExpDir                 = 'AsciiExp\';{10.04.01 P.W}
+  LocSpecResFile_Part            = LocAsciiExpDir+'RESULTS.TXT'; // 10.04.01 P.W;  // 02.04.08 P.W: _Part
+                                      // since 02.04.08 P.W UtKnApp2.pas inserts "UserId" before extension!
+
+  LocInitDir                     = 'INIT\';
+  LocInitTypDir                  = LocInitDir+'TYP\';    // 19.02.08 P.W
+  LocInitPlusDir                 = LocInitDir + 'PLUS\'; // for XCTPlus Devices contains info about collimations 06.11.07 P.W
+  LocMediaDir                    = 'Res\Media\';    // 22.06.07 P.W
+  DummyCtName                    = LocInitDir + 'CtForSv.M01'; // 19.07.05 P.W
+  SourceInfoName                 = 'BackupSourceInfo.ini';     // 11.11.08 P.W
+
+var
+  LocInitDirVar       : PathStr  = LocInitDir;                {06.08.97 P.W}
+const
+// moved from UTFilter.pas to GlbPath.pas for use by LoopEditIo.pas 06.03.08 P.W
+  UsrFiltDir       = LocInitDir;
+  UsrFiltNamePart  = 'USRFIL';
+  UsrFiltMaskPart  = '??';
+  UsrFiltExt       = '.TXT';
+  UsrFiltMask      = UsrFiltNamePart + UsrFiltMaskPart + UsrFiltExt;
+
+
+  // v--- replace FerErr2 ErrLogName and ErrLogNameOld
+  //  ErrLogNameOld value changed from Error.L01 to Error1.Log
+  LocErrName                     = LocLogDir  + 'ERROR.LOG';  //12.05.05 P.W
+  LocErrNameOld                  = LocLogDir  + 'ERROR1.LOG';  //12.05.05 P.W
+  LimitErrorLogSize              = 1200000;   // nearly 1.2MB replaces former limit of 120000 13.06.08 P.W
+  // ^---
+  LocCommProt                    = 'LOG\PROTV24.TXT';  // 12.05.05 from V24TUse.pas
+  LocEventsLogNameMask           = LocLogDir + 'EventsLog%.2d.txt';  // 17.12.08 P.W
+
+  LocOptFile                     = LocInitDir + 'OPTIONS.INI';
+  LocCodePageFile                = LocInitDir + 'CodePage.bat'; // 29.11.05 P.W
+  LocIniFile                     = LocInitDir + 'LOCAL.INI';
+  LocTempDir                     = 'TEMP\';                   {23.10.01 P.W}
+  LocTempScrDir                  = 'TEMP\SCREENS\';           {23.10.01 P.W}
+//  LocTempScrErrDir               = 'TEMP\SCREENS\Err\';       {21.01.02 P.W}
+  LocTempScrLoopDir              = 'TEMP\SCREENS\LOOP\';      {21.01.02 P.W}
+  LocTempComXFilDir              = 'TEMP\COMXFIL\';           {19.02.02 P.W}
+  LocTempFltImgDir               = 'TEMP\FLT\';               {18.07.03 P.W}
+
+  LocSvShowBat                   = LocInterDir + 'SVSHOW.BAT';{07.03.96 P.W}
+  ImageTempNamePart              = LocInterDir + 'I0';        {25.07.96 P.W}
+  ImageTempNameIndicator         = LocInterDir + 'TEMP.FLG';  {25.07.96 P.W}
+  AddGrpIndicator                = LocInterDir + 'ADD.FLG';   {11.04.97 P.W}
+  ACT_CLTFile                    = LocInterDir + 'ACT_CLT.INI';{11.06.97 MW}
+
+  XbJobIniName                   = LocInterDir + 'XBJOB.INI'; {04.12.02 P.W}
+                                   // RefPosMinMax ...
+
+  //XbAnaTxtName = LocInterDir + 'XBANA.TXT'
+                                   {for Analysis a part from Xbjob.TXT}
+
+  XbJobTxtName                   = LocInterDir + 'XBJOB.TXT'; {28.04.03 P.W}
+                                   {Job from database (Limits and VNames)}
+
+  XbJobInpName                   = LocInterDir + 'XBJOB.INP'; //19.07.05 P.W
+                                   {Modifications back to database}
+
+  ResultsInpName                 = LocInterDir + 'RESULTS.INP'; //19.07.05 P.W
+                                   // used by SvMen.pas to set CT invalid
+
+  WaitSecTxtName                 = LocInterDir + 'WaitSec.txt'; //14.10.08 P.W
+                                   // used by WaitSec and XctDirector TestPhantoms Start Batches
+
+  PrinterColorCheckBoxName       = LocMediaDir + 'PrinterColorCheckBox.bmp'; // 15.10.08 P.W
+var
+  PatNrPathBasis   : String   = 'C:\PAT\';                    {04.06.02 P.W}
+const
+  InfoExt                        = '.TXT';                    {04.06.02 P.W}
+var
+  GlbPatNr         : LongInt  = 0; {for use by Ctrl-F8} {05.07.02 P.W}
+  GlbMeasNr        : LongInt  = 0; {for use by Ctrl-F8} {05.07.02 P.W}
+  {---------------------------------------------------------------}
+
+Const
+  LangExtFileName  = 'LANGUAGE.TXT'; // to here from GlbFt at 08.04.05 P.W
+  GlbLangTxtDef    = '.ENG';              {.TXT -> .ENG: 03.02.97 P.W}
+var
+  GlbLangExt       : ExtStr      = GlbLangTxtDef; {Global Language Extension}
+  GlbMaskDir       : PathStr     = 'MASKS\ENG\';   {29.04.97 MW}
+
+
+
+Procedure Init(Const GetEnv_XCTDIRVAR, GetEnv_XCTDEVVAR: String); {Global: 06.08.97 P.W} {for WrtPar}
+Function PatNrPath(PatNr: LongInt): String;
+Function PatMeasNrPath(PatNr, MeasNr: LongInt): String;
+Function PatMeasSlcNrImageName(PatNr, MeasNr, SliceNr: LongInt): String;
+Function PatInfoPath(PatNr: LongInt): String;
+Function MeasInfoPath(PatNr, MeasNr: LongInt): String;
+Function PatNrFolderPossible: Boolean;
+Function GetFilScrOutPath: String;  {05.07.02 P.W}
+Function GetLoopExpPath: String;
+Function GetTableExpPath: String;
+
+Function OpenPictureInitDir_NB: String;
+Function SavePictureInitDir_NB: String;
+Function ErrLogFileName: String;
+
+Function GetLanguageExt: ExtStr; // to here from GlbFt at 08.04.05 P.W
+
+function DeviceThrName : String;   // 29.04.05 P.W
+function FemThrSpecName: String;   // 29.04.05 P.W
+function XctDirNoTest: String;     // 03.05.05 P.W
+function EE_ServiceName: String;   // 03.05.05 P.W
+function DevSnr_MasksName: String; // 03.05.05 P.W
+function RecionName: String;       // 03.05.05 P.W
+function ScreenNameMask: String;   // 04.05.05 P.W
+function ErrScreenNameMask: String;// 04.05.05 P.W
+function TempScreenNameMask: String;// 04.05.05 P.W
+function GetMaskNumberName(Mask:String; Number, MinLen: Integer): String;
+function GetFirstFreeMaskName(Mask:String;MinLen:Integer=6;CircularLimit:Integer=0): String;
+
+procedure GlbPathInit; // Code from initialization part as procedure for use by XctDirector: 02.12.05 P.W
+procedure InitServiceFlg;  // from FemGlb.pas to GlbPath.pas 25.08.09 P.W
+
+Implementation
+  const Unit_Name = 'GlbPath'; // 03.05.24 P.W
+
+Procedure Init(Const GetEnv_XCTDIRVAR, GetEnv_XCTDEVVAR: String);
+{06.08.97 P.W: enable several calls}
+  Procedure ErrMsgHalt(Msg: String);
+  begin
+    If not AcceptInvalidXctDir then                    {14.09.00 P.W}
+    begin
+//    ShowMessageFmt('Environment variable "%s" is invalid! (must be defined and needs a trailing backslash)', [Msg]);
+//    Use MessageBox1 to avoid use of Dialogs
+      MessageBox1(0,
+        PChar(AnsiString(
+        Format(
+          'Environment variable "%s" is invalid! (must be defined and needs a trailing backslash)',
+          [Msg]))),
+        nil, MB_OK or MB_ICONERROR+MB_TASKMODAL);
+
+      H_alt(1, 'GlbPath.pas Init');
+//      Writeln('Environment variable "', Msg, '" is invalid!');
+//      Writeln('a) must be defined and b) end with a backslash!');
+//      ReadlnHalt(1);   {Halt -> ReadlnHalt: 01.10.00 P.W}
+    end;
+  end;
+begin
+  XCTDir := GetEnv_XCTDIRVAR;      { must be backslash ended }
+  If (XCTDir[Length(XCTDIR)] <> '\') then ErrMsgHalt(XCTDIRVAR);
+
+  XCTDev := XCTDEVPRE + GetEnv_XCTDEVVAR;      { must be backslash ended }
+  if (XCTDev[Length(XCTDev)] <> '\') then ErrMsgHalt(XCTDEVVAR);
+  XCTDevAbs := XCTDir + XCTDev;
+  {------------------------------------------------------------------}
+  GlbInitDir    := XCTDIR + GlbInitDir_0;     {_0: 06.08.97 P.W}
+  GlbIniFile    := XCTDIR + GlbIniFile_0;     {_0: 06.08.97 P.W}
+  GlbDevTypDir  := XCTDIR + GlbDevTypDir_0;   {_0: 06.08.97 P.W}
+  GlbGraphDir   := XCTDIR + GlbGraphDir_0;    {_0: 06.08.97 P.W}
+  GlbResDir     := XCTDIR + GlbResDir_0;      {_0: 06.08.97 P.W}
+  GlbHelpDir    := GlbResDir + ResHelpSub;      // 08.04.08 P.W
+  {------------------------------------------------------------------}
+  LocDevSnrFile := XCTDevAbs + 'DEVICE.SNR';  {2/2!}
+end;
+
+Function OpenPictureInitDir_NB: String;
+begin
+//  Result := XCTDIR + LocUserDir + 'SCR';
+  Result := ExtractFileDir(ScreenNameMask);  // 20.12.07 P.W
+end;
+
+Function SavePictureInitDir_NB: String;
+begin
+  Result := OpenPictureInitDir_NB;
+end;
+
+Function ErrLogFileName: String;
+begin
+  Result := XCTDIR + LocLogDir + 'ErrLog';
+end;
+
+
+
+Function PatNrPath(PatNr: LongInt): String;
+(*
+Created: {04.06.02 P.W}
+Purpose: Return the path for Export of Patient data
+         Format: "<PatNrPathBasis>Pnnn\Pnnnnn\Pnnnnnnn\"
+           nnn     : highest three charactesr of PatNr (Leading Zeros, Decimal)
+           nnnnn   : highest fife  charactesr of PatNr (Leading Zeros, Decimal)
+           nnnnnnn :         seven charactesr of PatNr (Leading Zeros, Decimal)
+Globals: PatNrPathBasis
+Modifications:
+04.04.05 P.W: Format simplified; example: C:\PAT\P0022229\
+*)
+begin
+{
+  PatNrPath :=
+    PatNrPathBasis + 'P' + LeadZeros(PatNr div 10000, 3) +
+     '\'           + 'P' + LeadZeros(PatNr div   100, 5) + '' +
+     '\'           + 'P' + LeadZeros(PatNr          , 7) + '\';
+}
+  Result :=  // s. 04.04.05 P.W
+    IncludeTrailingPathDelimiter(
+      IncludeTrailingPathDelimiter(
+        PatNrPathBasis) +
+          'P' + LeadZeros(PatNr, 7));
+end;
+
+Function PatMeasNrPath(PatNr, MeasNr: LongInt): String;
+(*
+Created: {04.06.02 P.W}
+Purpose: Return the path for Export of Patient Measurement data
+         Format: "<PatNrPath(PatNr)>Cmmmmmmm\"
+           mmmmmmm MeasNr (Leading Zeros, Decimal)
+Example: C:\PAT\P0022229\C0026515\
+Modifications:
+*)
+begin
+  Result :=
+    IncludeTrailingPathDelimiter(
+       PatNrPath(PatNr) +
+          'C' + LeadZeros(MeasNr, 7));
+end;
+
+Function PatMeasSlcNrImageName(PatNr, MeasNr, SliceNr: LongInt): String;
+(*
+Created: {04.06.02 P.W}
+Purpose: Return the Name for Export of Patient Measurement Images
+         complete path but without the extension
+         Only low five characters of the decimal MeasNr are in the fileName
+         Format: "<PatMeasNrPath(PatNr,MeasNr)>mmmmmsss"
+           mmmmm Last five characters of MeasNr (Leading Zeros, Decimal)
+           sss   decimal SliceNr
+Modifications:
+04.04.05 P.W: format with 7 digits for CtNr
+  example: C:\PAT\P0022229\C0026515_001
+*)
+begin
+{
+  PatMeasSlcNrImageName :=
+    PatMeasNrPath(PatNr, MeasNr) +
+     LeadZeros(MeasNr mod 100000, 5) +
+     LeadZeros(SliceNr, 3);
+}
+  Result :=  // s. 04.04.05 P.W
+    ExcludeTrailingPathDelimiter(
+      PatMeasNrPath(PatNr, MeasNr)) +
+        '_' + LeadZeros(SliceNr, 3);
+
+end;
+
+Function PatInfoPath(PatNr: LongInt): String;
+(*
+Created: {04.06.02 P.W}
+Purpose: Return the path of Patient Info
+         Format: "<PatNrPath(PatNr)>PATINFO.TXT"
+Modifications:
+*)
+begin
+{
+  PatInfoPath := PatNrPath(PatNr) + 'PATINFO' + InfoExt;
+}
+  Result :=  // s. 04.04.05 P.W
+    PatNrPath(PatNr) +
+        'PATINFO' + InfoExt;
+end;
+
+Function MeasInfoPath(PatNr, MeasNr: LongInt): String;
+(*
+Created: {04.06.02 P.W}
+Purpose: Return the path of Measurement Info
+         Format: "<PatMeasNrPath(PatNr, MeasNr)>MEASINFO.TXT"
+Modifications:
+*)
+begin
+{
+  MeasInfoPath := PatMeasNrPath(PatNr, MeasNr) + 'MEASINFO' + InfoExt;
+}
+  Result :=  // s. 04.04.05 P.W
+    ExcludeTrailingPathDelimiter(
+      PatMeasNrPath(PatNr, MeasNr)) +
+        'MEASINFO' + InfoExt;
+end;
+
+Function PatNrFolderPossible: Boolean;
+// 28.07.06 P.W from GetFilScrOutPath;
+begin
+  Result := (GlbPatNr > 0) and (GlbMeasNr > 0) and (PatNrPathBasis <> '');
+end;
+
+Function GetFilScrOutPath: String;  {05.07.02 P.W}
+// Modifications:
+// 28.07.06 P.W use PatNrFolderPossible;
+begin
+  If PatNrFolderPossible
+    then GetFilScrOutPath := PatMeasNrPath(GlbPatNr, GlbMeasNr)
+    else GetFilScrOutPath := LocTempScrDir;
+end;
+
+Function GetLoopExpPath: String;
+// called by Kn_Slc.pas
+begin
+{
+  GetLoopExpPath := GetFilScrOutPath+'LOOP\';
+}
+  Result :=  // s. 04.04.05 P.W
+    IncludeTrailingPathDelimiter(
+      ExcludeTrailingPathDelimiter(
+        GetFilScrOutPath) +
+          'LOOP');
+end;
+
+Function GetTableExpPath: String;
+// 28.07.06 P.W
+// called by UTKnApp1.pas
+begin
+  Result :=  // s. 04.04.05 P.W
+    IncludeTrailingPathDelimiter(
+      ExcludeTrailingPathDelimiter(
+        GetFilScrOutPath) +
+          'TABLE');
+end;
+
+
+(*.**************************************************************************)
+(** Function Name    : GetLanguageExt                                     **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 22.02.96                                           **)
+(** Description      : Read local Language setting in LangExtFileName     **)
+(** Description      : In case of error returns with GlbLangTxtDef        **)
+(** Description      : Valid entries in LangExtFileName are:              **)
+(** Description      :   TXT                                              **)
+(** Description      :   GER                                              **)
+(** Description      :   ENG                                              **)
+(** Description      :   ITA                                              **)
+(** Description      :   FRE                                              **)
+(** Description      :   SPA                                              **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : Assign, Reset, Readln, Close, IoResult             **)
+(** Input            : -                                                  **)
+(** Output           : RETURN (ExtStr): Language Ext                      **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(** {29.04.97 MW}    GlbMaskDir implemented                               **)
+(**************************************************************************.*)
+Function GetLanguageExt: ExtStr;
+Var
+  Res, ResH        : Smallint;
+  Txt              : ExtStr;
+  Inp              : Text;
+  P                : Byte;
+begin  {Func. GetLanguageExt}
+  Res:=0;
+  Txt:='';
+  {$I-}
+    assign(Inp, ExpandFileName(LangExtFileName)); // FExpand added (04.03.04 P.W)
+    reset(Inp);
+      ResH:=IoResult; if (Res=0) then Res:=ResH;
+
+    if (Res=0) then Readln(Inp, Txt);
+      ResH:=IoResult; if (Res=0) then Res:=ResH;
+    For P:=1 to Length(Txt) do Txt[P]:=Upcase(Txt[P]);
+    If (Txt = 'TXT') or
+       (Txt = 'GER') or
+       (Txt = 'ENG') or
+       (Txt = 'ITA') or
+       (Txt = 'FRE') or
+       (Txt = 'SPA') then Txt:='.'+Txt
+                     else Txt:=GlbLangTxtDef;
+    close(Inp);
+      ResH:=IoResult; if (Res=0) then Res:=ResH;
+    if (Res <> 0) then Txt := GlbLangTxtDef; // 29.06.04 P.W
+  {$I+}
+  GlbMaskDir:=XCtDir+'MASKS\'+copy(Txt,2,3)+'\'; {29.04.97 MW}
+
+  GetLanguageExt:=Txt;
+end;   {Func. GetLanguageExt}
+
+function DeviceThrName : String; // 29.04.05 P.W
+const
+  ThresholdName       = 'FWDT.CMD';  {17.06.97 P.W}// FemGlb -> GlbPath
+begin
+  Result := XCTDevAbs + ThresholdName;
+end;
+
+function FemThrSpecName: String; // 29.04.05 P.W
+begin
+//Result := XCTDir + 'FEMTHR.OUT';                     // until 00.00.06 P.W (... 6.00 B)
+//Result := LocLogDir + 'WarmCold_Thresholds_Sav.txt'; // since 00.00.06 until 20.12.07 P.W  (6.00 D .. E)
+  Result := LocLogDir + 'Detector_Spectrum.txt';       // since 20.12.07 P.W (6.00 F ...)
+end;
+
+
+function XctDirNoTest: String;
+var
+  P : Integer;
+begin
+  Result := XCTDir;
+  P := Pos('\TEST\', UpperCase(Result));
+  if (P > 0) then Delete(Result, P, 5);
+end;
+
+function EE_ServiceName: String;
+begin  // ever in customer path!
+  Result := XctDirNoTest+'SERVICE\EE_Service.exe';
+//  Result := XctDir+'SERVICE\EE_Service.exe';
+end;
+
+function DevSnr_MasksName: String;
+begin
+  Result := XctDir+'Serv\DevSnr_Masks.exe';
+end;
+
+function RecionName: String;
+begin
+  Result := XCTDir + 'MEAS\RECION.EXE';
+end;
+
+function ScreenNameMask: String;
+// modifications:
+// 20.12.07 P.W: for AppStratec ScreenNameMask supports CtNumber in Path
+// Result when used by GetFirstFreeMaskName
+// Analysis:
+//   Format : "<XctDir>USER\SCR\I<(CtNr div 5):05>xx\I<CtNr:07>_SC<(next free number):06>.jpg"
+//   Example: D:\XCT\USER\SCR\I00400xx\I0040003_SC000001.jpg
+// others:
+//   Format : "<XctDir>USER\SCR\SC<(next free number):06>.jpg"
+//   Example: "D:\XCT\USER\SCR\SC000001.jpg"
+// 10.12.08 P.W: handle SvComparison like Analysis
+  function UseCtNumber: String;
+  begin
+//  Result :=  Format('I%0.5dxx\I%0.7d_', [CtNumberGlb div 100, CtNumberGlb]);  // u.: 25.07.08 P.W
+    Result :=  Format('I%0.5d\I%0.7d\I%0.7d_', [CtNumberGlb div 100, CtNumberGlb, CtNumberGlb]);  // s.: 25.07.08 P.W
+  end;
+var
+  S : String;
+begin
+  Case AppStratec of
+    AS_SvComp,                     // 10.12.08 P.W
+    AS_Analyse: S:= UseCtNumber;   // 20.12.07 P.W
+    else        S:= '';
+  end;
+  Result := XctDir + 'USER\SCR\'+S+ScreenExpMaskStr;
+end;
+
+function ErrScreenNameMask: String;// 04.05.05 P.W
+begin
+  Result := XctDir + ErrScrDirPart + '\'+ScreenExpMaskStr;
+end;
+
+function TempScreenNameMask: String;// 04.05.05 P.W
+begin
+  Result := XctDir + 'Temp\'+ScreenExpMaskStr;
+end;
+
+function GetMaskNumberName(Mask:String; Number, MinLen: Integer): String;
+// mask like 'C:\Temp\GR%s.BMP'
+begin
+  Mask := AnsiReplaceText(Mask, '%d', '%s');
+  Result := LeadZeros(Number, MinLen);
+  Result := Format(Mask, [Result]);
+end;
+
+function GetFirstFreeMaskName(Mask:String;MinLen:Integer=6;CircularLimit:Integer=0): String;
+  // allowed 1..CircularLimt when CircularLimt > 0 ; else unlimited;
+  function GetMaskName(Number: Integer): String;
+  begin
+    Result := GetMaskNumberName(Mask, Number, MinLen);
+  end;
+
+  function GetFirstFreeMaskNumber: Integer;
+  var
+    OldestNr    : Integer;
+    OldestDate  : TDateTime;
+    function FileNrExists(FileNr: Integer): Boolean;
+    var
+      Age: Integer;
+      Date : TDateTime;
+    begin
+      Age := FileAge(GetMaskName(FileNr));
+      Result := Age <> -1;
+      if Result then
+      begin
+        Date := FileDateToDateTime(Age);
+        if (OldestNr = 0) or (Date < OldestDate) then
+        begin
+          OldestNr   := FileNr;
+          OldestDate := Date;
+        end;
+      end;
+    end;
+  begin
+    Result := 1;
+    if (CircularLimit > 0) then     // if: 15.04.08 P.W
+    begin    // 15.04.08 P.W
+      OldestNr := 0;
+      While FileNrExists(Result) do
+      begin
+        Inc(Result);
+        If (Result > CircularLimit) then
+        begin
+          Result := OldestNr;
+          Exit;
+        end;
+      end;
+    end else
+    begin  // until 15.04.08 only this part:
+      While FileExists(GetMaskName(Result)) do Inc(Result);
+    end;
+  end;
+
+begin
+  Result := GetMaskName(GetFirstFreeMaskNumber);
+end;
+
+function GetXctDevFromCurDir: String; // 02.05.05 P.W
+begin
+  Result := IncludeTrailingPathDelimiter(ExpandFileName('.'));
+end;
+
+function GetXctDevFromSelSetBat: String; // 02.05.05 P.W
+const
+  SelSetName = 'SelSet.bat';
+var
+  SL : TStringList;
+  P : Integer;
+begin
+  Result := '';
+  if FileExists(SelSetName) then
+  begin
+    SL := TStringList.Create;
+    SL.LoadFromFile(SelSetName);
+    if SL.Count > 0 then
+    begin
+      P := Pos('=', SL[0]);
+      If P > 0 then
+      Result := Copy(SL[0], P+1, 255);
+    end;
+    FreeAndNil(SL);
+  end;
+end;
+
+function CallSetEnvironmentVariable(const VarName, VarValue: AnsiString): Boolean;
+begin
+  Result := SetEnvironmentVariable(PChar(VarName), PChar(VarValue));
+end;
+
+procedure XctDirectorSetEnv;  // 02.05.05 P.W
+var
+  VDir, VDev : String;
+begin
+  VDir := GetXctDevFromCurDir;
+  VDev := GetXctDevFromSelSetBat;
+  CallSetEnvironmentVariable(XCTDIRVAR, VDir);
+  CallSetEnvironmentVariable(XCTDEVVAR, VDev);
+//  ShowMessageFmt('XctDir: "%s"'+sLineBreak+'XctDev: "%s"',
+//    [GetEnvironmentVariable(XCTDIRVAR), GetEnvironmentVariable(XCTDEVVAR)]);
+end;
+
+procedure GlbPathInit;
+// Code from initialization part as procedure: 02.12.05 P.W
+begin
+  //ShowMessage(Param_Str(0));
+  if (Pos('XCTDIRECTOR.EXE', Uppercase(Param_Str(0))) > 0) then
+  begin
+    XctDirectorSetEnv;
+  end else
+  if (GetEnvironmentVariable(XCTDIRVAR) = '') and
+     IsDevelopePath then
+  begin // for start from development environment
+    SetEnvironmentVariable(XCTDIRVAR, DevelopeXctDir);
+    SetEnvironmentVariable(XCTDEVVAR, DevelopeXctDev);
+  end;
+
+  Init(GetEnvironmentVariable(XCTDIRVAR),
+       GetEnvironmentVariable(XCTDEVVAR));
+
+  GlbLangExt := GetLanguageExt;   // s.: 08.04.05 P.W
+end;
+
+procedure InitServiceFlg;
+// from FemGlb.pas to GlbPath.pas 25.08.09 P.W
+// Modifications:
+// 25.08.09 P.W: Use SetServiceFlg
+//  Replace UpcaseString by UpperCase
+  procedure SetTestPathFlg(Value: Boolean);
+  // 27.06.08 P.W; aim: ensure TurboToDelphi DisableRequestSound
+  // from FemGlb.pas to GlbPath.pas and only Local 25.08.09 P.W
+  begin
+    FTestPathFlg := Value;
+    DisableRequestSound := Value;
+  end;
+
+begin
+  SetServiceFlg(Pos('SERV', Param_Str(4))>0); {09.01.97 P.W}
+
+  // 09.07.08 P.W from XctDirFrm.pas procedure TfrmDirectorMain.FormCreate:
+  SetServiceFlg(ServiceFlg or
+             ( (UpperCase(Param_Str(1)) = 'DIAGNOSE') and (Param_Str(2) = '9999') )); // also in XctDirFrm.pas!
+
+{  ServiceFlg:=ServiceFlg or (Pos('SERV', UpcaseString(XCTDIR)) > 0); {31.01.97 P.W}
+  SetTestPathFlg ((Pos('\TEST\', UpperCase(XCTDIR)) > 0)); // use SetTestPathFlg 27.06.08 P.W
+                                 {^-- "TEST" -> "\TEST\": 21.05.01 P.W}
+                                 {^-- Use TestPathFlg   : 10.10.01 P.W}
+  SetServiceFlg(ServiceFlg or TestPathFlg); {11.06.97 MW}
+  {^-"(Pos('\TEST\', UpcaseString(XCTDIR)) > 0)"->"TestPathFlg":10.10.01 P.W}
+
+//ServiceFlgCopy := ServiceFlg;    // 09.07.08 P.W until 25.08.09 P.W
+end;
+
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  GlbDevTypDir     := GlbDevTypDir_0;
+  GlbGraphDir      := GlbGraphDir_0;
+  GlbHelpDir       := GlbResDir_0 + ResHelpSub;
+  GlbIniFile       := GlbIniFile_0;
+  GlbInitDir       := GlbInitDir_0;
+  GlbLangExt       := GlbLangTxtDef;
+  GlbMaskDir       := 'MASKS\ENG\';
+  GlbMeasNr        := 0;
+  GlbPatNr         := 0;
+  GlbResDir        := GlbResDir_0;
+  LocInitDirVar    := LocInitDir;
+  PatNrPathBasis   := 'C:\PAT\';
+  XCTDir           := '.\';
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Init  part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+  GlbPathInit;  // Code as procedure: 02.12.05 P.W
+  InitServiceFlg;  // from FemGlb.pas to GlbDecs.pas 25.08.09 P.W
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+  GlbPathInit;  // Code as procedure: 02.12.05 P.W
+  InitServiceFlg;  // from FemGlb.pas to GlbDecs.pas 25.08.09 P.W
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+
+end.
+

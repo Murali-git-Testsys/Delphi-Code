@@ -1,0 +1,690 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; changes: 11; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; changes: 3; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+(*.+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+(*+ ~ ~                                                    ) %15nV0.%22v) +*)
+(*+ Module Name/Vers.: @(#)FemGlb V.:1.00                               ) +*)
+(*+ Author           : P.Wueseke                                          +*)
+(*+ Date             : 04.03.94                                           +*)
+(*+ Description      : Glb def. COMMUNICATION  FEMUR... WITH PC           +*)
+(*+ ~ ~                                                       : %15d%30w: +*)
+(*+ Date/Modification: 16.05.94 P.W / Const: MaxIntvNumByte               +*)
+(*+ Date/Modification: 15.06.94 P.W / Definition of ScanHeadRecType       +*)
+(*+ Date/Modification:     "        / Definition of ScanNoGlb             +*)
+(*+ Date/Modification: 08.07.94 P.W / Errorcodes: Byte --> Smallint        +*)
+(*+ Date/Modification:     "        /   " : Offset: PC_errors:  512       +*)
+(*+ Date/Modification:     "        /   " : Offset: EP_errors: 1024       +*)
+(*+ Date/Modification:     "        / PcErrMsgArr --> PcErrMsg (funct.)   +*)
+(*+ Date/Modification: 27.07.94 P.W / Err_Eprom --> EpErr_...             +*)
+(*+ Date/Modification: 21.07.94 P.W / ScanHeadRecType: RecSize/NumIntv    +*)
+(*+ Date/Modification: 27.07.94 P.W /      "           AirValue           +*)
+(*+ Date/Modification: 27.07.94 P.W / DetOrderStrGlb                      +*)
+(*+ Date/Modification: 26.09.95 P.W /   " Default  corrected              +*)
+(*+ Date/Modification: 06.05.96 P.W / Added: ShowSvFlgGlb                 +*)
+(*+ Date/Modification: 08.11.96 P.W / Define Vars depending on Human/Int  +*)
+(*+ Date/Modification: 22.11.96 P.W / Add Movement limits                 +*)
+(*+ Date/Modification: 09.01.97 P.W / Support ServiceFlg (Param_Str(4))    +*)
+(*+ Date/Modification: 09.01.97 P.W / Support FirmwareVers                +*)
+(*+ Date/Modification: 17.01.97 P.W / Added IntvNumCharChk                +*)
+(*+ Date/Modification: 17.01.97 P.W / Added MaxRefPos_QA                  +*)
+(*+ Date/Modification: 30.01.97 P.W / INTER: I-Max = 1.0 mA               +*)
+(*+ Date/Modification: 31.01.97 P.W / ServiceFlg: True if XCTDIR cont.SERV+*)
+(*+ Date/Modification: 02.04.97 P.W / Define MessageGlb                   +*)
+(*+ Date/Modification: 03.04.97 P.W / MaxBaudRateLevel from 3 to 5        +*)
+(*+ Date/Modification: 10.04.97 P.W / New: WarnDeltaZmm = 2.0 ...         +*)
+(*+ Date/Modification: 02.06.97 P.W / New: MotPosParNotUsed               +*)
+(*+ Date/Modification: 04.06.97 P.W / New: Femur_GlbObjSide               +*)
+(*+ Date/Modification: 09.06.97 P.W / MaxParCtr: 9->10                    +*)
+(*+ Date/Modification: 11.06.97 M.W / path for service:SERV->TEST         +*)
+(*+ Date/Modification: 17.06.97 P.W / New: ThresholdName                  +*)
+(*+ Date/Modification: 17.06.97 P.W / From Scans: C_DevKey_...            +*)
+(*+ Date/Modification: 06.08.97 P.W / New: ChkMotParUse                   +*)
+(*+ Date/Modification: 15.04.99 P.W / New: IdleTimeBase                   +*)
+(*+ Date/Modification: 15.04.99 P.W / Global: VF_VersNo  (from FemurPc)   +*)
+(*+ Date/Modification: 26.04.99 P.W / Never used Buffertype deleted       +*)
+(*+ Date/Modification: 26.04.99 P.W / NumSlicesMax from 99 to 255 (Group) +*)
+(*+ Date/Modification: 14.06.99 P.W / EnableChkMeasBackProjection         +*)
+(*+ Date/Modification: 22.06.99 P.W / Sup.: EstScanTimeSec ...            +*)
+(*+ Date/Modification: 27.10.00 P.W / def.: BlockRepeatCtr and Max.       +*)
+(*+ Date/Modification: 27.10.00 P.W / def.: MinEpromVersOpti              +*)
+(*+ Date/Modification: 06.03.01 P.W / def.: GlbReadDataAgainCtr           +*)
+(*+ Date/Modification: 21.05.01 P.W / ServiceFlg checks "\TEST\" not only +*)
+(*+ Date/Modification: 21.05.01 P.W +                   "TEST" in XCTDIR  +*)
+(*+ Date/Modification: 25.09.01 P.W / GlbVersStr from "5.50 A" to "5.50 B"+*)
+(*
+{10.10.01 P.W}
+  TestPathFlg added
+{23.10.01 P.W}
+  GlbVersStr from "5.50 B" to "5.50 C"
+{19.06.02 P.W}
+  Some New dev key const added:
+  C_DevKey_Invalid =        -1;
+  C_MDevKey_Forw   =       $01;
+  C_MDevKey_Backw  =       $02;
+  GlbDevMoveMode reflects status of Device Move Keys
+  ProtV24Msg
+{08.07.02 P.W}
+  GlbVersStr from "5.50 C" to "5.50 D"
+{25.11.02 P.W}
+  BaudRateLevelArr moved from V24TUse.Pas to FemGlb.Pas
+11.07.05 P.W: SvNumLinesMax  from 99 to 1000;
+20.12.06 P.W  allow 1000 slices:  NumSlicesMaxGrp and NumSlicesMaxAll increased
+22.01.07 P.W 'Images are not for diagnostic purposes' to DisclaimerMsg2 from UtKnPane
+27.06.08 P.W: TestPathFlg as function, SetTestPathFlg as new procedure to support DisableRequestSound
+13.10.08 P.W: SwitchXRayOn_* const added
+27.06.08 P.W: Handle TurboToDelphi.pas DisableRequestSound in SetTestPathFlg
+25.08.09 P.W: Handling of TestPathFlg and ServiceFlg from FemGlb to GlbDecs and GlbPath
+(*+ Date/Modification  (end of list)                                      +*)
+(*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.*)
+
+
+Unit FemGlb;
+
+Interface
+
+Uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  SysUtils,      // 09.07.08 P.W
+  GlbDecs,       // 09.07.08 P.W
+//  TurboToDelphi, // since 27.06.08 P.W  until 25.08.09 P.W
+  XctVersion,    // 16.06.05 P.W
+  GlbPath,         {31.01.97 P.W}
+  GlbTools,        {31.01.97 P.W}
+  GlbType;         {17.06.97 P.W}
+
+{--------------------------------------------------------------------}
+Procedure NoMsg(Const Msg: String);  {19.06.02 P.W}
+function IaMaDigitised(const MA: Single): Single; // 20.04.06 P.W for use by DeadTimeCorr
+
+Type
+  TAxChar          = Char;  // 27.10.09 P.W
+
+Const
+ {GlbVersStr       = '5.50 A';  {19.09.00 P.W}
+ {GlbVersStr       = '5.50 B';  {25.09.01 P.W}
+ {GlbVersStr       = '5.50 C';  {23.10.01 P.W}
+ {GlbVersStr       = '5.50 D';  {08.07.02 P.W}
+//GlbVersStr       = '5.50 E';  {25.11.02 P.W}
+  GlbVersStr       = XctVersionMsg; //16.06.05 P.W
+//  ^--- duplicates: FemGlb.pas GlbVersStr, Kn_NGlb.pas Version & Do540Up.pas ParamVersion!
+  AxisNone         = #0;    // 27.10.09 P.W
+  AxisX            = 'X';
+  AxisY            = 'Y';
+  AxisZ            = 'Z';
+  AxisFirst        = AxisX;
+  AxisLast         = AxisZ;
+//  ThresholdName    =    'FWDT.CMD';  {17.06.97 P.W}// FemGlb -> GlbPath
+  TimeBasis_EST    =    21.333E-6;  {=21.333 µSec}              {28.05.97 P.W} //OemToAnsi Chg#260 (02.03.04 P.W)
+  TimeBasis_ESS    =    50.000E-3;  {=50.000 mSec}              {28.05.97 P.W}
+  FemGlbLimTol     =     0.001;
+  DigitsPerMA      =  4095 /   1.0;    {4095 Digits /   1.0 mA} {29.11.96 P.W}
+  DigitsPerMAmon   =  DigitsPerMA / 4.0;                        {04.12.96 P.W}
+  DigitsPerKV      =  4095 / 100.0;    {4095 Digits / 100.0 kV} {29.11.96 P.W}
+  DigitsPerKVmon   =  DigitsPerKV / 4.0;                        {04.12.96 P.W}
+  IdleTimeBase     =  10;              {10   Digits /   1.0 sec}{15.04.99 P.W}
+  MinEpromVers     =  1340;                                     {09.12.96 P.W}
+  MinEpromVersOpti =  1500;                                     {27.10.00 P.W}
+  XAxisCheckMinSec =  3600;                                   // 09.07.08 P.W
+var
+  WarnDeltaZmm     : Double  = 2.0;    {[mm]}                   {10.04.97 P.W}
+  SendResetProgEnd : Boolean = False;                           {10.04.97 P.W}
+
+  MeasModeFlg      : Boolean = False;{True: Backprojection from MeasModule}
+                                     {Used in CtFemNND}
+  // look out! MeasModeFlg in FemGlb.pas and SvCompGlb.pas!
+
+  EnableChkMeasBackProjection : Boolean = True;   {14.06.99 P.W}
+  CtFemErr         : Smallint =     0;   {0: no errror}
+                       {CtFemErr replaces CtFem GlbErrRes since  21.03.01 P.W}
+                       {for use by ScanIo if a error reading date occurs
+                        may be post an aborted measurement}
+  ProtV24Msg       : Procedure (Const Msg: String) = NoMsg; {19.06.02 P.W}
+  CommProtMarkCtr  : Integer = 0;  // 29.11.05 P.W
+
+Const
+  YPosMinDeg       =   0;  // 09.12.09 P.W
+  YPosMaxDeg       = 180;  // 09.12.09 P.W
+  YDeg_X_Vertical  =  90;  // 09.12.09 P.W
+  DevFDA           = 0;
+  MaxTimeOutStr    = '#WTO 78 78';  {Hv- & MotorTimeOut 120 sec}
+  MinRefPos        = -10.0;     {[mm]}
+  MaxRefPos        = 500.0;     {[mm]}                   // 350 -> 500: 08.05.09 P.W
+  MaxRefPos_QA     = 500.0;     {[mm]}   {17.01.97 P.W}  // 400 -> 500: 08.05.09 P.W
+  MaxImageMatrix   = 1024;
+  MaxBytesTimRef   =   4;  // 05.11.07 P.W
+  MaxBytesDetData  =   2;  // 05.11.07 P.W
+                           // four bytes may be requested but firmware
+                           // only padds two zero bytes
+
+  {Tolerance = 0.1  ;     {22.06.99 P.W until 19.03.01 P.W}
+  ZLimitTol        =   0.101;   {[mm]} {19.03.01 P.W}
+
+  SvZPosMin        =   0.0;     {[mm]} {22.11.96 P.W}
+  SvZPosMax        = 500.0;     {[mm]} {22.11.96 P.W}    // 400 -> 500: 08.05.09 P.W
+  SvStepWidthMin   = -20.0;     {[mm]} {22.11.96 P.W}
+  SvStepWidthMax   =  20.0;     {[mm]} {22.11.96 P.W}
+  SvNumLinesMin    =   2;              {22.11.96 P.W}
+//  SvNumLinesMax    =  99;              {22.11.96 P.W}
+  SvNumLinesMax    = 1000;  // 11.07.05 P.W
+{  SvStartPosMin    =   0.0;     {[mm]} {22.11.96 P.W u.:19.03.01 P.W}
+{  SvStartPosMax    = 400.0;     {[mm]} {22.11.96 P.W u.:19.03.01 P.W}
+
+  CtZPosMin_       =   0.0;     {[mm]} {22.11.96 P.W}
+  CtZPosMax_       = 500.0;     {[mm]} {22.11.96 P.W}    // 400 -> 500: 08.05.09 P.W
+  CtZPosMax_QA_    = 500.0;     {[mm]} {16.01.97 P.W}    // 400 -> 500: 08.05.09 P.W
+  CtVoxelSizeMin   =   0.0;     {[mm]} {22.11.96 P.W}
+  CtVoxelSizeMax   =   5.0;     {[mm]} {22.11.96 P.W}
+  NumBlocksMin     =   1;
+  NumBlocksMax     =  10;
+  NumSlicesMinGrp  =   1;
+//  NumSlicesMaxGrp  = 255;       {99 -> 255 : 21.05.99 P.W}
+//  NumSlicesMaxAll  = 255;       {27.05.99 P.W}
+  NumSlicesMaxGrp  = 1000;       {99 -> 255 : 21.05.99 P.W}// 255 -> 1000 : 20.12.06 P.W
+  NumSlicesMaxAll  = 1000;       {27.05.99 P.W}            // 255 -> 1000 : 20.12.06 P.W
+
+  TubeCurrentMaMin   =   0.000; {[mA]}
+  TubeCurrentMaMax   =   1.000; {[mA]}      {0.600 -> 1.000: 30.01.97 P.W}
+  IA_MIN_Dig         = $0000;
+ {IA_MAX_Dig         = Trunc(0.600*DigitsPerMA);}           {30.01.97 P.W}
+  IA_MAX_Dig         = Trunc(TubeCurrentMaMax*DigitsPerMA); {30.01.97 P.W}
+  TubePotentialKvMin =   0.0;   {[kV]}
+  TubePotentialKvMax =  65.0;   {[kV]}
+  HV_MIN_Dig         = $0000;
+  HV_MAX_Dig         = Trunc(65.0*DigitsPerKV);
+  (* until 15.04.99 P.W
+  HvSecLimitSV       =   0;     {[sec]}{02.12.96 P.W} {0-> no limit}
+  HvSecLimitCT       =   0;     {[sec]}{02.12.96 P.W} {0-> no limit}
+  *)
+  HvSecLimitSV       = 999999;  {[sec]}{only calculated limit}{15.04.99 P.W}
+  HvSecLimitCT       = 999999;  {[sec]}{only calculated limit}{15.04.99 P.W}
+
+  SwitchXRayOn_IA0mA         = 0.080; // mA                                          // 13.10.08 P.W
+  SwitchXRayOn_IaNomTimePart = 0.66;  // ratio of WaitSec to set IA to nominal value // 13.10.08 P.W
+
+
+{--------------------------------------------------------------------}
+
+Type
+  TStatusFlg       = LongInt;
+  TDevKey          = LongInt;
+  tDevMoveMode     = (C_DevMoveForw,  {19.06.02 P.W}
+                      C_DevMoveBack,
+                      C_DevMoveStop);
+
+var // const  
+  {------------------------------------------------------------------}
+  {from Scans : 17.06.97 P.W}
+  {     Keyboard:
+
+     ^ +Z                    [^^]                       [on/off]
+     |                      Forw (1)                   on/off (5)
+     |
+     |            [<<]                  [>>]
+     |           LEFT (3)              Right (4)
+     |
+     |                       [vv]                       [cont]
+     |                      Backw (2)                  continue (6)
+     +-------------------------------------------------------------> Y
+  }
+  GlbDevMoveMode   : tDevMoveMode = C_DevMoveStop;  {19.06.02 P.W}
+   {^-- reflect status of Device Move Key; set by FemErr GetEpErrCode}
+  {--------------------------}
+const
+  C_DevKey_None    =         0;
+  {v-------------------------------------------------------------------}
+  {Key Codes of "Immediate Move-Keys (move without support of PC,
+    these special device-keys interrupts all  running commands while pressed
+    each 65 ms)}
+  C_MDevKey_Forw   =       $01;  {19.06.02 P.W}
+  C_MDevKey_Backw  =       $02;  {19.06.02 P.W}
+  {^-------------------------------------------------------------------}
+  C_DevKey_Forw    = $08 + $01;     // DK_KeyUp   Scans0.pas
+  C_DevKey_Backw   = $08 + $02;     // DK_KeyDown Scans0.pas
+  C_DevKey_Left    = $08 + $03;
+  C_DevKey_Right   = $08 + $04;
+  C_DevKey_OnOff   = $08 + $05;
+  C_DevKey_Cont    = $08 + $06;
+  DevKey_First     = -1;
+  DevKey_Last      = 6;
+  C_DevKey_Invalid = DevKey_First;  {19.06.02 P.W}
+  C_DevKeyCodeMax  = $08 + $FF;     {19.06.02 P.W}
+  // extended support for DKBD_802_902_x see Scans0.pas
+  DevKeyMsg        : Array[DevKey_First .. DevKey_Last] of String08
+                   = ('-?-  ',
+                      'none ',
+                      'Forw ',
+                      'Backw',
+                      'Left ',
+                      'Right',
+                      'On   ',
+                      'Off  ');
+  {------------------------------------------------------------------}
+
+  MaxLongInt       = 2147483647;
+{  MaxBuffer        =       1023;}  {until: 26.04.99 P.W}
+  MaxParCtr        =         10; {9-> 10: 09.06.97 P.W}
+  MaxNumDet        =         32; { Counting: 1 .. 32 }
+  MaxNumUsedDet    =         12; {21.01.02 P.W}
+  MaxNumRef        =          4;
+var
+  FirmWareVers     : String[40] = '-?-';  {09.01.97 P.W}
+  FirmWareResearch : Boolean = False;     {26.04.99 P.W}
+  VF_VersNo        : LongInt = -1;        {here since 15.04.99 P.W}
+                                          {former: local in FemurPc}
+    { FirmwareVersion Numbers:
+      Processor "80 C 537":
+      since 1500 support
+                 - GlbDevSnr.IdleTimeOut
+                 - GlbDevSnr.SpeedLowPerc
+
+      Processor "C161PI":
+      since 2000 support    (new firmware using Processor "C161PI")
+                 - Baudrate Param "BRP"
+                   BRP     : Baudrate [Bit/Sec]
+                    4      :  57600
+                    5      : 115200
+                    6      : 230400
+                    7..255 : BaudRate := 230400 / (BRP-6)
+    }
+    { Possible Values: TimeRef, PosRef, IntvNo, CheckSum }
+
+const    
+  {for device version < 2000 only 960 Intervals are supported!}
+  MaxNumIntv_OldDev=         960;       {19.07.02 P.W}
+  MaxNumIntv       =        1024;
+var // const
+  ShowSvFlgGlb     : Boolean = False;   {06.05.96 P.W}
+  AbortActiveFlg   : Boolean = False;
+  OutNameGlb       : String  = 'NUL';
+  MessageGlb       : String  = '';      {02.04.97 P.W}
+
+  (* {until 26.09.95 P.W}  {09 and 19 missing!}
+  DetOrderStrGlb   : String  = '01020304050607080A0B0C0D0E0F10'+
+                               '11121314151617181A1B1C1D1E1F20';
+  *)
+const
+  DetOrderStrDef             = '0102030405060708090A0B0C0D0E0F10'+
+                               '1112131415161718191A1B1C1D1E1F20';
+var                               
+  DetOrderStrGlb   : String  = DetOrderStrDef;
+
+ {^27.07.94 P.W serves to determine the order how to write the
+                received detector data to file and must be set
+                BEFORE "#WDF"!!!}
+  CountsMaxGlb     : LongInt = $7FFFFFFF;      {27.07.94 P.W}
+ { WaitMilliSecGlb  : LongInt = 8000;  {from 27.07.94 until 16.01.97 P.W}
+
+  CtNoGlb          : LongInt = 0; {MeasNo}        {26.04.99 P.W}
+  SliceNoGlb       : LongInt = 1; {SliceNo}       {26.04.99 P.W}
+  ScanNoGlb        : LongInt = 1; {TranslationNo} {15.06.94 P.W}
+                              {^-- 0 -> 1 :26.04.99 P.W}
+
+  BlockRepeatCtr   : LongInt = 0; {27.10.00 P.W} {Reseted each CheckPause}
+                                  {used to limit repetitons per block
+                                   if not a research device}
+  MaxBlockRepeatCtr: LongInt = 2; {27.10.00 P.W}
+  GlbReadDataAgainCtr : LongInt = 0; {06.03.01 P.W}
+  {------------------------------------------------------------------}
+  {22.06.99 P.W}
+  EstScanTimeSec   : LongInt = 0; {estimated time}
+  EstHvTimeSec     : LongInt = 0; {estimated time}
+  EstScanTimeMsg   : String40= '';{Message, like: SV, CT, SV+CT}
+  BlockRetryHvCtr  : LongInt = 0; {Help to limit RetryHv per Block}
+                                  {Reseted each time in "CheckPause"}
+  TotalRetryHvCtr  : LongInt = 0; {Ctr of all RetryHv}
+  {------------------------------------------------------------------}
+  // v--- 12.11.09 P.W
+  TotalRetryHvFailCtr        : LongInt = 0; {Ctr of all failing RetryHv}
+  TotalSliceCtr              : LongInt = 0;
+
+  TotalCheckEncoderCtrX      : LongInt = 0;
+
+  TotalPosReInitCtr          : LongInt = 0;
+  TotalPosRecoverCtrX        : LongInt = 0;
+  TotalPosRecoverCtrY        : LongInt = 0;
+  TotalPosRecoverCtrZ        : LongInt = 0;
+
+  TotalCheckEncoderFailCtrX  : LongInt = 0;
+
+  TotalPosReInitFailCtr      : LongInt = 0;
+  TotalPosRecoverFailCtrX    : LongInt = 0;
+  TotalPosRecoverFailCtrY    : LongInt = 0;
+  TotalPosRecoverFailCtrZ    : LongInt = 0;
+
+  TotalLightbarFailCtrX      : LongInt = 0;
+  TotalLightbarFailCtrY      : LongInt = 0;
+  TotalLightbarFailCtrZ      : LongInt = 0;
+  // ^--- 12.11.09 P.W
+const
+  BaudRateLevelPowerOn_Def =    3;    {19.07.02 P.W}
+  MaxBaudRateLevelPowerOn  =    6;    {19.07.02 P.W}
+
+  MaxBaudRateLevel = 6;           {5 -> 6: 19.07.02 P.W}
+                                  {3 -> 5: 03.04.97 P.W}
+  {BaudRateLevel_Def= 3;    {3 = 38400 baud}
+     {^-- replaced by GlbDevSnr.BaudRateLevelPowerOn : 19.07.02 P.W}
+
+  CharBegPc0       = '*';
+  CharBegPc1       = '#';
+  CharBegEp        = '$';
+  CharEnd          = #13;         { Terminator }
+  EpErrMsgLen      =   6;         // format: "$E xx<CR>"
+  MotPosUnKnown    = $0FFFFFFF;
+  MotPosParNotUsed = MotPosUnKnown-128;{02.06.97 P.W} {-128: allow Single see
+                                                             a difference!}
+  InvalidPosPhys   = -99999;   // mm!  30.05.05 P.W
+  TstInvalidPosPhys= -99998;   // 
+
+  BaudRateLevelArr : Array[0..MaxBaudRateLevel] of LongInt    {03.04.97 P.W}
+                   = ( 4800, 9600, 19200, 38400, 57600, 115200, 230400);
+      {^-- here from V24TUse.Pas since 25.11.02 P.W}
+      {^-- Gets BaudRate from BaudRateLevel}
+  DisclaimerMsg1 =   'Image is not for diagnostic purposes';   // 22.01.07 P.W
+  DisclaimerMsg2 =   'Images are not for diagnostic purposes'; // 22.01.07 P.W
+Type
+  tMotParUse       = (C_MotParNorm,
+                      C_MotParUnknown,
+                      C_MotParNotUsed); {06.08.97 P.W}
+
+var
+  GlbHvOnMsgDy : Integer = 0; // usde to avoid Scans1.pas draws at same pos 25.01.05 P.W
+  Femur_GlbObjSide : Char = '?';       {04.06.97 P.W}
+Const
+
+  {--- Constants to ReadDataFormat "aa":-(AddSelector)-----}
+  DFA_TimeRef      = 1 shl 0; {Time_Reference Requested    }
+  DFA_PosRef       = 1 shl 1; {Position_Reference Requested}
+  DFA_IntvNo       = 1 shl 2; {Interval_Number Requested   }
+  DFA_ChkSum       = 1 shl 3; {CheckSumm Requested         }
+
+  {--- Constants to ReadDataFormat "ll":-(LenSelector)-----}
+  DFL_DataLen4     = 1 shl 0; {Length of Data    (2/4) Byte}
+  DFL_TimeRefLen4  = 1 shl 1; {Length of TimeRef (2/4) Byte}
+  DFL_PosRefLen4   = 1 shl 2; {Length of PosRef  (2/4) Byte}
+  DFL_HexFormat    = 1 shl 3; {Bin or Hex Format of Transm.}
+
+  (*
+        $0000 0000             Bits
+         ¦¦¦¦ ¦¦¦¦              $8 $4 $2 $1 //OemToAnsi Chg#259 (02.03.04 P.W)
+         1234 5678        Pos
+         ¦¦¦¦ ¦¦¦+-------  8    03 02 01 00 //OemToAnsi Chg#258 (02.03.04 P.W)
+         ¦¦¦¦ ¦¦+--------  7    07 06 05 04 //OemToAnsi Chg#257 (02.03.04 P.W)
+         ¦¦¦¦ ¦+---------  6    11 10 09 08 //OemToAnsi Chg#256 (02.03.04 P.W)
+         ¦¦¦¦ +----------  5    15 14 13 12 //OemToAnsi Chg#255 (02.03.04 P.W)
+         ¦¦¦¦ //OemToAnsi Chg#254 (02.03.04 P.W)
+         ¦¦¦+------------  4    19 18 17 16 //OemToAnsi Chg#253 (02.03.04 P.W)
+         ¦¦+-------------  3    23 22 21 20 //OemToAnsi Chg#252 (02.03.04 P.W)
+         ¦+--------------  2    27 26 25 24 //OemToAnsi Chg#251 (02.03.04 P.W)
+         +---------------  1    31 30 29 28 //OemToAnsi Chg#250 (02.03.04 P.W)
+
+
+     {28.09.95 P.W}
+      1234 5678
+     $0006 0000 : Outside YSoftRef
+     $0004 0000 : Inside  YSoftRef      Delta = $2  --> Bit 17
+
+
+  *)
+
+  {--- Constants to ReadStatusFlag: -----------------------}
+//RSF_Busy         = 1 shl  0; {Busy                       }
+//RSF_Error        = 1 shl  1; {Error occured              }
+//RSF_Watchdog     = 1 shl  2; {Watchdog did reset         }
+//RSF_FindOrigin   = 1 shl  3; {Origin is valid            }
+//RSF_Wait         = 1 shl  4; {Wait is active             }
+  RSF_DetOn        = 1 shl  5; {Detector voltage is on     } // enabled: 12.02.09 P.W
+  RSF_HvOn         = 1 shl  6; {High voltage is on         } // enabled: 12.02.09 P.W
+//RSF_MotX_a       = 1 shl  7; {                           }
+//RSF_MotX_b       = 1 shl  8; {                           }
+//RSF_MotY_a       = 1 shl  9; {                           }
+//RSF_MotY_b       = 1 shl 10; {                           }
+//RSF_MotZ_a       = 1 shl 11; {                           }
+//RSF_MotZ_b       = 1 shl 12; {                           }
+//RSF_IndX         = 1 shl 13; {Position Indicator X active}
+//RSF_IndY         = 1 shl 14; {Position Indicator Y active}
+//RSF_ZeroY        = 1 shl 15; {Zero               Y active}
+//RSF_IndZ         = 1 shl 16; {Position Indicator Z active}
+//RSF_PosCtrl0     = 1 shl 17; {Position Ctrl 0 active     }
+//RSF_PosCtrl1     = 1 shl 18; {Position Ctrl 1 active     }
+//RSF_PosCtrl2     = 1 shl 19; {Position Ctrl 2 active     }
+
+  RSF_ZetZeroX     = 1 shl 13; {setzero motor X executed   }
+  RSF_ZetZeroY     = 1 shl 14; {setzero motor Y executed   }
+  RSF_ZetZeroZ     = 1 shl 15; {setzero motor Z executed   }
+
+  RSF_RefX         = 1 shl 16; {Position Indicator X active} {?}
+  RSF_RefXInvFlg   = False;                                  {?}
+  RSF_RefY         = 1 shl 17; {Position Indicator Y active}
+  RSF_RefYInvFlg   = True;
+  RSF_RefZ         = 1 shl 18; {Position Indicator Z active} {?}
+  RSF_RefZInvFlg   = False;                                  {?}
+
+  RSF_IdxX         = 1 shl 19; // Index Pulse X active 02.06.05 P.W
+
+  {--- Constants to set options: --------------------------}
+  SO_WaitEmpty     = 1 shl 0; {CheckInterfaceBufferEmpty   }  // deprecated
+  SO_WaitEcho      = 1 shl 1; {WaitReceiveEcho             }
+  SO_UseReady      = 1 shl 2; {WaitReadyEcho               }  
+  SO_WaitReady     = 1 shl 3; {WaitReadyEcho               }
+  SO_CheckEsc      = 1 shl 4; {CheckUserAbort              }
+  SO_SendCmd       = 1 shl 5; {SendCommand                 }
+  SO_ChkErrMsg     = 1 shl 6; {Check Error Message         }
+  SO_ReadAnswer    = 1 shl 7; {SendCommand                 }
+  SO_Msg           = 1 shl 8; {Write Messages to Screen    }
+  MaxRefLineNo     =     5;     {07.09.95 P.W}
+    {^-- here from XbJob0.Pas since 04.12.02 P.W}
+Type
+  tParDesCript     = String[12];
+  CmdString        = String[80];
+  WLOHI            = Packed Record // "Record" to "Packed Record" Chg#247 (02.03.04 P.W)
+    WLO,
+    WHI            : Byte;
+  end;
+
+  SendModeType     = (SM_Send,
+                      SM_WaitEcho,
+                      SM_ChkWaitAnswer,
+                      SM_WaitAnswer,
+                      SM_ChkWaitReady,
+                      SM_WaitReady);
+  String80         = String[80];
+  OptType          = Word;
+{  BufferType       = Array[0..MaxBuffer] of Char;}  {until: 26.04.99 P.W}
+  MotPosArrType    = Array [AxisFirst..AxisLast] of LongInt;    {15.06.94 P.W}
+  MotDistMmType    = Array [AxisFirst..AxisLast] of Double;     {26.04.99 P.W}
+
+{  BufRecType       = Record}                        {until: 26.04.99 P.W}
+{    BufWrtPtr      : Word;}
+{    Buffer         : BufferType;}
+{  end;}
+
+  DataFormatRecType = Packed Record // "Record" to "Packed Record" Chg#248 (02.03.04 P.W)
+    DetSelector,
+    AddSelector,
+    LenSelector     : LongInt;
+    NumUsedDet      : Word;
+    TimeRefUseFlg,
+    PosRefUseFlg,
+    IntNoUseFlg,
+    ChkSumUseFlg,
+    DataLongFlg,
+    TimeRefLongFlg,
+    PosRefLongFlg,
+    HexFlg         : Boolean;
+    NumBytesPerDet,
+    NumBytesTimRef,
+    NumBytesPosRef,
+    NumBytesIntvNo,
+    NumBytesChkSum,
+    NumCharPerByte,
+    IntvNumChar,
+    IntvNumCharChk : Word;  {17.01.97 P.W} {num Char checked by chksum}
+  end;
+
+  ScanHeadRecType  = Packed Record {15.06.94 P.W} // "Record" to "Packed Record" Chg#249 (02.03.04 P.W)
+    RecSize                  : LongInt; {21.07.94 P.W}
+    ScanNo                   : LongInt;
+    MotPosArr                : MotPosArrType;
+    WrtDataFormat_CMD        : CmdString;
+    ExcScan_CMD              : CmdString;
+    NumIntvS                 : Word;    {21.07.94 P.W}
+    EpromTime                : LongInt;
+    AirValueLeft,                                              {27.07.94 P.W}
+    AirValueRight            : Array[1..MaxNumDet] of LongInt; {27.07.94 P.W}
+  end;
+
+//Var
+//  ServiceFlg       : Boolean;              // 09.01.97 P.W as function since 25.08.09 P.W
+//  TestPathFlg      : Boolean;              // 10.10.01 P.W as function since 27.06.08 P.W
+//                        {Used to disable spike repetition only for
+//                         TestPath}
+function TestPathFlg : Boolean;  // var as function to ensure setting is only performed using SetTestPathFlg 27.06.08 P.W
+function ServiceFlg  : Boolean;  // var as function to ensure setting is only performed using SetTestPathFlg 25.08.09 P.W
+
+Function ChkMotParUse (S: Single): tMotParUse;
+// procedure InitServiceFlg;  // from FemGlb.pas to GlbPath.pas 25.08.09 P.W
+
+Implementation
+  const Unit_Name = 'FemGlb'; // 03.05.24 P.W
+
+function TestPathFlg : Boolean;
+// modifications:
+// 27.06.08 P.W: var changed to function to ensure setting is only performed using SetTestPathFlg
+// 25.08.09 P.W also in GlbDecs.pas!
+begin
+  Result := GlbDecs.TestPathFlg;
+end;
+
+function ServiceFlg  : Boolean;
+// modifications:
+// 27.06.08 P.W: var changed to function to ensure setting is only performed using SetTestPathFlg
+// 25.08.09 P.W also in GlbDecs.pas!
+begin
+  Result := GlbDecs.ServiceFlg;
+end;
+
+//procedure SetTestPathFlg(Value: Boolean);
+// 27.06.08 P.W; aim: ensure TurboToDelphi DisableRequestSound
+// from FemGlb.pas to GlbPath.pas 25.08.09 P.W
+//begin
+//  FTestPathFlg := Value;
+//  DisableRequestSound := Value;
+//end;
+
+Procedure NoMsg(Const Msg: String);  {19.06.02 P.W}
+begin  {only dummy as long as V24TUse does not connect
+        ProtV24Msg to WritelnProtV24}
+end;
+
+function IaMaDigitised(const MA: Single): Single;
+// 20.04.06 P.W for use by DeadTimeCorr
+// send value is not equal to wanted value!
+begin
+  Result := Round(MA*DigitsPerMA) / DigitsPerMA;
+end;
+
+
+(*.**************************************************************************)
+(** Function Name    : ChkMotParUse                                       **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 06.08.97                                           **)
+(** Description      : Check if S represents MotPosParNotUsed ..          **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : -                                                  **)
+(** Input            : S                                                  **)
+(** Output           : RETURN (tMotParUse): MPU                           **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function ChkMotParUse (S: Single): tMotParUse;
+{Successfully tested for LongInt and Single as Type of calling parameter}
+Var
+  MPU              : tMotParUse;
+begin  {Func. ChkMotParUse}
+  If Abs(S - MotPosParNotUsed) < Abs(0.01*MotPosParNotUsed) then
+  begin
+    If Abs(S - MotPosParNotUsed) < Abs(S - MotPosUnKnown)
+    then MPU := C_MotParNotUsed
+    else MPU := C_MotParUnKnown;
+  end else
+  begin
+         MPU := C_MotParNorm;
+  end;
+  ChkMotParUse:=MPU;
+end;   {Func. ChkMotParUse}
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  WarnDeltaZmm                := 2.0;
+  SendResetProgEnd            := False;
+  MeasModeFlg                 := False;
+  EnableChkMeasBackProjection := True;
+  CtFemErr                    :=     0;
+  ProtV24Msg                  := NoMsg;
+  CommProtMarkCtr             := 0;
+  GlbDevMoveMode              := C_DevMoveStop;
+  FirmWareVers                := '-?-';
+  FirmWareResearch            := False;
+  VF_VersNo                   := -1;
+  ShowSvFlgGlb                := False;
+  AbortActiveFlg              := False;
+  OutNameGlb                  := 'NUL';
+  MessageGlb                  := '';
+  DetOrderStrGlb              := DetOrderStrDef;
+  CountsMaxGlb                := $7FFFFFFF;
+  CtNoGlb                     := 0;
+  SliceNoGlb                  := 1;
+  ScanNoGlb                   := 1;
+  BlockRepeatCtr              := 0;
+  MaxBlockRepeatCtr           := 2;
+  GlbReadDataAgainCtr         := 0;
+  EstScanTimeSec              := 0;
+  EstHvTimeSec                := 0;
+  EstScanTimeMsg              := '';
+  BlockRetryHvCtr             := 0;
+  TotalRetryHvCtr             := 0;
+  TotalRetryHvFailCtr         := 0;
+  TotalSliceCtr               := 0;
+  TotalCheckEncoderCtrX       := 0;
+  TotalPosReInitCtr           := 0;
+  TotalPosRecoverCtrX         := 0;
+  TotalPosRecoverCtrY         := 0;
+  TotalPosRecoverCtrZ         := 0;
+  TotalCheckEncoderFailCtrX   := 0;
+  TotalPosReInitFailCtr       := 0;
+  TotalPosRecoverFailCtrX     := 0;
+  TotalPosRecoverFailCtrY     := 0;
+  TotalPosRecoverFailCtrZ     := 0;
+  TotalLightbarFailCtrX       := 0;
+  TotalLightbarFailCtrY       := 0;
+  TotalLightbarFailCtrZ       := 0;
+  GlbHvOnMsgDy                := 0;
+  Femur_GlbObjSide            := '?';
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Initialization part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init); // 03.05.24 P.W
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+//  InitServiceFlg;  // from FemGlb.pas to GlbPath.pas 25.08.09 P.W
+end.

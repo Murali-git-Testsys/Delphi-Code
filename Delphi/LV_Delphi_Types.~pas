@@ -1,0 +1,34 @@
+unit LV_Delphi_Types;
+
+interface
+
+const
+  MaxIRoiPoints_50 = 50;  // duplicates MaxIRoiPoints defined in UTGenRoi.pas !!!
+
+type
+  t_I32    = LongInt;     // = Integer;
+  t_I16    = SmallInt;
+  t_I08    = ShortInt;
+
+  t_Dbl    = Double;
+
+type
+  pMat_I16 = ^tMat_I16;
+  tMat_I16 = Array[1..1] of t_I16;
+
+  tPnt = packed record
+    X, Y : t_I16
+  end;
+
+  tPnts = Array[1 .. MaxIRoiPoints_50] of tPnt;
+
+  pRoi = ^tRoi;
+  tRoi = packed record
+    num  : t_I32;
+    Pnts : tPnts;
+  end;
+
+
+implementation
+
+end.

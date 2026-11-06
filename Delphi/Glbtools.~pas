@@ -1,0 +1,2757 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; changes: 15; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+(*.+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+GlbTOOLS: general stringtools
+
+Version : @(#) KN_TOOLS.PAS V:1.0
+Author  : M.Welsch
+Date    : 12.03.93
+Programmers: MW = Michael Welsch; P.W = Peter Wueseke;
+GENERAL HINTS and MODIFICATION LOG:
+{03.06.93 Michael Welsch}
+{20.07.93 Michael Welsch} see c_510_2
+{15.02.96 Michael Welsch uses TextCon deleted,
+{22.03.96 Michael Welsch: UTGenOb used,
+Function CheckValidMCMLine(EinStr:String):Boolean;
+implemented!
+{26.03.96 Michael Welsch} SoundOnOff implemented
+{16.04.96 Michael Welsch} new function:
+Function  DateGerWithoutCentury(Inp:String10):String08; {16.04.96 Michael Welsch}
+new in interface part:
+Function DateGerToInt(DGer:String10;CountryCode:Word):String10; {11.11.92 P.W}
+{28.05.96 Michael Welsch} implemented:
+Function GetArchivNum(Number:LongInt):String08;
+{29.05.96 Michael Welsch} implemented:
+Function  MyGetDate:String10;
+FUNCTION  GETSingle(INSTR : STRING) : Single ;
+{21.06.96 Michael Welsch}
+Function DateIntToGer(DInt:String10;CountryCode:Word):String10; {11.11.92 P.W}
+Function didn't work for MDY and YMD. This was corrected.
+{02.07.96 Michael Welsch}
+Function IndexRoll(RefInd,Increment,MinInd,MaxInd:Smallint):Smallint;
+The following error was corrected: if increment was greater than (MaxInd-MinInd+1)
+the result was not correct!
+{11.07.96 Michael Welsch}
+Function  MyCheckDate(day,Month,Year:LongInt); implemented
+when false,function ConvDate will give the date without the century
+e.g. 19.07.1996 -> 07/19/96
+{24.10.96 Michael Welsch}
+Function  GetOnOffStr(Flg:Boolean):String;
+{13.11.96 Michael Welsch}
+FUNCTION GETREALSTR(INZAL : Double ; VK,NK : BYTE) : STRING ;
+{15.11.96 Michael Welsch}
+counterpart to StringParser implemented:
+Function StringComposer(Var EinStr,NewPart:String;Delimiter:Char;Num:Byte):String;
+{28.11.96 Michael Welsch, BEEP delay time even when sound is off
+{11.12.96 MW}
+Functions :
+Function  DatStrToDays(DatStr:String):LongInt;
+Function  DaysToDatStr(Days:LongInt):String10;
+were modified to take account for all leapyears!
+New function: (works in past and futur, reference date = my birthdate!!)
+Function  GetDayOfWeek(Days:LongInt):Byte;
+Function GetBeginOfMonth(Days:LongInt):LongInt;
+Function GetBeginOfYear(Days:LongInt):LongInt;
+{13.12.96 MW}
+Function DaysToDatStr(Days:LongInt):String10; modified.
+{16.01.97 MW}
+Procedure  GetSysTimeHHPMM(Var TIME:String05);
+{24.01.97 MW}
+FUNCTION GETDouble(INSTR : STRING) : Double ;
+
+Procedure  GetCollectionFileList(Path,Maske:String;Var List:PStringCollection);
+{20.03.97 MW
+"Archive" substituted by "AnyFile and NOT Directory"
+(although it seems that Findfirst anyhow gives all files, disregarding
+wether the archive bit is set or not!)
+{22.04.97 P.W  "@WSTR[1]" -> Addr(WSTR[1])
+               (Reason: allow to compile with Typed @ oper. $T+)
+{29.04.97 MW} new procedure:
+Procedure  GetCollectionFileList_EX(Path,Maske,ExMask:String;Var List:PStringCollection);
+Usage example: GetCollectionFileList_EX('.\','*.*','*.BAK',List);
+Will give all files except BAKs !
+
+Function StringParser(EinStr,Delimiter:String;Num:Byte):String;
+{  {29.04.97 MW error detected:
+   changed
+     I:=Pos(Delimiter,HelpStr);
+     If I>1 Then
+     ...
+   to
+     I:=Pos(Delimiter,HelpStr);
+     If I>0 Then
+     ...
+}
+Function  GetFile_TopNumExt(Path,Name:String):PathStr;
+{07.05.97 MW
+Purpose: get the file with the highest extension. Uses a sorted list
+and ignores all extensions that are not numerical.
+}
+{17.06.97 P.W} DELSPCRIGHT: deletes like DELSPCLEFT also Tabs (#9)
+{11.07.97 MW}
+Function CheckValidMCMLine(EinStr:String):Boolean;
+{=9 changed to >=9 }
+{01.09.97 MW, new functions}
+Function  DoCopyFiles(Source,Target:String):Smallint;
+Procedure  GetCollectionPathList(BasePath:String;Var List:PStringCollection;AddBase:Boolean); {01.09.97 MW}
+{20.11.97 MW, new function:
+similar to GetUniqueFileName. It modifies the filename instead of the extension}
+Function  GetUniqueFileName_ChngName(Path:String;Name:String08;Ext:String04):PathStr;
+{03.12.97 MW}
+Function  GetUniqueFileName(Path:String;Name:String08):PathStr;
+{03.12.97 MW, error if non numerical characters are present}
+This creates a crash in QA scan analysis, when the LOG file should be
+renamed second time.
+{04.10.00 P.W}
+  DoFSplit supports two additional parameter values for Num :
+    C_DirNam = 4;    {Directory + Name (without extension)}
+    C_NamExt = 5;    {Name + Extension (without Directory)}
+  Introduced constants for call:
+    C_Dir    = 1;
+    C_Nam    = 2;
+    C_Ext    = 3;
+    C_DirNam = 4;    {Directory + Name (without extension)}
+    C_NamExt = 5;    {Name + Extension (without Directory)}
+    Num: Byte Replaced Mode: tSplit
+    tSplit   = (C_Dir, C_Nam, C_Ext, C_DirNam, C_NamExt);
+               old calls using
+                 "1" replace by C_Dir
+                 "2" replace by C_Nam
+                 "3" replace by C_Ext
+{20.10.00 P.W}
+  Added: Function NoEndBackSlashFunc(Path: String): String;
+{19.02.02 P.W}
+  GetConvDateTime added for use by LoopMsg
+{17.06.02 P.W}
+  added Function DateGerToYYYYMMDD(DGer:String10):String10;
+  for use by CreatePatInfo
+  DateGerToInt has been corrected for the case : Year(4) not at end
+{17.06.03 P.W}
+  added Max Min LeadZeros (LongInt)
+{27.06.03 P.W}
+  new Function Scale_1_2_5
+  Aim    : Returns next fitting value 1.0 2.0 5.0 10.0 ...
+         beeing smaller (absolute) than MMSMax
+           1.23 -> 1.0; -5.5 -> -5.0 0.0 -> 0.0; 9.9 -> 5.0; 10.1 -> 10.0;
+{09.07.03 P.W}
+  Procedure DelayTime corrected
+{17.09.03 P.W}
+  Procedure GetCollectionPathList test of attributes corrected
+  Function  DoCopyFiles           test of attributes corrected
+{22.09.03 P.W}
+  Avoid WTXT,WSTR in GetIntStr ..
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+
+Unit Glbtools;
+{$F+}
+{$O+}
+INTERFACE
+
+Uses
+   SysUtils, // before! Dos (FindNext...)
+   DosTimer,      {09.07.03 P.W}
+   Objects,
+   GlbDecs,
+   GlbFT,
+   IOTools,
+   CRT,
+   Dos;
+{$I TransCon}
+
+
+Type
+  {Constants for use in calls of DoFSplit 04.10.00 P.W}
+  tSplit   = (C_Dir,        {"1" replaced by C_Dir}
+              C_Nam,        {"2" replaced by C_Nam}
+              C_Ext,        {"3" replaced by C_Ext}
+              C_DirNam,     {Directory + Name (without extension)}
+              C_NamExt);    {Name + Extension (without Directory)}
+
+Const
+  SETUPID             : PATHSTR = 'NEWGLB.SET' ;
+  IncCentury          : Boolean = TRUE; {19.07.96 Michael Welsch}
+{  21.02.96 Michael Welsch --> GlbFT.pas
+Type
+   FTTYPE              = (FL,FR,FC,FM,MU) ;
+}
+Function  DateToLong(Date:String10):LongInt;
+Function  LongToDate(L:LongInt):String10;
+Function  DatStrToDays(DatStr:String):LongInt;
+Function  DaysToDatStr(Days:LongInt):String10;
+Function  GetDayOfWeek(Days:LongInt):Byte;    {0=sunday,6=saturday}
+Function  GetBeginOfMonth(Days:LongInt):LongInt; {11.12.96 MW}
+Function  GetBeginOfYear(Days:LongInt):LongInt;  {11.12.96 MW}
+Function  ConvDate(EuroDate:String10):String10;
+Function  CompleteDate(Inp:String10):String10; {{13.09.95 Michael Welsch dd.mm.YY -> dd.mm.yyyy}
+Function  DateGerWithoutCentury(Inp:String10):String08; {16.04.96 Michael Welsch}
+Function  PackedDateToString(DDD:LongInt):String10;
+Function  MyGetDate:String10;
+Function  UpCaseString(Tex:String):String;
+Function  DeleteChar(EinStr:String;SOC:TSOC):String;
+Function  MakeDoubleCharSingle(EinStr:String;Ch:Char):String;
+Function  ExchangeChar(EinStr:String;SOC:TSOC;NewChar:Char):String;
+Function  ExchangeString(EinStr,OldStr,NewStr:String):String;
+Function  FExcel(ValStr:String):String;
+Function  DeExcel(ValStr:String):String;
+Function  GetBoolStr(Flg:Boolean):String;
+Function  GetOnOffStr(Flg:Boolean):String; {24.10.96 Michael Welsch}
+Function GetBoolean(EinStr:String):Boolean;
+Function GetString(EinStr:String):String;
+Function DateGerToInt(DGer:String10;CountryCode:Word):String10; {11.11.92 P.W}
+Function DateGerToYYYYMMDD(DGer:String10):String10;{17.06.02 P.W}
+Function DateIntToGer(DInt:String10;CountryCode:Word):String10; {11.11.92 P.W}
+Function IntDate(DGer:String10):String10; {17.11.92 P.W}{13.09.95 Michael Welsch}
+Function GetAktDate:String10;
+Function AGE(Date1,Date2:String10):Smallint ;
+Procedure UpperCaseGerProc(Var Txt: String);
+Function UpperCaseGerFunc(Txt:String):String;
+Function F_C(Value:Real;LStr,LZahl,Dezi:Smallint):String;
+Function StringComposer(const EinStr,NewPart:String;Delimiter:Char;Num:Byte):String;
+Function StringParser(EinStr,Delimiter:String;Num:Byte):String;
+Function CountCharInStr(EinStr:String;CountChar:Char):Byte;
+Function IndexRoll(RefInd,Increment,MinInd,MaxInd:Smallint):Smallint;
+PROCEDURE DELAYTIME(WaitSec: Double) ;
+PROCEDURE BEEP(Freq:Word;WaitSec:Real) ;
+FUNCTION  GETSingle(INSTR : STRING) : Single ;
+FUNCTION  GETREAL(INSTR : STRING) : REAL ;
+FUNCTION  GETDouble(INSTR : STRING) : Double ;
+FUNCTION  GETLINT(INSTR : STRING) : LONGINT ;
+FUNCTION  GETINTSTR(INZAL : LONGINT ; STRLEN : BYTE) : STRING ;
+{13.11.96 Michael Welsch
+FUNCTION  GETREALSTR(INZAL : REAL ; VK,NK : BYTE) : STRING ;}
+FUNCTION GETREALSTR(INZAL : Double ; VK,NK : BYTE) : STRING ;
+PROCEDURE DELSPCRIGHT(VAR INSTR : STRING) ;
+PROCEDURE DELSPCLEFT (VAR INSTR : STRING) ;
+Function DelSpcLR(INSTR : STRING):String ; {28.10.94 Michael Welsch}
+{21.02.96 Michael Welsch --> GlbFT
+FUNCTION  FT (TXT     : STRING ; F : FTTYPE ; FL : BYTE) : STRING ;}
+PROCEDURE GETSETUP(VAR SETUPSTR,SETUPIND,SETUPVAL : STRING) ;
+Function Stuetzpunkte(Tex:String;Var XX,YY,SS:Real):Smallint;
+Function Stuetz_to_Str(XX,YY,SS:Real;XL,XD,YL,YD,SL,SD:Byte):String;
+Function DoFSplit(FName: String; Mode: tSplit): String;
+Function DoFSplitA(const FName:PathStrA; Mode:tSplit):String;
+Procedure  GetFileList(Path,Maske:String;Var ListTop:TBasicListPointer);
+Procedure  GetCollectionFileList(Path,Maske:String;Var List:PStringCollection);
+Procedure  GetCollectionFileList_EX(Path,Maske,ExMask:String;Var List:PStringCollection);
+Procedure  GetCollectionPathList(BasePath:String;Var List:PStringCollection;AddBase:Boolean); {01.09.97 MW}
+Function  GetFile_TopNumExt(Path,Name:String):PathStr;
+Function  Add_FirstLine_FName(Path:String;Var Line:String):Smallint;
+Function GetPointerOfTBasicListPointer(    ListTop:TBasicListPointer;
+                                        Var Actual :TBasicListPointer;
+                                                Num:Word):Smallint;
+Function  SearchFileList(Path,Maske : String;
+                               Attr : Word;
+                         DoWithProc : Pointer):LongInt;
+
+
+Function GetArchivBlockNumStr(LeadStr:String;
+                                  Num:LongInt;
+                            BlockCont:LongInt;
+                          BlockLength:Byte):String;
+Function GetNumberOf(Str:String):LongInt;
+Function  EnCodeDate(Date:String10):LongInt;
+Function  DeCodeDate(LIntDate:LongInt):String10;
+Procedure CutString(    EinStr:String;
+                     Delimiter:String;
+                        NumPos:Byte;
+                    Var VorStr:String;
+                   Var NachStr:String);
+Function DoMakeALLPaths(Path:String):Smallint;
+Function DoDeleteALLPaths(Path:String):Smallint;
+Function DoDeleteFiles(Target:String;DeleteDir:Boolean):Smallint;
+Function  DoCopyFiles(Source,Target:String):Smallint; {01.09.97 MW}
+Procedure  PatchHeader(TargetFile:String;Str:String;From:WORD;Len:WORD);
+Function SkipLeadingChar(EinStr:String;LS:Char;Var NumLS:Byte):String;
+Procedure CompletePath(Var Test:String);
+Function ChangeDriveInPath(OldPath:String;NewDrive:String):String;
+Function ReadStrRes(Var ResFile:String;ID:Smallint;Line:Word):String;
+Function UseFExpand(HStr:String):String;
+Procedure  GetSysTimeHHMM(Var TIME:String04);
+Procedure  GetSysTimeHHPMM(Var TIME:String05);
+Function GetConvDateTime: String; {19.02.02 P.W}
+Function  GenderCharToInt(Gender:Char):Smallint;
+Function  GenderIntToChar(GenderInt:Smallint):Char;
+Function  GetGenderString(Gender:Char):String10;
+function ValidFileName(FN : PathStr) : Boolean;
+Function  ChangeDirInString(CurDir,Command:PathStr;Var Erg:String):Smallint;
+Function NoEndBackSlashFunc(Path: String): String;  {20.10.00 P.W}
+Procedure  AppendBackSlash(Var Inp:String);
+Function  GetUniqueFileName(Path:String;Name:String08):PathStr;
+Function  GetUniqueFileName_ChngName(Path:String;Name:String08;Ext:String04):PathStr;
+Function CheckValidMCMLine(EinStr:String):Boolean;
+Function GetArchivNum(Number:LongInt):String08;
+Function  MyCheckDate(day,Month,Year:LongInt):Boolean;
+Function Max(A,B:LongInt): LongInt; {17.06.03 P.W}
+Function Min (A,B:LongInt): LongInt; {17.06.03 P.W}
+Function MaxD(A,B:Double ): Double;  {17.06.03 P.W}
+Function MinD(A,B:Double ): Double;  {17.06.03 P.W}
+Function LeadZeros(Nr: LongInt; MinLen: Byte): String; {17.06.03 P.W}
+Function Scale_1_2_5(MMSmax: Double): Double;          {27.06.03 P.W}
+Procedure ChangeInSteps(Var Extend: Double; Step: Smallint); {27.06.03 P.W}
+
+
+Implementation
+  const Unit_Name = 'Glbtools'; // 03.05.24 P.W
+
+(*  {22.09.03 P.W}
+VAR
+   WTXT                : TEXT ;   {private since: 22.09.03 P.W}
+   WSTR                : STRING ; {private since: 22.09.03 P.W}
+*)
+
+Const
+    DateDescKey : String04 = 'DMY';
+
+{----------------------------------------------------------------------------}
+
+Function  IsLeapyear(Year:Smallint):Boolean;
+begin
+   IsLeapyear:=( (Year Mod 4 = 0) And Not (Year Mod 100 = 0) )
+               Or
+               (Year Mod 400 = 0);
+end;
+
+{----------------------------------------------------------------------------}
+(*.*************************************************************************
+DatStrToDays: convert datestring 'DD.MM.YY' or 'DD.MM.YYYY' into sum of days
+              dividing character is not importent
+Input   : string, length 8 or 10
+OutPut  : sum of days,
+          if inputlength is not 8 or 10 or if month is not between
+          1 and 12 , day not between 1 and 31 it returns 0 !!
+Version : @(#) KN_TOOLS.PAS V:1.0
+Author  : M.Welsch
+Date    : 21.08.92
+Modified:
+Modification log:
+{11.12.96 MW Use IsLeapYear and take account all leapyears between}
+****************************************************************************)
+type
+  TMonthDays = Array[0..12] Of Smallint;
+function MonthDays: TMonthDays; // 22.03.05 P.W adapt to Delphi
+Const
+  CMonDays: TMonthDays   = (0,31,28,31,30,31,30,31,31,30,31,30,31);
+begin
+  Result := CMonDays;
+end;
+
+Function DatStrToDays(DatStr:String):LongInt;
+var
+  MonDays : TMonthDays; // = (0,31,28,31,30,31,30,31,31,30,31,30,31);
+Var
+  FullYear           : Boolean;
+  Help,Day,Year,Month: LongInt;
+  i                  : Smallint;
+  Result_             : LongInt;
+begin
+  MonDays := MonthDays;
+     DatStrToDays:=0;
+     Result_:=0;
+     case Length(DatStr) Of
+        8:FullYear:=False;
+       10:FullYear:=True;
+       else Exit;
+     end;
+
+     Day:=GetLint(Copy(DatStr,1,2));
+     If Not(Day In [1..31]) Then
+        Exit;
+
+     Month:=GetLint(Copy(DatStr,4,2));
+     If Not(Month In [1..12]) Then
+        Exit;
+
+     If FullYear Then
+        Year:=GetLint(Copy(DatStr,7,4))
+     else
+        Year:=GetLint(Copy(DatStr,7,2))+1900;
+     If IsLeapyear(Year) Then
+        MonDays[2]:=29
+     else
+        MonDays[2]:=28;
+
+     For i:=0 to (Month-1) Do
+        Result_:=Result_+MonDays[i];
+
+     {09.12.96 Michael Welsch}
+     Help:=0;
+     For I:=0 To Year-1 Do
+     begin
+       If IsLeapyear(I) Then
+         Inc(Help,366)
+       else
+         Inc(Help,365);
+     end;
+     Result_:=Result_+Day+Help;
+     {...}
+     DatStrToDays:=Result_;
+end;
+{----------------------------------------------------------------------------}
+Function DaysToDatStr(Days:LongInt):String10;
+{28.09.95 Michael Welsch}
+{11.12.96 MW Use IsLeapYear and take account all leapyears between}
+//Const
+//        MonDays:Array[0..12] Of Smallint = (0,31,28,31,30,31,30,31,
+//                                    31,30,31,30,31);
+var
+  MonDays : TMonthDays; // = (0,31,28,31,30,31,30,31,31,30,31,30,31);
+Var
+  Day,Month          : String02;
+  Year               : String04;
+  i                  : Byte;
+  Result_             : LongInt;
+begin
+  MonDays := MonthDays;
+     Day:='';
+     Month:='';
+     Year:='';
+     i:=0;
+
+     Result_:=0;
+     While Days>365 Do
+     begin
+       If IsLeapyear(Result_) Then
+         Dec(Days,366)
+       else
+         Dec(Days,365);
+       Inc(Result_);
+     end;
+     If Days=0 Then             { the date is the 31.12 of a leapyear }
+     begin
+       Dec(Result_);
+       Days:=366;
+     end;
+
+     If IsLeapyear(Result_) Then MonDays[2]:=29
+     else MonDays[2]:=28;
+
+
+     Year:=ExchangeChar(GetIntStr(Result_,4),[' '],'0');
+     If Days>0 Then i:=1;
+     While (i<=12) and (Days>MonDays[i]) Do {13.12.96 MW, check i}
+     begin
+        Days:=Days-MonDays[i];
+        Inc(i);
+     end;
+     If i<10 Then Month:='0'+GetIntStr(i,1)
+     else Month:=GetIntStr(i,2);
+     If Days<10 Then Day:='0'+GetIntStr(Days,1)
+     else Day:=GetIntStr(Days,2);
+     DaysToDatStr:=Day+'.'+Month+'.'+Year;
+end;
+
+{----------------------------------------------------------------------------}
+Function  GetDayOfWeek(Days:LongInt):Byte;
+{11.12.96 MW}
+Var
+  Diff,ADays                 :       LongInt;
+  DayOfWeek                  :       Word;
+  I                          :       LongInt;
+
+(*
+  Function PWDays(tt,mm,jjjj:Smallint):LongInt;
+  var d,z:Real;
+  begin
+    d:=tt;
+    if (mm>=3) then
+    begin
+      Z:=Trunc( (mm-3)*30.6 + 0.5 );
+      d:=d+z;
+    end else
+    begin
+      dec(jjjj);
+      z:=Trunc( (mm+9)*30.6 + 0.5 );
+      d:=d+z;
+    end;
+    z:=Trunc( jjjj*365.25 );
+    d:=d+z;
+
+    z:=Trunc(jjjj/100.0);
+    d:=d-z;
+
+    z:=Trunc(jjjj/400.0);
+    d:=d+z;
+
+    PWdays:=Round(d);
+  end;
+*)
+begin
+
+(* * )
+  GetDate(Year, Month, Day, DayOfWeek);
+  AStr:=MyGetDate;
+  ADays:=DatStrToDays(AStr);
+  Diff:=ADays-Days;
+(* this uses an algorithm ported from a basic progr.:* )
+  GetDate(Year, Month, Day, DayOfWeek);
+  DStr:=DaysToDatStr(Days);
+  ADays:=PWDays(Day,Month,Year);
+  Days:=PWDays(GetLInt(Copy(DStr,1,2)),
+               GetLInt(Copy(DStr,4,2)),
+               GetLInt(Copy(DStr,7,4)));
+
+  Diff:=ADays-Days;
+(* *)
+  ADays:=DatStrToDays('15.10.1964');
+  DayOfWeek:=4;
+  Diff:=ADays-Days;
+(* *)
+  I:=Diff div 7;
+  I:=Diff-I*7;
+  I:=IndexRoll(DayOfWeek,-I,0,6);
+  GetDayOfWeek:=I;
+end;
+{----------------------------------------------------------------------------}
+Function GetBeginOfMonth(Days:LongInt):LongInt;
+{11.12.96 MW}
+Var
+  AStr     :       String10;
+begin
+  AStr:=DaysToDatStr(Days);
+  AStr[1]:='0';
+  AStr[2]:='1';
+  GetBeginOfMonth:=DatStrToDays(AStr);
+end;
+{----------------------------------------------------------------------------}
+Function GetBeginOfYear(Days:LongInt):LongInt;
+{11.12.96 MW}
+Var
+  AStr     :       String10;
+begin
+  AStr:=DaysToDatStr(Days);
+  AStr[1]:='0';
+  AStr[2]:='1';
+  AStr[4]:='0';
+  AStr[5]:='1';
+  GetBeginOfYear:=DatStrToDays(AStr);
+end;
+{----------------------------------------------------------------------------}
+(*.*************************************************************************
+ConvDate:
+convert date in right national format. Inputstring must contain a date in the
+format '    TT.MM.YY   '. If the inputstring is of invalid format, the return
+value will be 8 characters of the inputstring ( spaces cut off).
+Input   : EuroDate:String, glb. STATUS
+OutPut  : string8
+Version : @(#) KN_Tools.pas V:1.0
+Author  : M.Welsch
+Date    : 22.09.92
+Modified:
+Modification log:
+(M.W. 25.11.92): use of procedures INtDat from P. Wueseke
+****************************************************************************)
+
+Function  ConvDate(EuroDate:String10):String10;
+begin
+    ConvDate :=IntDate(EuroDate);
+end;
+{----------------------------------------------------------------------------}
+Function PackedDateToString(DDD:LongInt):String10;
+var
+  DT    :       DateTime;
+  HStr  :       String;
+(*
+DateTime = record
+  Year,Month,Day,Hour,Min,Sec: Word;
+end;
+*)
+begin
+  UnpackTime(DDD,DT);
+  With DT Do
+  begin
+    HStr:=ExchangeChar(GetIntStr(Day,2),[' '],'0')+'.';
+    HStr:=HStr+ExchangeChar(GetIntStr(Month,2),[' '],'0')+'.';
+    HStr:=HStr+copy(ExchangeChar(GetIntStr(Year,4),[' '],'0'),3,2);
+  end;
+  PackedDateToString:=HStr;
+end;
+{----------------------------------------------------------------------------}
+Function  MyGetDate:String10;
+{
+  returns : DD.MM.YYYY
+}
+var
+  Year, Month, Day, DayOfWeek: Word;
+  Res                        : String10;
+begin
+  GetDate(Year, Month, Day, DayOfWeek);
+  Res:=ExchangeChar(GetIntStr(Day,2),[' '],'0')+'.'
+       +ExchangeChar(GetIntStr(Month,2),[' '],'0')+'.'
+       +ExchangeChar(GetIntStr(Year,4),[' '],'0');
+  MyGetDate:=Res;
+end;
+
+{----------------------------------------------------------------------------}
+Function  UpCaseString(Tex:String):String;
+Var
+   H    :       String;
+   i    :       Byte;
+begin
+   H:='';
+   For i:=1 To Length(Tex) Do H:=H+UpCase(Tex[i]);
+   UpCaseString:=H;
+end;
+{----------------------------------------------------------------------------}
+Function DeleteChar(EinStr:String;SOC:TSOC):String;
+Var
+   i            :       Byte;
+   _NewStr       :    String;
+begin
+   _NewStr:='';
+   For i:=1 To Length(EinStr) Do
+        If Not(EinStr[i] in SOC) Then _NewStr:=_NewStr+EinStr[i];
+   DeleteChar:=_NewStr;
+end;
+{----------------------------------------------------------------------------}
+Function MakeDoubleCharSingle(EinStr:String;Ch:Char):String;
+Var
+  OutStr        :       String;
+  I             :       Byte;
+  LastwasCh     :       Boolean;
+begin
+  OutStr:=EinStr;
+  LastwasCh:=False;
+
+  //For I:=1 To Length(OutStr) Do
+  I:= 1;
+  while I <= Length(OutStr) do
+  begin
+    If OutStr[I]<>Ch Then
+      LastwasCh:=False
+    else
+    begin
+      If LastwasCh Then
+      begin
+        delete(OutStr,I,1);
+        If I>Length(OutStr) Then break;
+        Dec(I);
+      end else
+        LastwasCh:=True;
+    end;
+    Inc(I);
+  end;
+  MakeDoubleCharSingle:=OutStr;
+end;
+
+{----------------------------------------------------------------------------}
+Function  ExchangeChar(EinStr:String;SOC:TSOC;NewChar:Char):String;
+Var
+   i    :       Byte;
+begin
+ For i:=1 To Length(EinStr) Do
+       If (EinStr[i] in SOC) Then EinStr[i]:=NewChar;
+ ExchangeChar:=EinStr;
+end;
+{----------------------------------------------------------------------------}
+Function  ExchangeString(EinStr,OldStr,NewStr:String):String;
+Var
+   P    :       Byte;
+begin
+ P:=Pos(OldStr,EinStr);
+ If P<>0 Then
+   EinStr:=copy(EinStr,1,P-1)+NewStr+copy(EinStr,P+Length(OldStr),Length(EinStr));
+ ExchangeString:=EinStr;
+end;
+{----------------------------------------------------------------------------}
+{----------------------------------------------------------------------------}
+Function  DeExcel(ValStr:String):String;
+begin
+ DeExcel:=ExchangeChar(ValStr,[','],'.');
+end;
+{---------------------------------------------------------------------------}
+
+{----------------------------------------------------------------------------}
+Function  FExcel(ValStr:String):String;
+begin
+ If CountryCodeGlb=49 Then                       {28.06.94 Michael Welsch}
+   FExcel:=ExchangeChar(ValStr,['.'],',')
+ else
+   FExcel:=ValStr;
+end;
+{---------------------------------------------------------------------------}
+Function  GetBoolStr(Flg:Boolean):String;
+begin
+   If Flg Then GetBoolStr:='TRUE'
+   else GetBoolStr:='FALSE';
+end;
+{---------------------------------------------------------------------------}
+Function  GetOnOffStr(Flg:Boolean):String;
+begin
+   If Flg Then GetOnOffStr:=FT('ON',FM,10)
+   else GetOnOffStr:=FT('OFF',FM,10);;
+end;
+{---------------------------------------------------------------------------}
+{---------------------------------------------------------------------------}
+Function GetBoolean(EinStr:String):Boolean;
+begin
+   EinStr:=UpCaseString(EinStr);
+   DelSpcLeft (EinStr);
+   DelSpcRight(EinStr);
+   GetBoolean:=EinStr='TRUE';
+end;
+{---------------------------------------------------------------------------}
+Function GetString(EinStr:String):String;
+begin
+   EinStr:=UpCaseString(EinStr);
+   DelSpcLeft (EinStr);
+   DelSpcRight(EinStr);
+   If EinStr[1]='"' Then Delete(EinStr,1,1);
+   If EinStr[Length(EinStr)]='"' Then Delete(EinStr,Length(EinStr),1);
+   GetString:=EinStr;
+end;
+{---------------------------------------------------------------------------}
+Function FirstUpCase(tex:String):Char;
+begin
+   If tex='' Then FirstUpCase:=#0
+   else FirstUpCase:=Upcase(Tex[1]);
+end;
+{----------------------------------------------------------------------}
+
+Function DateDescriptor(CountryCode:Word):String04;  {11.11.92 P.W}
+{ MDY-  bedeutet: Month, Day, Year, Trennzeichen "-"  }
+{       also    : MM-DD-YY                            }
+begin
+  Case CountryCode of
+    001:                         DateDescriptor:='MDY-';
+    002,036,038,042,046,048:     DateDescriptor:='YMD-';
+     {^-- 002 is used by DateGerToYYYYMMDD which expects YMD !}
+    031,045,061:                 DateDescriptor:='DMY-';
+    003,032,034,039,044,055,351: DateDescriptor:='DMY/';
+    033,041,047,049,358:         DateDescriptor:='DMY.';
+    932:                         DateDescriptor:='MDY/';        // 14.01.08 P.W
+    else                         DateDescriptor:='DMY-';
+  end;
+end;
+
+(* invalid for IncCentury = true and Y not at end {17.06.02 P.W}
+Function DateGerToInt(DGer:String10;CountryCode:Word):String10; {11.11.92 P.W}
+Var
+  Desc  : String04;
+  DInt  : String10;
+  P,i,j : Smallint;
+begin
+  Desc:=DateDescriptor(CountryCode);
+{   DInt[0]:=#10; }
+  DInt:=FT_( ' ',MU,10);
+  If Pos('Y',Desc)=1 Then
+  begin
+    DInt[5]:=Desc[4];
+    DInt[8]:=Desc[4];
+  end else
+  begin
+    DInt[3]:=Desc[4];
+    DInt[6]:=Desc[4];
+  end;
+
+  for i:=1 to 3 do
+  begin
+    P:=(Pos(DateDescKey[i],Desc)-1)*3+1;
+    j:=(i-1)*3+1;
+    If DateDescKey[i]='Y' Then
+    begin
+      If IncCentury Then
+      begin
+        DInt[p  ]:=DGer[j  ];
+        DInt[p+1]:=DGer[j+1];
+        DInt[p+2]:=DGer[j+2];
+        DInt[p+3]:=DGer[j+3];
+      end else
+      begin
+        DInt[p  ]:=DGer[j+2];
+        DInt[p+1]:=DGer[j+3];
+      end;
+    end else
+    begin
+      DInt[p  ]:=DGer[j  ];
+      DInt[p+1]:=DGer[j+1];
+    end;
+  end;
+  DateGerToInt:=DInt;
+end;
+*)
+Function DateGerToInt(DGer:String10;CountryCode:Word):String10;
+(*
+Modifications:
+{17.06.02 P.W}
+  completely new to avoid problems when year is not at end
+  Expected Input: DGer : "Dd.Mm.Yyyy" (Dd:day ; Mm: Month; Yyyy: Year)
+  Output: order defined by DateDescriptor(CountryCode)
+    Length of Year is 4 digits when IncCentury is true
+    Format of DateDescriptor: "ABCS" ABC may each be one out of "DMY"
+                                     S   is the wanted separator like "."
+
+*)
+Var
+  Desc  : String04;
+  DInt  : String10;
+
+  Function GerPart(DescPos: Smallint): String04;
+  begin
+    Case Desc[DescPos] of
+      'D':   GerPart := Copy(DGer, 1, 2); {"Dd"   = Day}
+      'M':   GerPart := Copy(DGer, 4, 2); {"Mm"   = Month}
+      'Y': If IncCentury
+           Then
+             GerPart := Copy(DGer, 7, 4)  {"Yyyy" = Year4}
+           Else
+             GerPart := Copy(DGer, 9, 2); {  "yy" = Year2}
+
+      Else   GerPart := '';               {""     = invalid}
+    end;
+  end;
+begin
+  Desc :=DateDescriptor(CountryCode);
+  {DInt :=FT_( ' ',MU,10);}
+
+  DInt := GerPart(1) +
+          Desc[4]    +  {Separator}
+          GerPart(2) +
+          Desc[4]    +  {Separator}
+          GerPart(3);
+
+  DInt := FT_(DInt, FL, 10);
+
+  DateGerToInt:=DInt;
+end;
+
+Function DateGerToYYYYMMDD(DGer:String10):String10;{17.06.02 P.W}
+begin
+  DateGerToYYYYMMDD := DateGerToInt(DGer, 002);{002: "YMD-"}
+end;
+
+
+Function DateIntToGer(DInt:String10;CountryCode:Word):String10; {11.11.92 P.W}
+{21.06.96 Michael Welsch: function was not correct for MDY and YMD!}
+Var
+  Desc : String04;
+  DGer : String10;
+  P,i,j : Smallint;
+begin
+  Desc:=DateDescriptor(CountryCode);
+  DGer[0]:=#10;
+  DGer[3]:='.';
+  DGer[6]:='.';
+  for i:=1 to 3 do
+  begin
+    If (Desc[1]='Y') Then
+    begin
+      Case i Of
+        1 : P:=9;  {D}
+        2 : P:=6;  {M}
+        3 : P:=1;  {Y}
+        else P:= 0;  // force def. 29.06.04 P.W
+      end;
+    end else
+      P:=(Pos(DateDescKey[i],Desc)-1)*3+1;
+    j:=(i-1)*3+1;
+    If DateDescKey[i]='Y' Then
+    begin
+      DGer[j  ]:=DInt[p  ];
+      DGer[j+1]:=DInt[p+1];
+      DGer[j+2]:=DInt[p+2];
+      DGer[j+3]:=DInt[p+3];
+    end else
+    begin
+      DGer[j  ]:=DInt[p  ];
+      DGer[j+1]:=DInt[p+1];
+    end;
+  end;
+  DateIntToGer:=DGer;
+end;
+{  21.06.96 Michael Welsch, wurde wohl nie benutzt?? Geht nicht!
+Function DateIntToGer(DInt:String10;CountryCode:Word):String10;
+Var
+  Desc : String04;
+  DGer : String10;
+  P,i,j : Smallint;
+begin
+  Desc:=DateDescriptor(CountryCode);
+  DGer[0]:=#10;
+  DGer[3]:='.';
+  DGer[6]:='.';
+  for i:=1 to 3 do
+  begin
+    P:=(Pos(DateDescKey[i],Desc)-1)*3+1;
+    j:=(i-1)*3+1;
+    If DateDescKey[i]='Y' Then
+    begin
+      DInt[p  ]:=DGer[j  ];
+      DInt[p+1]:=DGer[j+1];
+      DInt[p+2]:=DGer[j+2];
+      DInt[p+3]:=DGer[j+3];
+    end else
+    begin
+      DInt[p  ]:=DGer[j  ];
+      DInt[p+1]:=DGer[j+1];
+    end;
+(*
+    P:=(Pos(DateDescKey[i],Desc)-1)*3+1;
+    j:=(i-1)*3+1;
+    DGer[j  ]:=DInt[p  ];
+    DGer[j+1]:=DInt[p+1];
+*)
+  end;
+  DateIntToGer:=DGer;
+end;
+}
+Function DateFormatInt(CountryCode:Word):String10; {12.11.92 P.W}
+Var
+  D,M,Y       : Char;
+begin
+  D:=FirstUpCase(FT_( 'Tag',FM,20));
+  M:=FirstUpCase(FT_( 'Monat',FM,20));
+  Y:=FirstUpCase(FT_( 'Jahr',FM,20));
+  DateFormatInt:=DateGerToInt(D+D+'.'+M+M+'.'+Y+Y, CountryCode);
+end;
+
+Function LongDateFormatInt(CountryCode:Word):String20; {12.11.92 P.W}
+Var
+  DMY         : Array[1..3] of String05;
+  LDF         : String20;
+  Desc        : String04;
+  i           : Smallint;
+begin
+  FillChar(LDF, SizeOf(LDF), #0);
+  Desc:=DateDescriptor(CountryCode);
+  DMY[1]:=FT_( 'Tag',FM,20);
+  DMY[2]:=FT_( 'Monat',FM,20);
+  DMY[3]:=FT_( 'Jahr',FM,20);
+  for i:=1 to 3 do
+    LDF:=LDF+DMY[Pos(DateDescKey[i],Desc)]+Desc[4];
+  Dec(LDF[0]);
+  LongDateFormatInt:=LDF;
+end;
+
+
+Function IntDate(DGer:String10):String10; {17.11.92 P.W}{13.09.95 Michael Welsch}
+begin
+  IntDate:=DateGerToInt(DGer,CountryCodeGlb);
+end;
+
+{----------------------------------------------------------------------}
+Function DateGerWithoutCentury(Inp:String10):String08;
+{ this procedure assumes:
+  - german date format: DD.MM.YYYY
+}
+begin
+  Inp:=DelSpcLR(Inp);
+  If Length(Inp)=8 Then
+  begin
+    DateGerWithoutCentury:=Inp;
+    Exit;
+  end;
+  Inp:=copy(Inp,1,6)+copy(inp,9,2);
+  DateGerWithoutCentury:=Inp;
+end;
+{----------------------------------------------------------------------}
+Function CompleteDate(Inp:String10):String10;
+{ this procedure assumes:
+  - german date format: DD.MM.YY
+  - year of date is 19##
+}
+begin
+  Inp:=DelSpcLR(Inp);
+  If Length(Inp)=10 Then
+  begin
+    CompleteDate:=Inp;
+    Exit;
+  end;
+  Inp:=copy(Inp,1,6)+'19'+copy(inp,7,2);
+  CompleteDate:=Inp;
+end;
+{----------------------------------------------------------------------}
+Function GetAktDate:String10;
+Var
+   Year,Month,Day,DayOfWeek  :   Word;
+   AktDate                   :   String10;
+begin
+  GetDate(Year,Month,Day,DayOfWeek);
+  AktDate:=GetIntStr(Day,2)+'.'+GetIntStr(Month,2)+'.'+GetIntStr(Year,4);
+  GetAktDate:=ConvDate(AktDate);
+end;
+{---------------------------------------------------------------------------}
+(*.*************************************************************************
+AGE: calculating the age in years according to date of measurement
+Input   : Date1,Date2:String10
+OutPut  : returns years,
+Version : @(#) KN_Tools.PAS V:1.2
+Author  : M.Welsch
+Date    : 5/92
+Modified: 21.08.92
+Modification log:
+(M.W.21.08.92): function GETLINT instead of val(),
+                changed from procedure to function.
+(M.W.09.09.92): moved to KN_Calc.pas
+(M.W.15.01.93): moved to KN_Tools,
+dates as input parameters,
+{13.09.95 Michael Welsch} String08->String10
+****************************************************************************)
+Function AGE(Date1,Date2:String10):Smallint ;
+// Date1: Date of birth
+// Date2: Date of measurement
+// supports Date in this formats
+// year with century :
+//    dd-mm-yyyy
+// year without century:
+//    dd-mm-yy
+//    in case of yy assume patient is younger than 100 years
+// modifications:
+// 16.09.05 P.W above description added
+Var
+   GEB,DAT,Help       :       Smallint;
+
+BEGIN
+  {---Jahr---}
+  GEB:=GetLInt(Copy(Date1,7,4));
+  Dat:=GetLInt(COPY(Date2,7,4));
+  IF GEB > DAT THEN DAT := DAT+100 ;
+  Help := DAT-GEB ;
+  {---Monat---}
+  GEB:=GetLInt(COPY(Date1,4,2)) ;
+  DAT:=GetLInt(COPY(Date2,4,2)) ;
+  IF DAT < GEB THEN
+  BEGIN
+    Help:= Help-1 ;
+    AGE:=Help;
+    EXIT ;
+  END
+  ELSE
+  IF DAT = GEB THEN
+  BEGIN
+    {---Tag---}
+    GEB := GetLInt(COPY(Date1,1,2)) ;
+    DAT:=GetLInt(COPY(Date2,1,2)) ;
+    IF DAT < GEB THEN Help := Help-1 ;
+  END ;
+  AGE:=Help;
+END ;
+{----------------------------------------------------------------------------}
+{---------------------------------------------------------------------------}
+Procedure UpperCaseGerInlineProc(VAR txt:string);
+{ Inclusive Umlaute äöü } //OemToAnsi Chg#188 (02.03.04 P.W)
+Begin
+  (*
+  inline
+     ($c4/$be/txt/         {     LES DI, txt[BP]               }
+      $26/$8a/$0D/         {     MOV CL,ES:[DI]                }
+      $fe/$c1/             {     INC CL                        }
+      $fe/$c9/             { L1: DEC CL                        }
+      $74/$33/             {     JZ  L6                        }
+      $47/                 {     INC DI                        }
+      $26/$80/$3d/$61/     {     CMP ES:BYTE PTR[DI], 'a'      }
+      $72/$f5/             {     JB  L1                        }
+      $26/$80/$3D/$7a/     {     CMP ES:BYTE PTR[DI], 'z'      }
+      $77/$06/             {     JA  L2                        }
+      $26/$80/$2d/$20/     {     SUB ES:BYTE PTR[DI], 20H      }
+      $eb/$e9/             {     JMP SHORT L1                  }
+
+      $26/$80/$3D/$84/     { L2: CMP ES:BYTE PTR[DI], 'ä'      } //OemToAnsi Chg#187 (02.03.04 P.W)
+      $75/$04/             {     JNZ L3                        }
+      $26/$80/$05/$0A/     {     ADD ES:BYTE PTR[DI], 0AH      }
+
+      $26/$80/$3D/$94/     { L3: CMP ES:BYTE PTR[DI], 'ö'      } //OemToAnsi Chg#186 (02.03.04 P.W)
+      $75/$04/             {     JNZ L4                        }
+      $26/$80/$05/$05/     {     ADD ES:BYTE PTR[DI], 05H      }
+
+      $26/$80/$3D/$81/     { L4: CMP ES:BYTE PTR[DI], 'ü'      } //OemToAnsi Chg#185 (02.03.04 P.W)
+      $75/$04/             {     JNZ L5                        }
+      $26/$80/$05/$19/     {     ADD ES:BYTE PTR[DI], 19H      }
+
+      $EB/$C9);            { L5: JMP L1                        }
+
+                           { L6:                               }
+   *)
+   Txt := DelphiUpperCase(Txt);
+End;
+
+Procedure UpperCaseGerProc(Var Txt: String);
+(*
+Modifications:
+{23.07.03 P.W}
+  Change "Var Txt" to "Var Txt: String" for higher security
+*)
+begin
+  UpperCaseGerInlineProc(Txt);
+end;
+
+Function UpperCaseGerFunc(Txt:String):String;
+begin
+  UpperCaseGerProc(Txt);
+  UpperCaseGerFunc:=Txt;
+end;
+
+{---------------------------------------------------------------------------}
+Function F_C(Value:Real;LStr,LZahl,Dezi:Smallint):String;
+begin
+   F_C:=FT_(GetRealStr(Value,LZahl,Dezi),FR,LStr);
+end;
+{---------------------------------------------------------------------------}
+Function StringComposer(const EinStr,NewPart:String;Delimiter:Char;Num:Byte):String;
+{15.11.96 Michael Welsch, the counterpart to Stringparser!!}
+Var
+  Str,Str2   :       String;
+  I,Ctr :       Smallint;
+begin
+  Str:=EinStr;
+  Ctr:=CountCharInStr(Str,Delimiter);
+  Str2:=' '+Delimiter+' ';
+  If Num>Ctr Then
+  begin
+    For I:=1 To Num-Ctr Do
+      Str:=Str+Str2;
+  end;
+  Ctr:=CountCharInStr(Str,Delimiter);
+  Str2:=Str;
+  Str:='';
+  For I:=1 To Ctr Do
+  begin
+    If I<>Num Then
+      Str:=Str+StringParser(Str2,Delimiter,I)+Delimiter
+    else
+      Str:=Str+NewPart+Delimiter;
+  end;
+  StringComposer:=Str;
+end;
+
+{---------------------------------------------------------------------------}
+Function StringParser(EinStr,Delimiter:String;Num:Byte):String;
+{  {29.04.97 MW error detected:
+   changed
+     I:=Pos(Delimiter,HelpStr);
+     If I>1 Then
+     ...
+   to
+     I:=Pos(Delimiter,HelpStr);
+     If I>0 Then
+     ...
+  This caused an error when handling lines like this:
+  /////"Modus: Research XCT3000"/ 2/ 0/0/
+}
+Var
+  P,I,LD     :       Byte;
+  HelpStr       :    String;
+  OutStr        :    String;
+begin
+  P:=0;
+  LD:=Length(Delimiter);
+  HelpStr:=EinStr+Delimiter;
+  OutStr:='';
+  I:=Pos(Delimiter,HelpStr);
+  If I=1 Then HelpStr:=Copy(HelpStr,I+LD,Length(HelpStr));
+  While (P<Num) And (Length(HelpStr)>0) Do
+  begin
+     Inc(P);
+     I:=Pos(Delimiter,HelpStr);
+{     If I>1 Then {29.04.97 MW}
+     If I>0 Then  {29.04.97 MW}
+     begin
+       OutStr :=Copy(HelpStr,1,I-1);
+       HelpStr:=Copy(HelpStr,I+LD,Length(HelpStr));
+     end else
+     begin
+       HelpStr:='';
+       OutStr:='';
+     end;
+  end;
+  If P<>Num Then OutStr:='';
+  StringParser:=OutStr;
+end;
+{---------------------------------------------------------------------------}
+Function CountCharInStr(EinStr:String;CountChar:Char):Byte;
+Var
+  Ctr,I :       Byte;
+begin
+  Ctr:=0;
+  For I:=1 To Length(EinStr) Do
+    If EinStr[I]=CountChar Then Inc(Ctr);
+  CountCharInStr:=Ctr;
+end;
+{---------------------------------------------------------------------------}
+
+{---------------------------------------------------------------------------}
+Function IndexRoll(RefInd,Increment,MinInd,MaxInd:Smallint):Smallint;
+{
+ 02.07.96 Michael Welsch
+ Falls Abs(Increment) größer als der maximale Bereich war, war //OemToAnsi Chg#184 (02.03.04 P.W)
+ das Ergebnis manchmal nicht in [MinInd,MaxInd]!
+ z.B.:
+ IndexRoll(1,-4,1,3)->0; !! FEHLER!!
+ jetzt:
+ IndexRoll(1,-4,1,3)->3;
+}
+Var
+  H             :       Smallint;
+begin
+  H:=Increment div (MaxInd-MinInd+1);
+  If H<>0 Then
+    Increment:=Increment-H*(MaxInd-MinInd+1);
+  RefInd:=RefInd+Increment;
+  If RefInd>MaxInd Then RefInd:=MinInd+RefInd-(MaxInd+1)
+  else
+  If RefInd<MinInd Then RefInd:=(MaxInd+1)-(MinInd-RefInd);
+
+  { Notbremse falls RefInd bereits außerhalb des Bereiches ist: } //OemToAnsi Chg#183 (02.03.04 P.W)
+  If RefInd<MinInd Then RefInd:=MinInd
+  else
+  If RefInd>MaxInd Then RefInd:=MaxInd;
+  IndexRoll:=RefInd;
+end;
+(*
+Function IndexRoll(RefInd,Increment,MinInd,MaxInd:Smallint):Smallint;
+begin
+  RefInd:=RefInd+Increment;
+  If RefInd>MaxInd Then RefInd:=MinInd+RefInd-(MaxInd+1)
+  else
+  If RefInd<MinInd Then RefInd:=(MaxInd+1)-(MinInd-RefInd);
+  IndexRoll:=RefInd;
+end;
+*)
+{---------------------------------------------------------------------------}
+(*.*************************************************************************
+Beep: "beep"
+Variables:
+Input   : Freq Wait
+OutPut  :
+
+global Variables:
+  affected:
+predefined:
+
+Version : @(#) KN_Tools.Pas V:1.0
+Author  : P.Schneider
+Date    : ???
+Modified: 30.09.92
+Modification log:
+(M.W. 30.09.92): frequency and wait - time as input parameters;
+****************************************************************************)
+
+PROCEDURE BEEP(Freq:Word;WaitSec:Real) ;
+
+BEGIN
+  If SoundOnOff Then
+  begin
+    Sound(Freq) ;
+
+    DELAYTIME(WaitSec) ;  // included in if: 25.10.04 P.W.
+  end;
+  NOSOUND ;
+END ;
+{---------------------------------------------------------------------------}
+(*.*************************************************************************
+Delaytime: delay run
+Variables:
+Input   : wait
+OutPut  : --
+
+global Variables:
+  affected:--
+predefined:--
+
+Version : @(#) KN_TOOLS.PAS V:1.0
+Author  : P.Schneider
+Date    : ???
+Modified: 30.09.92
+Modification log:
+(M.W. 30.09.92): delaytime as input parameter;
+{09.07.03 P.W} : Attention: Wait may be shorter than wanted!
+                            20 seconds wanted. But when the PC clock
+                            reaches the next minute the wait is ready!!
+                            means if time is (HH:MM:SS) (look on Seconds)
+                                              09:45:58 than wait is ready
+                            when time reaches 09:46:00
+                            Also if Wait is more than 30 seconds the
+                            wait may be eternal:
+                            Wait = 35 will never stop if started
+                            at 09:46:30
+Corrction:
+  {09.07.03 P.W} Code replaced completely; Parameter Wait renamed to
+                 WaitSec
+****************************************************************************)
+
+PROCEDURE DELAYTIME(WaitSec: Double) ;
+(*
+Complete new code: {09.07.03 P.W}
+Modifications:
+{09.07.03 P.W}
+  Allow abort with "KeyPressed" if minimum 1 sec waited
+*)
+Var
+  Aborted, Ready   : Boolean;
+  RemainSec        : Double;
+  WaitedSec        : Double;
+  Timer            : tDosTimer;
+  DelayMSec        : Smallint;
+BEGIN {Proc. DELAYTIME}
+  Aborted     := False;
+  RemainSec   := WaitSec;
+  StartDosTimer  (Timer);
+
+  Repeat
+
+    DelayMSec := Round(MinD(100, MaxD(0,RemainSec*1000)));
+    Delay        (DelayMSec);
+    WaitedSec := ReadDosTimer(Timer);
+    RemainSec := WaitSec - WaitedSec;
+    Ready     := (RemainSec <= 0);
+
+    If (not Ready) and (WaitedSec >= 1.0)
+      then Aborted := KeyPressed;
+
+  until Ready or Aborted;
+END;  {Proc. DELAYTIME}
+(*  {until: 09.07.03 P.W}
+PROCEDURE DELAYTIME(Wait:Real) ;
+
+VAR
+  ST,MIN,SEC,HUSEC    : WORD ;
+  RSEC,SSEC,DEL       : REAL ;
+
+BEGIN
+  GETTIME(ST,MIN,SEC,HUSEC) ;
+  RSEC := SEC+(HUSEC+0.1)/100 ;
+  REPEAT
+    GETTIME(ST,MIN,SEC,HUSEC) ;
+    SSEC := SEC+(HUSEC+0.1)/100 ;
+    DEL := ABS(SSEC-RSEC) ;
+  UNTIL DEL > Wait ;
+END ;
+*)
+{---------------------------------------------------------------------------}
+FUNCTION GETSingle(INSTR : STRING) : Single ;
+{29.05.96 Michael Welsch}
+
+VAR
+  ZW                  : Single ;
+  CODE                : LongInt ;
+
+BEGIN
+  VAL(INSTR,ZW,CODE) ;
+  IF CODE = 0 THEN GETSingle := ZW
+  ELSE GETSingle := 0.0 ;
+END ;
+
+{---------------------------------------------------------------------------}
+FUNCTION GETREAL(INSTR : STRING) : REAL ;
+
+VAR
+  ZW                  : REAL ;
+  CODE                : LongInt ;
+
+BEGIN
+  VAL(INSTR,ZW,CODE) ;
+  IF CODE = 0 THEN GETREAL := ZW
+  ELSE GETREAL := 0.0 ;
+END ;
+{---------------------------------------------------------------------------}
+FUNCTION GETDouble(INSTR : STRING) : Double ;
+{24.01.97 MW}
+VAR
+  ZW                  : Double ;
+  CODE                : LongInt ;
+
+BEGIN
+  VAL(INSTR,ZW,CODE) ;
+  IF CODE = 0 THEN GETDouble := ZW
+  ELSE GETDouble := 0.0 ;
+END ;
+
+{---------------------------------------------------------------------------}
+FUNCTION GETLINT(INSTR : STRING) : LONGINT ;
+
+VAR
+  ZW                  : LONGINT ;
+  CODE                : LongInt ;
+
+BEGIN
+  VAL(INSTR,ZW,CODE) ;
+  IF CODE = 0 THEN GETLINT := ZW
+  ELSE GETLINT := 0 ;
+END ;
+
+{---------------------------------------------------------------------------}
+FUNCTION GETINTSTR(INZAL : LONGINT ; STRLEN : BYTE) : STRING ;
+Var
+  Txt : String;
+BEGIN
+  {
+  WRITE(WTXT,INZAL : STRLEN) ;
+  GETINTSTR := WSTR ;
+  }
+
+  Str(INZAL: STRLEN, Txt);        {22.09.03 P.W}
+  GETINTSTR := Txt;
+END ;
+
+{---------------------------------------------------------------------------}
+{13.11.96 Michael Welsch
+FUNCTION GETREALSTR(INZAL : REAL ; VK,NK : BYTE) : STRING ;
+}
+FUNCTION GETREALSTR(INZAL : Double ; VK,NK : BYTE) : STRING ;
+Var
+  Txt : String;
+BEGIN
+  {
+  WRITE(WTXT,INZAL : VK : NK) ;
+  GETREALSTR := WSTR ;
+  }
+  Str(INZAL : VK : NK, Txt);      {22.09.03 P.W}
+  GETREALSTR := Txt;
+END ;
+{---------------------------------------------------------------------------}
+
+PROCEDURE DELSPCRIGHT(VAR INSTR : STRING) ;
+{Mod. 17.06.97 P.W : Delete also Tabs (#9) }
+// 22.03.05 P.W adapt to Delphi
+var
+  P : Integer;
+BEGIN
+
+//  WHILE (INSTR[LENGTH(INSTR)] = ' ') or
+//        (INSTR[LENGTH(INSTR)] = #9)   {or: 17.06.97 P.W}
+//    DO DEC(INSTR[0]) ;
+  P := Length(INSTR);
+  While (P > 0) and (INSTR[P] in [' ', #9]) do Dec(P);
+  SetLength(INSTR, P);
+END ;
+{---------------------------------------------------------------------------}
+
+PROCEDURE DELSPCLEFT (VAR INSTR : STRING) ;
+BEGIN
+  WHILE (LENGTH(INSTR) > 0) AND ((INSTR[1] = ' ') OR (INSTR[1] = #9)) DO DELETE(INSTR,1,1) ;
+END ;
+{---------------------------------------------------------------------------}
+{---------------------------------------------------------------------------}
+Function DelSpcLR(INSTR : STRING):String ;
+begin
+  DELSPCLEFT (INSTR) ;
+  DELSPCRight(INSTR) ;
+  DelSpcLR:=InStr;
+end;
+{---------------------------------------------------------------------------}
+
+PROCEDURE ADJUSTSTR(VAR INTEXT : STRING ; LAENGE : WORD) ;
+
+BEGIN
+  WHILE LENGTH(INTEXT) < LAENGE DO INTEXT := INTEXT +' ' ;
+  IF LENGTH(INTEXT) > LAENGE THEN
+  DELETE(INTEXT,LAENGE+1,LENGTH(INTEXT)-LAENGE) ;
+END ;
+{---------------------------------------------------------------------------}
+{
+(*.*************************************************************************
+FT: Format strings
+Variables:
+Input   : txt,F,FL
+OutPut  : returns a string
+
+global Variables:
+  affected: --
+predefined: --
+
+Version : @(#) NewExt.pas V:1.0
+Author  : K.Fischer
+Date    : ???
+Modified: 13.01.93
+Modification log:
+Value MU added to FTType
+MU means:"multiply txt fl times"
+21.02.96 Michael Welsch --> GlbFT.pas
+****************************************************************************)
+
+FUNCTION FT (TXT     : STRING ; F : FTTYPE ; FL : BYTE) : STRING ;
+Var
+   I       :       Byte;
+   Stxt    :       String;
+BEGIN
+  CASE ORD(F) OF
+    0 : WHILE LENGTH(TXT) < FL DO TXT := TXT+' ' ;
+    1 : WHILE LENGTH(TXT) < FL DO TXT := ' '+TXT ;
+    2 :
+    WHILE LENGTH(TXT) < FL DO
+    BEGIN
+      TXT := ' '+TXT ;
+      IF LENGTH(TXT) < FL THEN TXT := TXT+' ' ;
+    END ;
+    3 : BEGIN
+         If Length(txt)>FL Then txt:=Copy(txt,1,FL);
+        END ;
+    4 : begin
+         STxt:=txt;
+         txt:='';
+         For I:=1 To FL Do txt:=txt+Stxt;
+        end;
+  END ;
+  FT := TXT ;
+END ;
+}
+{---------------------------------------------------------------------------}
+
+(*
+FUNCTION WTXTINOUT(VAR F : TEXTREC) : Smallint ;
+
+BEGIN
+  WSTR[0] := CHR(F.BUFPOS) ;
+  IF F.BUFPOS < F.BUFSIZE THEN WTXTINOUT := 0
+  ELSE WTXTINOUT := 160 ;
+  F.BUFPOS := 0 ;
+END ;
+*)
+{---------------------------------------------------------------------------}
+PROCEDURE GETSETUP(VAR SETUPSTR,SETUPIND,SETUPVAL : STRING) ;
+
+VAR
+  SETUPPOS            : Smallint ;
+  STRIPPOS            : Smallint ;
+
+Function StrUpCase(EinStr:String):String;
+Var
+   I       :   Byte;
+   HStr    :   String;
+begin
+   HStr:='';
+   For I:=1 To Length(EinStr) Do HStr:=HStr+Upcase(EinStr[I]);
+   StrUpCase:=HStr;
+end;
+
+BEGIN
+  SETUPIND := '' ;
+  SETUPVAL := '' ;
+  STRIPPOS := POS('{',SETUPSTR) ;
+  IF STRIPPOS > 0 THEN
+  SETUPSTR := COPY(SETUPSTR,1,STRIPPOS-1) ;
+(*       SETUPPOS := POS(':',SETUPSTR) ; geändert 27.04.92*) //OemToAnsi Chg#182 (02.03.04 P.W)
+  SETUPPOS := POS('=',SETUPSTR) ;
+  IF SETUPPOS > 0 THEN
+  SETUPIND := COPY(SETUPSTR,1,SETUPPOS-1) ;
+  DELSPCRIGHT(SETUPIND) ;
+  DELSPCLEFT (SETUPIND) ;
+  SetUpInd:=StrUpCase(SetUpInd);
+  SETUPVAL := COPY(SETUPSTR,SETUPPOS+1,LENGTH(SETUPSTR) -SETUPPOS+1) ;
+  DELSPCRIGHT(SETUPVAL) ;
+  DELSPCLEFT (SETUPVAL) ;
+END ;
+{---------------------------------------------------------------------------}
+Function Stuetzpunkte(Tex:String;Var XX,YY,SS:Real):Smallint;
+{ umwandlung eines koordinatenstring wie " 20.3 / 390.5 / 40.0 " in XX=20.3, YY=390.5 ,Sdtdev = 40.0}
+{ Res = -1 falls die Trennungszeichen '(' '/' ')' nicht gefunden wurden,
+{ d.h. kein richtiges Format eingegeben wurde
+{17.06.93 Michael Welsch}
+Var
+  Res   :       Smallint;
+
+Procedure GetVal(Num:Byte;Var TT:Real);
+Var
+  H     :       String;
+begin
+  H:='';
+  H:=StringParser(Tex,'/',Num);
+  If H='' Then Res:=-1;
+  DelSpcLeft (H);
+  DelSpcRight(H);
+  TT:=GetReal(H);
+end;
+
+begin
+  Res:=0;
+  GetVal(1,XX);
+  GetVal(2,YY);
+  GetVal(3,SS);
+  Stuetzpunkte:=Res;
+end;
+
+(*
+Var
+   p0,p1    :       Smallint;
+   H        :       String;
+   Res      :       Smallint;
+begin
+   Res:=0;
+   H:='';
+   p0:=Pos('(',Tex);
+   p1:=Pos('/',Tex);
+   If (p0=0) Or (p1=0) Then Res:=-1;
+   H:=Copy(Tex,p0+1,p1-p0-1);
+   DELSPCRIGHT(H) ;
+   DELSPCLEFT (H) ;
+   XX:=GetReal(H);
+
+   p0:=Pos(')',Tex);
+   If (p0=0) Then Res:=-1;
+   H:=Copy(Tex,p1+1,p0-p1-1);
+   DELSPCRIGHT(H) ;
+   DELSPCLEFT (H) ;
+   YY:=GetReal(H);
+   Stuetzpunkte:=Res;
+end;
+*)
+{---------------------------------------------------------------------------}
+Function Stuetz_to_Str(XX,YY,SS:Real;XL,XD,YL,YD,SL,SD:Byte):String;
+
+begin
+  Stuetz_to_Str:=GetRealStr(XX,XL,XD) +
+                 '/'+
+		 GetRealStr(YY,YL,YD) +
+                 '/'+
+		 GetRealStr(SS,SL,SD);
+end;
+{---------------------------------------------------------------------------}
+Function DoFSplit(FName:String; Mode:tSplit):String;
+{
+Modifications:
+04.10.00 P.W:
+  Num: Byte Replaced Mode: tSplit
+  tSplit   = (C_Dir, C_Nam, C_Ext, C_DirNam, C_NamExt);
+  "1" replaced by C_Dir
+  "2" replaced by C_Nam
+  "3" replaced by C_Ext
+
+  Additional Values for Num supported:
+  C_DirNam         Directory + Name (without extension)
+  C_NamExt         Name + Extension (without Directory)
+}
+Var
+  Dir   : DirStr;
+  Name  : NameStr;
+  Ext   : ExtStr;
+begin
+  FSplit(FName,Dir,Name,Ext);
+  Case Mode Of
+   C_Dir   : DoFSplit:=Dir;      { C:\DICHTE\CALC\ }
+   C_Nam   : DoFSplit:=Name;     { KNOCHEN }
+   C_Ext   : DoFSplit:=Ext;      {.EXE }
+   C_DirNam: DoFSplit:=Dir+Name; { C:\DICHTE\CALC\KNOCHEN } {04.10.00 P.W}
+   C_NamExt: DoFSplit:=Name+Ext; { KNOCHEN.EXE }            {04.10.00 P.W}
+  else
+   DoFSplit:='';
+  end;
+end;
+
+Function DoFSplitA(const FName:PathStrA; Mode:tSplit):String;
+// Created: 07.04.05 P.W
+// Purpose: Replace DoFSplit support Long FileNames
+//  C_Dir
+//  C_Nam
+//  C_Ext
+//  C_DirNam         Directory + Name (without extension)
+//  C_NamExt         Name + Extension (without Directory)
+// Modifications:
+Var
+  Dir   : DirStrA;
+  Name  : NameStrA;
+  Ext   : ExtStrA;
+begin
+  FSplitA(FName,Dir,Name,Ext);
+  Case Mode Of
+   C_Dir   : Result := Dir;      // C:\DICHTE\CALC\         //
+   C_Nam   : Result := Name;     // KNOCHEN                 //
+   C_Ext   : Result := Ext;      // .EXE                    //
+   C_DirNam: Result := Dir+Name; // C:\DICHTE\CALC\KNOCHEN  //
+   C_NamExt: Result := Name+Ext; // KNOCHEN.EXE             //
+  else
+   Result := '';
+  end;
+end;
+{---------------------------------------------------------------------------}
+Procedure  GetFileList(Path,Maske:String;Var ListTop:TBasicListPointer);
+Var
+  F       :       SearchRec;
+  Temp    :       TBasicListPointer;
+begin
+  ListTop:=NIL;
+  Path:=DoFSplit(Path,C_Dir);
+  FindFirstDE(Path+Maske,Archive,F);
+                       {^--Finds file excepted: Hidden, SysFile, VolumeID, Directory}
+  If DosError=0 Then
+  begin
+    New(ListTop);
+    ListTop^.NextPtr:=NIL;
+    ListTop^.Element:=Path+F.Name;
+    Temp:=ListTop;
+    while DosError = 0 do
+    begin
+      FindNextDE(F);
+      If DosError = 0 Then
+      begin
+        New(Temp^.NextPtr);
+        Temp:=Temp^.NextPtr;
+        Temp^.NextPtr:=NIL;
+        Temp^.Element:=Path+F.Name;
+      end;
+    end;
+  end;
+  ChkFindClose(F); // ChkFindClose (05.03.04 P.W)
+end;
+{-----------------------------------------------------------------------}
+Procedure  GetCollectionFileList(Path,Maske:String;Var List:PStringCollection);
+{23.04.96 Michael Welsch
+If Duplicates=FALSE, the Pstring is disposed !!
+{20.03.97 MW
+Archive substituted by Anyfile
+(although it seems that Findfirst anyhow gives all files, disregarding
+wether the archive bit is set or not!)
+}
+Var
+  F       :       SearchRec;
+  SC      :       Smallint;
+  PS      :       PString;
+begin
+  If List=NIL Then
+    List:=New(PStringCollection,Init(10,5));
+  Path:=DoFSplit(Path,C_Dir);
+  FindFirstDE(Path+Maske,AnyFile and NOT Directory,F);
+  while DosError = 0 do
+  begin
+    SC:=List^.Count;
+    PS:=Objects.NewStr(Path+F.Name);
+    List^.Insert(PS);
+    If SC=List^.Count Then
+      Objects.DisposeStr(PS);
+    FindNextDE(F);
+  end;
+  ChkFindClose(F); // ChkFindClose (05.03.04 P.W)
+end;
+{-----------------------------------------------------------------------}
+Procedure  GetCollectionPathList(BasePath:String;Var List:PStringCollection;AddBase:Boolean);
+{01.09.97 MW}
+(*
+Modifications:
+{17.09.03 P.W}
+  correct test of attributes:
+            ReadOnly
+            Hidden
+            SysFile
+            VolumeID
+            Directory
+            Archive
+            AnyFile
+         SearchRec
+
+
+*)
+Var
+  F       :       SearchRec;
+  SC      :       Smallint;
+  PS      :       PString;
+begin
+  If List=NIL Then
+    List:=New(PStringCollection,Init(10,5));
+  AppendBackslash(BasePath);
+  BasePath:=DoFSplit(BasePath,C_Dir);
+  FindFirstDE(BasePath+'*.*',Directory,F);
+  while DosError = 0 do
+  begin
+    {If (F.Attr=Directory)                   {u.: 17.09.03 P.W}
+    If ((F.Attr and Directory) <> 0)         {s.: 17.09.03 P.W}
+       And (F.Name<>'.') And (F.Name<>'..') Then
+    begin
+      SC:=List^.Count;
+      If AddBase Then
+        PS:=Objects.NewStr(BasePath+F.Name)
+      else
+        PS:=Objects.NewStr(F.Name);
+      List^.Insert(PS);
+      If SC=List^.Count Then  {item already in collection}
+        Objects.DisposeStr(PS);
+    end;
+    FindNextDE(F);
+  end;
+  ChkFindClose(F); // ChkFindClose (05.03.04 P.W)
+end;
+{-----------------------------------------------------------------------}
+Procedure  GetCollectionFileList_EX(Path,Maske,ExMask:String;Var List:PStringCollection);
+{29.04.97 MW}
+{ ExMask = exculde filemask i.e. *.BAK }
+Var
+  I,J   :       Smallint;
+  ExList:       PStringCollection;
+begin
+  GetCollectionFileList(Path,Maske,List);
+  ExList:=New(PStringCollection,Init(10,5));
+  GetCollectionFileList(Path,ExMask,ExList);
+  For I:=0 To ExList^.Count-1 Do
+  begin
+    If List^.Search(ExList^.At(I),J) Then
+      List^.Free(List^.At(J));
+  end;
+  Dispose(ExList,Done);
+end;
+{-----------------------------------------------------------------------}
+Function  GetFile_TopNumExt(Path,Name:String):PathStr;
+{07.05.97 MW
+Purpose: get the file with the highest extension. Uses a sorted list
+and ignores all extensions that are not numerical.
+}
+Var
+  List          : PStringCollection;
+  I,ZW          : Smallint;
+  Code          : LongInt;
+  HStr          : String;
+  ResStr        : PathStr;
+begin
+  ResStr:='';
+  Name:=DelSpcLR(Name);
+  Path:=DelSpcLR(Path);
+  AppendBackSlash(Path);
+  List:=New(PStringCollection,Init(2,2)); { this is a sorted collection !! }
+  GetCollectionFileList(Path,Name+'.*',List);
+  { the sorted list may contain (i.e): N.000, N.001, N.BAK ...other not numerical extensions }
+  I:=List^.Count-1;
+  While (I>=0) Do
+  begin
+    HStr:=PString(List^.At(I))^;
+    VAL(Copy(DoFSplit(HStr,C_Ext),2,3),ZW,CODE) ;
+    if ZW=0 then {donothing}; // force use of ZW 29.06.04 P.W
+    If Code=0 Then
+    begin
+      ResStr:=HStr;
+      I:=-1; { to break the loop }
+    end else
+      Dec(I);
+  end;
+  Dispose(List,Done);
+  GetFile_TopNumExt:=ResStr;
+end;
+
+{-----------------------------------------------------------------------}
+Function  Add_FirstLine_FName(Path:String;Var Line:String):Smallint;
+Var
+  Res   :       Smallint;
+  txt   :       Text;
+  Name  :       String[8];
+begin
+  Res:=0;
+  Line:='';
+  Path := FExpand(Path); // FExpand added (04.03.04 P.W)
+  If  Not(FileExist(Path)) Then Res:=-1;
+  If Res=0 Then
+  begin
+    Assign(txt,Path);
+    Reset(txt);
+    Readln(txt,Line);
+    Close(txt);
+    DelSpcLeft (Line);
+    DelSpcRight(Line);
+    Name:=DoFSplit(Path,C_Nam);
+    Line:=FT_(Name,FL,8)+' |" '+Line+' "';
+  end;
+  Add_FirstLine_FName:=Res;
+end;
+
+{-----------------------------------------------------------------------}
+Function GetPointerOfTBasicListPointer(    ListTop:TBasicListPointer;
+                                        Var Actual :TBasicListPointer;
+                                                Num:Word):Smallint;
+Var
+  Res    :      Smallint;
+  I      :      Word;
+begin
+  Actual:=ListTop;
+  I:=1;
+  Res:=0;
+  While (Actual^.NextPtr<>NIL) And (I<NUM) Do
+  begin
+    Inc(I);
+    Actual:=Actual^.NextPtr;
+  end;
+  If I<Num Then Res:=-1;
+  GetPointerOfTBasicListPointer:=Res;
+end;
+
+{-----------------------------------------------------------------------}
+Function  SearchFileList(Path,Maske : String;
+                               Attr : Word;
+                         DoWithProc : Pointer):LongInt;
+Var
+   Res  :       LongInt;
+   GlbFileSearchRec    : SearchRec;     {17.01.94 Michael Welsch}
+     {^-- local since 22.09.03 P.W}
+begin
+  Res:=0;
+  Path:=DoFSplit(Path,C_Dir);
+  FindFirstDE(Path+Maske,Archive,GlbFileSearchRec);
+  If DosError=0 Then
+  begin
+    Inc(Res);
+    If DoWithProc<>NIL Then TProcedure(DoWithProc);
+    while DosError = 0 do
+    begin
+      FindNextDE(GlbFileSearchRec);
+      If DosError = 0 Then
+      begin
+        Inc(Res);
+        If DoWithProc<>NIL Then TProcedure(DoWithProc);
+      end;
+    end;
+  end;
+  ChkFindClose(GlbFileSearchRec); // ChkFindClose (05.03.04 P.W)
+  SearchFileList:=Res;
+end;
+{-----------------------------------------------------------------------}
+Function GetArchivBlockNumStr(LeadStr:String;
+                                  Num:LongInt;
+                            BlockCont:LongInt;
+                          BlockLength:Byte):String;
+{ call example : GetArchivBlockNumStr('AV',345,40,5)
+  -> av00320 }
+Var
+  Help  :       String;
+begin
+   Num:=( Num div BlockCont)*BlockCont;
+   Help:=FT_(GetIntStr(Num,BlockLength),FR,BlockLength);
+   Help:=ExchangeChar(Help,[' '],'0');
+   Help:=LeadStr+Help;
+   GetArchivBlockNumStr:=Help;
+end;
+{-----------------------------------------------------------------------}
+Function GetNumberOf(Str:String):LongInt;
+begin
+  GetNumberOf:=GetLInt(copy(Str,Length(Str)-9,5));
+end;
+{-----------------------------------------------------------------------}
+Function EnCodeDate(Date:String10):LongInt;
+Var
+ Tag,Monat,Jahr :       LongInt;
+
+begin
+ (*  Datum in deutsches format bringen TT.MM.JJJJ*)
+ (* *)
+ If Length(Date)<10 Then
+   Date:=Copy(Date,1,6)+'19'+Copy(Date,7,2);
+
+ Tag:=GetLInt(Copy(Date,1,2))*100;
+ Monat:=GetLInt(Copy(Date,4,2))*10000;
+ Jahr:=GetLInt(Copy(Date,7,4))*1000000;
+
+ EnCodeDate:=Jahr+Monat+Tag;
+end;
+
+Function  DeCodeDate(LIntDate:LongInt):String10;
+Var
+ HStr           :      String;
+ DateStr        :      String10;
+begin
+  HStr:=GetIntStr(LIntDate,8);
+  DateStr:=copy(HStr,7,2)+'.';
+  DateStr:=DateStr+copy(HStr,5,2)+'.';
+  DateStr:=DateStr+copy(HStr,1,4);
+  DeCodeDate:=DateStr;
+end;
+{-----------------------------------------------------------------------}
+Procedure CutString(    EinStr:String;
+                     Delimiter:String;
+                        NumPos:Byte;
+                    Var VorStr:String;
+                   Var NachStr:String);
+{
+ Bsp.: EinStr:"D:\AV\A0\" ,Delimiter:'\',NumPos:2
+         -> VorStr:"D:\AV", NachStr:"A0\"
+}
+Var
+   P    :       Byte;
+   I    :       Byte;
+   HStr :       String;
+   Len  :       Byte;
+begin
+  VorStr:='';
+  NachStr:='';
+  I:=0;
+  HStr:=EinStr;
+  Len:=0;
+  P:=1;
+  While (I<NumPos) and (P<>0) Do
+  begin
+    P:=Pos(Delimiter,HStr);
+    If P<>0 Then
+    begin
+      Len:=Len+P;
+      HStr:=Copy(Hstr,P+Length(Delimiter),Length(HStr));
+      Inc(I);
+    end;
+  end;
+  If (I=NumPos) Then
+  begin
+    VorStr:=Copy(EinStr,1,Len-1);
+    NachStr:=Copy(EinStr,Len+Length(Delimiter),Length(EinStr));
+  end;
+end;
+{-----------------------------------------------------------------------}
+Function DoMakeALLPaths(Path:String):Smallint;
+Var
+  HStr  :       String;
+  TStr  :       String;
+  Res   :       Smallint;
+  I     :       Byte;
+begin
+  FExpand(Path);
+  Path:=DoFSplit(Path,C_Dir);
+  Res:=0;
+  I:=2;
+  CutString(Path,'\',I,HStr,TStr);
+  While (HStr<>'') And (Res=0) Do
+  begin
+    If Not(PathExist(HStr)) Then
+      Res:=MakePath(HStr);
+    Inc(I);
+    CutString(Path,'\',I,HStr,TStr);
+  end;
+  DoMakeALLPaths:=Res;
+end;
+{-----------------------------------------------------------------------}
+Function DoDeleteALLPaths(Path:String):Smallint;
+Var
+  HStr  :       String;
+  TStr  :       String;
+  Res   :       Smallint;
+  I     :       Byte;
+begin
+  FExpand(Path);
+  Path:=DoFSplit(Path,C_Dir);
+  Res:=0;
+  I:=CountCharInStr(Path,'\');
+  CutString(Path,'\',I,HStr,TStr);
+  While (HStr<>'') And (Res=0) Do
+  begin
+    Res:=DeletePath(HStr);
+    Dec(I);
+    CutString(Path,'\',I,HStr,TStr);
+  end;
+  DoDeleteALLPaths:=Res;
+end;
+{-----------------------------------------------------------------------}
+Function  DoCopyFiles(Source,Target:String):Smallint;
+{01.09.97 MW
+ Source : C:\T_PREV\DEV\XCT2000.X\*.*
+ Target : C:\XCT540\DEV\XCT2000.X[\]
+}
+(*
+Modifications:
+{17.09.03 P.W}
+  Correct use of F.Attr Directory VolumeID
+*)
+Var
+  F     :        SearchRec;
+  B     :        Boolean;
+  Res   :        Smallint;
+  TT    :        String;
+begin
+  B:=TRUE;
+  Res:=0;
+  TT:=DoFSplit(Source,C_Dir);
+  AppendBackSlash(Target);
+  FindFirstDE(Source,AnyFile,F);
+  while (DosError=0) do
+  begin
+  { If (F.Attr<>Directory) And (F.Attr<>VolumeID) Then {u.: 17.09.03 P.W}
+    If ((F.Attr and (Directory+VolumeId) = 0)) Then    {s.: 17.09.03 P.W}
+       B:=(DOCOPY(tt+F.Name,Target+F.Name)=0)  And B;
+    FindNextDE(F);
+  end;
+  ChkFindClose(F); // ChkFindClose (05.03.04 P.W)
+  If Not(B) Then Res:=-1;
+  DoCopyFiles:=Res;
+end;
+
+{-----------------------------------------------------------------------}
+Function  DoDeleteFiles(Target:String;DeleteDir:Boolean):Smallint;
+{01.09.97 MW, error when a failour occures, all following files are not deleted
+ because of execution shortcut of the logical operation AND, this has been corrected!}
+Var
+  F     :        SearchRec;
+  B     :        Boolean;
+  Res   :        Smallint;
+begin
+  B:=TRUE;
+  Res:=0;
+  FindFirstDE(Target,AnyFile,F);
+  while (DosError=0) do
+  begin
+{    B:=B AND Eraser(DoFSplit(Target,1)+F.Name);{01.09.97 MW}
+    B:=Eraser(DoFSplit(Target,C_Dir)+F.Name) AND B;
+    FindNextDE(F);
+  end;
+  ChkFindClose(F); // ChkFindClose (05.03.04 P.W)
+  If DeleteDir Then DoDeleteAllPaths(Target);
+  If Not(B) Then Res:=-1;
+  DoDeleteFiles:=Res;
+end;
+{-----------------------------------------------------------------------}
+Procedure  PatchHeader(TargetFile:String;Str:String;From:WORD;Len:WORD);
+Var
+  F     :       File;
+  I     :       LongInt; //WORD;
+  P     :       Pointer;
+
+begin
+  TargetFile := FExpand(TargetFile); // FExpand added (04.03.04 P.W)
+  If Not(FileExist(TargetFile)) Then EXIT;
+  Assign(F,TargetFile);
+  Reset(F,1);
+  Seek(F,From);
+  P:=@Str[1];
+  BlockWrite(F,Str[1],Len,I);
+  Close(F);
+  Repeat
+  Until (IOResult=0);
+end;
+{-----------------------------------------------------------------------}
+Function SkipLeadingChar(EinStr:String;LS:Char;Var NumLS:Byte):String;
+Var
+  OutStr        :       String;
+begin
+  NumLS:=0;
+  OutStr:=EinStr;
+  While  (Length(OutStr)>0) AND ( OutStr[1]=LS) Do
+  begin
+    Inc(NumLS);
+    Delete(OutStr,1,1);
+  end;
+  SkipLeadingChar:=OutStr;
+end;
+{-----------------------------------------------------------------------}
+Procedure CompletePath(Var Test:String);
+{     {22.11.94 Michael Welsch
+      Aufgabe:
+      Pfadangaben wie: '\test\...' oder 'test\..'
+      werden completiert
+      z.B:     '\' -> 'C:\'
+               'A' -> 'C:\TEST\A'
+      08.03.95 Michael Welsch
+               '.\INIT\' ->'C:\DICHTE\INIT\' , falls C:\DICHTE aktuelles Verzeichnis ist!
+               Das geht auch mit FExpand!!!
+}
+Var
+  P,Q   :       Byte;
+  S     :       String;
+begin
+  P:=Pos(':',Test);
+  If P=2 Then Exit;                   { C:\...}
+
+  GetDir(0,S);                        { get actual directory }
+
+  If (P=1) Then delete(Test,1,1);     { :\... -> \... }
+  Q:=Pos('\',Test);
+
+  If Q=1 Then                         { \... }
+  begin
+    If (Length(S)=3) Then
+       delete(S,Length(S),1)
+    else
+       S:=Copy(S,1,2);
+    Test:=S+Test;
+  end
+  else                                { ...\... }
+  begin
+    If (Test[1]='.') Then delete(Test,1,2); {08.03.95 Michael Welsch} {.\TTT -> TTT }
+    If (Test[1]='\') Then delete(Test,1,1); {28.07.95 Michael Welsch}
+    If (S[Length(S)]<>'\') Then S:=S+'\';
+    Test:=S+Test;
+  end;
+end;
+{-----------------------------------------------------------------------}
+Function ChangeDriveInPath(OldPath:String;NewDrive:String):String;
+{
+   Aufgabe: tauscht die Laufwerksbezeichnung, evt auch durch Pfad
+   z.B OldPath ='C:\AV\A00..'
+       NewDrive='D:\'
+       ->       'D:\AV\A00..'
+
+   z.B OldPath ='C:\AV\A00..'
+       NewDrive='D:\TEST'
+       ->       'D:\TEST\AV\A00..'
+
+   z.B OldPath ='C:\AV\A00..'
+       NewDrive=''
+       ->       '\AV\A00..'
+}
+Var
+  ResStr        :       String;
+begin
+  CompletePath(OldPath);
+  CompletePath(NewDrive);
+  If NewDrive[Length(NewDrive)]='\' Then
+     delete(NewDrive,Length(NewDrive),1);
+  ResStr:=NewDrive+copy(OldPath,3,Length(OldPath));
+  ChangeDriveInPath:=ResStr;
+end;
+(*.**************************************************************************)
+(** Function Name    : ReadStrRes                                         **)
+(** Author           : Michael Welsch                                     **)
+(** Date             : 23.11.94                                           **)
+(** Description      : einlesen von selten gebrauchten Strings aus einer  **)
+(** Resourcen Datei. Syntax Beispiel:                                     **)
+(** ID = 1                                                                **)
+(** Dieser Text wird für ID 1 als String zurückgegeben                    **) //OemToAnsi Chg#181 (02.03.04 P.W)
+(** ID = 2                                                                **)
+(** Dieser Text wird für ID 2 als String zurückgegeben                    **) //OemToAnsi Chg#180 (02.03.04 P.W)
+(***************************************************************************)
+(** Called By        : ANY                                                **)
+(** Calls            : GETSETUP                                           **)
+(** Input            : Var ResFile:String;ID:Smallint                      **)
+(** Output           : returns a String                                   **)
+(** Global Variables                                                      **)
+(**  - affected      : --                                                 **)
+(**  - predefined    : --                                                 **)
+(***************************************************************************)
+(** Last modified/By :                                                    **)
+(** Date/Modification:                                                    **)
+(**                  :                                                    **)
+(** ************************************************************************.*)
+
+{$IFOPT I+ } {$DEFINE IOCHECK } {$ENDIF }
+{$I-}
+
+Function ReadStrRes(Var ResFile:String;ID:Smallint;Line:Word):String;
+Var
+   TXT          :       Text;
+   ResStr       :       String;
+   Found        :       Boolean;
+   Res          :       Smallint;
+   IDStr,IDVal  :       String;
+   LineCtr      :       Word;
+begin
+  LineCtr:=0;
+  Found:=False;
+  ResFile := FExpand(ResFile); // FExpand added (04.03.04 P.W)
+  If Not(FileExist(ResFile)) Then
+  begin
+    ResStr:='Resource file :"'+ResFile+'" not found!';
+    ReadStrRes:=ResStr;
+    Exit;
+  end;
+  Assign(txt,ResFile);
+  Reset(txt);
+  Res:=IOResult;
+
+  If EOF(txt) Then Res:=-1;
+
+  While     Not(EOF(txt))
+        And Not(Found)
+        And (Res=0)
+        Do
+  begin
+    Readln(txt,ResStr);
+    Res:=IOResult;
+    GETSETUP(ResStr,IDStr,IDVal) ;
+    Found:=(IDStr='ID') And (GetLInt(IDVal)=ID);
+    If Found Then
+    begin
+      If EOF(txt) Then Res:=-1;
+      While     Not(EOF(txt))
+            And (Res=0)
+            And (LineCtr<>Line)
+            Do
+      begin
+        Readln(txt,ResStr);
+        Res:=IOResult;
+
+        GETSETUP(ResStr,IDStr,IDVal) ;      { prüfe ob resourceeintrag zuende } //OemToAnsi Chg#179 (02.03.04 P.W)
+        If (IDStr='ID') Then
+        begin
+           ResStr:='';                      { falls weniger Zeilen in der Resource stehen }
+           LineCtr:=Line;                   { soll ein Leerstring zurückgegeben werden } //OemToAnsi Chg#178 (02.03.04 P.W)
+        end
+        else
+           Inc(LineCtr);
+      end;
+    end;
+  end;
+
+  If Not(Found) Then
+     ResStr:='ID "'+GetIntStr(ID,5)+'" in "'+ResFile+'" not found';
+
+  If (Res<>0)   Then
+     ResStr:='Error reading ID "'+GetIntStr(ID,5)+'" in "'+ResFile+'"';
+
+  Repeat Until IOResult=0;
+  Close(txt);
+  Repeat Until IOResult=0;
+  ReadStrRes:=ResStr;
+end;
+{$IFDEF IOCHECK} {$I+ } {$ENDIF }
+
+Function UseFExpand(HStr:String):String;
+begin
+  If DelSpcLR(HStr)<>'' Then
+     UseFExpand:=FExpand(HStr)
+  else
+     UseFExpand:='';
+end;
+
+{-----------------------------------------------------------------------}
+Procedure  GetSysTimeHHMM(Var TIME:String04);
+var Hour, Minute, Second, Sec100             : Word;
+begin
+  Dos.GetTime(Hour, Minute, Second, Sec100);
+  TIME:= Exchangechar(GetIntStr(Hour  ,2),[' '],'0')
+        +Exchangechar(GetIntStr(Minute,2),[' '],'0');
+end;
+{-----------------------------------------------------------------------}
+Procedure  GetSysTimeHHPMM(Var TIME:String05);
+var Hour, Minute, Second, Sec100             : Word;
+begin
+  Dos.GetTime(Hour, Minute, Second, Sec100);
+  TIME:= Exchangechar(GetIntStr(Hour  ,2),[' '],'0')
+        +':'
+        +Exchangechar(GetIntStr(Minute,2),[' '],'0');
+end;
+{-----------------------------------------------------------------------}
+Function GetConvDateTime: String; {19.02.02 P.W}
+{Len = 16 (= 10(Date) + 1(Space) + 5(Time))}
+Var
+  TIME             : String05;
+begin
+  GetSysTimeHHPMM(Time);
+  GetConvDateTime := ConvDate(MyGetDate)+ ' '+TIME;
+end;
+{-----------------------------------------------------------------------}
+Function  GenderCharToInt(Gender:Char):Smallint;
+begin
+  Case Gender Of
+    'F' : GenderCharToInt:=1;
+    'M' : GenderCharToInt:=2;
+     else
+          GenderCharToInt:=2;
+  end;
+end;
+{-----------------------------------------------------------------------}
+Function  GenderIntToChar(GenderInt:Smallint):Char;
+begin
+  Case GenderInt Of
+    1: GenderIntToChar:='F';
+    2: GenderIntToChar:='M';
+    else
+     GenderIntToChar:='N';
+  end;
+end;
+{-----------------------------------------------------------------------}
+Function  GetGenderString(Gender:Char):String10;
+{27.07.95 Michael Welsch}
+Var
+  OutStr        :       String10;
+begin
+  Case Gender Of
+    'M' : OutStr:=FT('männlich',FM,10); //OemToAnsi Chg#177 (02.03.04 P.W)
+    'F' : OutStr:=FT('weiblich',FM,10);
+     else
+        OutStr:=FT_( '--',FM,10);
+  end;
+  GetGenderString:=OutStr;
+end;
+{-----------------------------------------------------------------------}
+{$IFOPT I+ } {$DEFINE IOCHECK } {$ENDIF }
+{$I-}
+
+(*.**************************************************************************)
+function ValidFileName(FN : PathStr) : Boolean;
+(***************************************************************************
+Date/Author      : {11.08.95 Michael Welsch, copied from topaz401, dbf4.pas
+Description      : Check if fn is a valid DOS filename.
+Example : ValidFilename('?&&\\.EXT') -> FALSE
+          ValidFileName('D:\TOPAZ') ->TRUE
+***************************************************************************
+return           : TRUE,FALSE
+heap             :
+Global Variables
+ - affected      :
+ - predefined    :
+***************************************************************************
+Date/Modification:
+**************************************************************************.*)
+var
+  f          : File;
+  Path       : PathStr;
+  SaveDir    : PathStr;
+begin
+(*  fn := Ltrim(Trim(fn));*)
+  fn:=DelSpcLR(fn);
+  if (Length(fn) > 2) and (fn[2] = ':') then
+    Delete(fn,1,2);     {remove a drive letter if given}
+  if (fn = '') or (pos(' ', fn) > 0) then
+    begin
+      ValidFileName := False;
+      Exit;
+    end
+  else
+    ValidFileName := True;
+  if FileExist(fn) then Exit;
+  { if a path was specified, parse that out: }
+  Path := '';
+  while Pos('\',fn) > 0 do
+    begin
+      Path := Path + Copy(fn,1,pos('\',fn));
+      Delete(fn,1,Pos('\',fn));
+    end;
+
+  {if a path was specified, test to see if the path is a valid DOS pathname:}
+  if (Path <> '') and (Path <> '\') then
+    begin
+      Delete(Path,Length(Path),1);   {remove the last \}
+      GetDir(0,SaveDir);
+      {$I-}
+      ChDir(path);
+      {$I+}
+      if IOResult>0 then
+        begin  {path doesn't exist, but could it?}
+          {$I-}
+          MkDir(path);
+          {$I+}
+          if IOResult > 0 then
+            begin     {path can't be made: either it's not a valid name,
+                       or its already a file}
+              ValidFileName := False;
+              ChDir(SaveDir);
+              Exit;
+            end;
+          {we could make the path just fine, but we'd better erase it!}
+          RmDir(path);
+        end;
+      ChDir(SaveDir);
+    end;
+  if Fn > '' then
+    begin
+      {$I-}
+      Assign(f, fn);
+      Rewrite(f);
+      if IoResult = 0 then
+        begin
+          Close(f);
+          if IoResult = 0 then
+            begin
+              Eraser(fn);
+              if IoResult > 0 then
+                ValidFileName := False;
+            end
+          else
+            ValidFileName := False;
+        end
+      else
+        ValidFileName := False;
+      {$I+}
+  end
+  else
+    ValidFileName := False;  { fn = empty string after removing path }
+end;
+{$IFDEF IOCHECK} {$I+ } {$ENDIF }
+{-----------------------------------------------------------------------}
+{$IFOPT I+ } {$DEFINE IOCHECK } {$ENDIF }
+{$I-}
+Function  ChangeDirInString(CurDir,Command:PathStr;Var Erg:String):Smallint;
+Var
+  SaveDir       :       String;
+  Res           :       Smallint;
+begin
+  Repeat Until (IOResult=0);
+  GetDir(0,SaveDir);
+  CurDir := FExpand(CurDir); // FExpand added (04.03.04 P.W)
+  If Length(CurDir)>3 Then
+  begin
+    If CurDir[Length(CurDir)]='\' Then
+       Delete(CurDir,Length(CurDir),1);
+  end;
+
+  Command := FExpand(Command); // FExpand added (04.03.04 P.W)
+  If Length(Command)>1 Then
+  begin
+    If Command[Length(Command)]='\' Then
+       Delete(Command,Length(Command),1);
+  end;
+  ChDir(CurDir);
+  Res:=IOResult;
+  If Res<>0 Then
+  begin
+    ChDir(SaveDir);
+    ChangeDirInString:=Res;
+    Exit;
+  end;
+  ChDir(Command);
+  Res:=IOResult;
+  If Res<>0 Then
+  begin
+    ChDir(CurDir);
+    Repeat Until (IOResult=0);
+    ChDir(SaveDir);
+    Repeat Until (IOResult=0);
+    ChangeDirInString:=Res;
+    Exit;
+  end;
+  GetDir(0,Erg);
+  ChDir(CurDir);
+  Repeat Until (IOResult=0);
+  ChDir(SaveDir);
+  Repeat Until (IOResult=0);
+  ChangeDirInString:=0;
+end;
+{$IFDEF IOCHECK} {$I+ } {$ENDIF }
+{-----------------------------------------------------------------------}
+Procedure  AppendBackSlash(Var Inp:String);
+begin
+  If Inp[Length(Inp)]<>'\' Then
+     Inp:=Inp+'\';
+end;
+{-----------------------------------------------------------------------}
+Function NoEndBackSlashFunc(Path: String): String;  {20.10.00 P.W}
+{  "C:\Temp\" to "C:\Temp"
+{  ".\"       t0 "."
+{  "C:\"      to "C:"
+}
+// 22.03.05 P.W adapt to Delphi
+begin
+//  If (Path[Length(Path)] = '\')
+//    then Dec(Path[0]);
+//  NoEndBackSlashFunc := Path;
+  Result := ExcludeTrailingPathDelimiter(Path);
+end;
+{-----------------------------------------------------------------------}
+Function   DateToLong(Date:String10):LongInt;
+Var
+  L     :       LongInt;
+begin
+  L:=GetLInt(copy(Date,7,4))*10000+
+     GetLInt(copy(Date,4,2))*100+
+     GetLInt(copy(Date,1,2));
+  DateToLong:=L;
+end;
+{-----------------------------------------------------------------------}
+Function   LongToDate(L:LongInt):String10;
+Var
+  Y   :       String04;
+  M,D :       String02;
+begin
+  Y:=ExchangeChar(GetIntStr(L div 10000,4),[' '],'0');;
+  L:=L-(L div 10000)*10000;
+  M:=ExchangeChar(GetIntStr(L div 100,2),[' '],'0');
+  L:=L-(L div 100)*100;
+  D:=ExchangeChar(GetIntStr(L,2),[' '],'0');
+  LongToDate:=D+'.'+M+'.'+Y;
+end;
+{-----------------------------------------------------------------------}
+Function  GetUniqueFileName(Path:String;Name:String08):PathStr;
+{03.12.97 MW, error if non numerical characters are present}
+Var
+  List           :       PStringCollection;
+  I,Num,Code     :       LongInt;
+  HStr           :       String;
+begin
+  List:=New(PStringCollection,Init(2,2));
+  GetCollectionFileList(Path,Name+'.*',List);
+  I:=List^.Count;
+  {03.12.97 MW}
+  Code:=-1;
+  Num:=0;
+  While (I>0) And (Code<>0) Do
+  begin
+    HStr:=PString(List^.At(I-1))^;
+    HStr:=copy(HStr,Length(HStr)-2,3);
+    Val(Hstr,Num,Code);
+    Dec(I);
+  end;
+  Inc(Num);
+
+  Dispose(List,Done);
+  AppendBackSlash(Path);
+  GetUniqueFileName:=Path+Name+'.'+ExchangeChar(GetIntStr(Num,3),[' '],'0');
+end;
+{-----------------------------------------------------------------------}
+Function  GetUniqueFileName_ChngName(Path:String;Name:String08;Ext:String04):PathStr;
+Var
+  List       : PStringCollection;
+  I,Num      : Smallint;
+  Code       : LongInt;
+  HStr       : String;
+begin
+  List:=New(PStringCollection,Init(2,2));
+  Name:=FT_(Name,FR,8);
+  Name:=copy(Name,4,5)+'???';
+
+  GetCollectionFileList(Path,Name+Ext,List);
+  { suche größten wert für ??? }
+  I:=List^.Count;
+  Code:=-1;
+  Num:=0;
+  While (I>0) And (Code<>0) Do
+  begin
+    HStr:=PString(List^.At(I-1))^;
+    HStr:=Dofsplit(HStr,C_Nam);
+    HStr:=copy(HStr,Length(HStr)-2,3);
+    Val(Hstr,Num,Code);
+    Dec(I);
+  end;
+  Dispose(List,Done);
+  AppendBackSlash(Path);
+  Inc(Num);
+
+  HStr:=ExchangeChar(GetIntStr(Num,3),[' '],'0'); { "2" -> "002"}
+  Name:=ExchangeString(Name,'???',HStr);
+  Result := Path+Name+Ext;
+end;
+{-----------------------------------------------------------------------}
+Function CheckValidMCMLine(EinStr:String):Boolean;
+{ prüft, ob EinStr ein gültiges Maskenelement ist } //OemToAnsi Chg#175 (02.03.04 P.W)
+{11.07.97 MW =9 changed to >=9 }
+begin
+  CheckValidMCMLine:=CountCharInStr(EinStr,'/')>=9; {03.11.94 Michael Welsch :8}
+end;
+{-----------------------------------------------------------------------}
+Function GetArchivNum(Number:LongInt):String08;
+Var
+   Help :       String08;
+begin
+   Help:=GetIntStr((Number div ARCHIVBLOCKSIZE)*ARCHIVBLOCKSIZE,7);
+   Help:=ExchangeChar(Help,[' '],'0');
+   Help:='A'+Help;
+   GetArchivNum:=Help;
+end;
+
+{-----------------------------------------------------------------------}
+Function  MyCheckDate(day,Month,Year:LongInt):Boolean;
+{11.07.96 Michael Welsch, von Aurel Sararu übernommen} //OemToAnsi Chg#174 (02.03.04 P.W)
+Var
+  CheckDate     :       Boolean;
+begin
+  case month of
+    1,3,5,7,8,10,12 : CheckDate:=day in [1..31];
+    4,6,9,11        : CheckDate:=day in [1..30];
+    2               :if year mod 4=0 then
+                       if year mod 100=0 then CheckDate:=day in [1..28]
+                       else CheckDate:=day in [1..29]
+                     else CheckDate:=day in [1..28];
+    else CheckDate:=false;
+  end;
+  MyCheckDate:=Checkdate;
+end;
+
+{-----------------------------------------------------------------------}
+Function Max (A,B:LongInt): LongInt; {17.06.03 P.W}
+begin
+  If A>B then Max :=A else Max :=B;
+end;
+
+{-----------------------------------------------------------------------}
+Function Min (A,B:LongInt): LongInt; {17.06.03 P.W}
+begin
+  If A<B then Min :=A else Min :=B;
+end;
+{-----------------------------------------------------------------------}
+Function MaxD(A,B:Double ): Double;  {17.06.03 P.W}
+begin
+  If A>B then MaxD:=A else MaxD:=B;
+end;
+
+{-----------------------------------------------------------------------}
+Function MinD(A,B:Double ): Double;  {17.06.03 P.W}
+begin
+  If A<B then MinD:=A else MinD:=B;
+end;
+
+{-----------------------------------------------------------------------}
+Function LeadZeros(Nr: LongInt; MinLen: Byte): String;
+(*
+{17.06.03 P.W} from Kn_Print.pas
+*)
+Var
+  Txt            : String;
+begin
+  Str(Nr, Txt);
+  While (Length(Txt) < MinLen) do Txt := '0' + Txt;
+  LeadZeros := Txt;
+end;
+
+
+{-----------------------------------------------------------------------}
+Function Scale_1_2_5(MMSmax: Double): Double;
+(*
+Created: {27.06.03 P.W}
+Aim    : Returns next fitting value 1.0 2.0 5.0 10.0 ...
+         beeing smaller (absolute) than MMSMax
+         1.23 -->  1.0;
+         -5.5 --> -5.0
+          0.0 -->  0.0;
+          9.9 -->  5.0;
+         10.1 --> 10.0;
+*)
+Var
+  Ready            : Boolean;
+  Factor           : Double;
+begin {Func. Scale_1_2_5}
+  Factor := 1.0;
+  If (MMSmax <> 0.0) then
+  begin
+    If MMSMax < 0.0 then
+    begin
+      Factor := -1.0;
+      MMSMax := -MMSMax;
+    end;
+
+    While MMSMax > 1.0 do
+    begin
+      MMSMax := MMSMax / 10;
+      Factor := Factor * 10;
+    end;
+    While MMSMax < 0.1 do
+    begin
+      MMSMax := MMSMax * 10;
+      Factor := Factor / 10;
+    end;
+
+    Repeat
+      Ready := True;
+      If MMSmax >= 1.0 then MMSmax :=  1.0
+      else
+      If MMSmax >= 0.5 then MMSmax :=  0.5
+      else
+      If MMSmax >= 0.2 then MMSmax :=  0.2
+      else
+        begin
+          Ready := False;
+          MMSMax := MMSMax * 10;
+          Factor := Factor / 10;
+        end;
+    Until Ready;
+  end;
+  Scale_1_2_5:=MMSmax*Factor
+end;  {Func. Scale_1_2_5}
+{-----------------------------------------------------------------------}
+Procedure ChangeInSteps(Var Extend: Double; Step: Smallint); {27.06.03 P.W}
+(*
+{27.06.03 P.W}
+Aim: modify non zero values : like 10 -> 11 -> 12 -> .. -> 48 -> 50 -> 55 ...
+ (positive and negative values)
+*)
+Var
+  Factor           : Double;
+  HExtend : Smallint;
+begin
+  If (Abs(Extend) <> 0.0) then
+  begin
+    Factor := 1;
+    While (Abs(Extend) > 999) do
+    begin
+      Extend := Extend / 10;
+      Factor := Factor * 10;
+    end;
+
+    While (Abs(Extend) < 99) and (Extend <>0) do
+    begin
+      Extend := Extend * 10;
+      Factor := Factor / 10;
+    end;
+
+    HExtend:=Abs(Round(Extend));
+
+    If (HExtend >= 500) then Extend := 50 * Round (Step+(Extend / 50))
+    else
+    If (HExtend >= 200) then Extend := 20 * Round (Step+(Extend / 20))
+    else
+                             Extend := 10 * Round (Step+(Extend / 10));
+
+    Extend := Extend * Factor;
+  end;
+end;
+{-----------------------------------------------------------------------}
+end.

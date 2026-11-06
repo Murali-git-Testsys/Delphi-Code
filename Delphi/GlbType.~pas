@@ -1,0 +1,611 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; changes: 1; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+(*.+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+(*+ ~ ~                                                    ) %15nV0.%22v) +*)
+(*+ Module Name/Vers.: @(#)GlbType V.:1.00                              ) +*)
+(*+ Author           : P.Wueseke                                          +*)
+(*+ Date             : 28.08.95 (from Glb.Pas)                            +*)
+(*+ Description      : Globale Typen                                      +*)
+(*+ ~ ~                                                       : %15d%30w: +*)
+(*+ Last modified/By : 19.02.02 / P.Wueseke                               +*)
+(*+ Date/Modification: 20.03.96 P.W / NameExtStr added                    +*)
+(*+ Date/Modification: 22.06.99 P.W / Define FileMode_ReadOnly ...        +*)
+(*+ Date/Modification: 04.09.00 P.W / add String07, String15              +*)
+(*
+{21.12.01 P.W}
+  Devine Const OldMaxColor = 15;
+{19.02.02 P.W}
+  Added "FileMode_ReadOtherWrite = 64"
+// 08.07.02 P.W until 01.04.05 P.W
+  Define "Sep" as ";" to start the job replace ";" by Sep (AsciiExp)
+// 20.12.07 P.W new variable CtNumberGlb set by Readpar
+// 07.01.08 P.W: InitAppStratec in initialization
+(*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.*)
+Unit GlbType;
+
+INTERFACE
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  Param_StrUnit,
+  Math,     // 12.03.09 P.W
+  SysUtils; // 07.01.08 P.W
+
+
+// v--- from EE_Param 12.03.09 P.W
+{
+int8=ShortInt
+int16=SmallInt
+int32=Integer
+int64=Int64
+uInt8=Byte
+uInt16=Word
+uInt32=LongWord
+uInt64=uInt64
+float32=Single
+float64=Double
+LVBoolean=Byte
+char2=[0..1]Char
+char3=[0..2]Char
+char12=[0..11]Char
+char16=[0..15]Char
+char192=[0..191]Char
+}
+type
+  int8       = ShortInt;
+  int16      = SmallInt;
+  int32      = Integer;                   // 12.03.09 P.W
+//int64      = Int64;                     // 12.03.09 P.W
+  uInt8      = Byte;
+  uInt16     = Word;
+  uInt32     = LongWord;
+//uInt64     = uInt64;                    // 12.03.09 P.W
+  float32    = Single;
+  float64    = Double;                    // 12.03.09 P.W
+  LVBoolean  = Byte;
+  char2      = Array[0 ..   1] of Char;
+  char3      = Array[0 ..   2] of Char;
+  char12     = Array[0 ..  11] of Char;
+  char16     = Array[0 ..  15] of Char;
+  char192    = Array[0 .. 191] of Char;
+// ^--- from EE_Param 12.03.09 P.W
+  TConType    = (                        // 12.03.09 P.W
+    ct_None,
+    ct_int8,      ct_int16,     ct_int32,     ct_int64,
+    ct_uInt8,     ct_uInt16,    ct_uInt32,    ct_uInt64,
+    ct_float32,   ct_float64,   ct_LVBool, 
+    ct_char2,     ct_char3,     ct_char12,    ct_char16,    ct_char192,
+    ct_AnsiString);
+//  ShortInt,     SmallInt,     Integer,      Int64,
+//  Byte,         Word,         LongWord,     uInt64,
+//  Single,       Double,       Byte,
+//  [0..1]Char,   [0..2]Char,   [0..11]Char,  [0..15]Char,  [0..191]Char,
+
+const
+  FormTag_InWindowsList : Integer = $00000001;  // 15.04.08 P.W
+    // Form.Window with Tag = FormTag_InWindowList set is supported by FemurPcForm1 UpdateWindow1Items
+
+type    // TAppStratec from TurboToDelphi.pas 20.12.07 P.W
+  TAppStratec = (AS_Unknown,
+                 AS_DataBase,       // Database module Xmenu.Exe
+                 AS_MeasMod,        // Measurement module FemurPc
+                 AS_BackPro,        // Backprojection Module CtFemNnD.exe
+                 AS_XbJob,
+                 AS_Femprep,
+                 AS_SvComp,
+                 AS_Xtract,
+                 AS_Analyse,        // Analysis Module KnMulti.exe
+                 AS_XctDirector,
+                 AS_BnLock);  // special see in GlbPath.pas!
+
+var
+  AppStratec : TAppStratec = AS_Unknown;       // set in FemurPcForm1.pas
+
+var
+  CtNumberGlb : Integer = 0;  // set by ReadPar.pas ReadGlbXbJobHeadRec 20.12.07 P.W
+
+Type
+  NameExtStr= String[08+04];       {20.03.96 P.W}
+
+  String01  = String[01];
+  String02  = String[02];
+  String03  = String[03];
+  String04  = String[04];
+  String05  = String[05];
+  String06  = String[06];
+  String07  = String[07];          {04.09.00 P.W}
+  String08  = String[08];
+  String10  = String[10];
+  String11  = String[11];
+  String12  = String[12];
+  String15  = String[15];          {04.09.00 P.W}
+  String20  = String[20];
+  String25  = String[25];
+  String27  = String[27];
+  String32  = String[32];
+  String30  = String[30];
+  String40  = String[40];
+  String50  = String[50];
+  String60  = String[60];
+  String64  = String[64];
+  String80  = String[80];
+  String100 = String[100];
+  String150 = String[150];
+  String200 = String[200];
+
+  CharSetType=Set of Char;
+
+  RealArrType=Array[0..10000] of Real;
+  RealArrPtrType= ^RealArrType;
+
+  DoubleArrType=Array[0.. 8000] of Double;
+  DoubleArrPtrType= ^DoubleArrType;
+
+  SingleArrType=Array[0..15000] of Single;
+  SingleArrPtrType= ^SingleArrType;
+
+  ShortIntArrType=Array[0..60000] of ShortInt;
+  ShortIntArrPtrType= ^ShortIntArrType;
+
+  LongIntArrType=Array[0..15000] of LongInt;
+  LongIntArrPtrType= ^LongIntArrType;
+
+  IntegerArrType=Array[0..30000] of Smallint;
+  IntegerArrPtrType= ^IntegerArrType;
+
+  WordArrType=Array[0..30000] of Word;
+  WordArrPtrType= ^WordArrType;
+
+  CharArrType=Array[0..60000] of Char;
+  CharArrPtrType= ^CharArrType;
+
+  ByteArrType=Array[0..60000] of Byte;
+  ByteArrPtrType= ^ByteArrType;
+
+  TypType = (ReTyp,  LoTyp,   InTyp,   WoTyp,   StTyp,   NilTyp, ChTyp, BoTyp,
+            {Real,   LongInt, Smallint, Word,    String,  Nichts, Char,  Boolean }
+
+             DoTyp,  SiTyp,   ByTyp,   ShTyp);
+            {Double, Single,  Byte,    ShortInt}
+
+  W_Mode  = (W_READ, W_OVERWRITE, W_APPEND, W_REWRITE);
+
+  VarPtrType = Packed Record // "Record" to "Packed Record" Chg#61 (02.03.04 P.W)
+    Case Smallint of
+      0: (Adresse : Pointer);
+      1: (RePtr    : ^Real);
+      2: (LoPtr    : ^LongInt);
+      3: (InPtr    : ^Smallint);
+      4: (WoPtr    : ^Word);
+      5: (StPtr    : ^String);
+      6: (ChPtr    : ^Char);
+      7: (BoPtr    : ^Boolean);
+      8: (ByPtr    : ^Byte);
+      9: (DoPtr    : ^Double);
+     10: (SiPtr    : ^Single);
+     11: (ShPtr    : ^ShortInt);
+     12: (ReAPtr   : ^RealArrType);
+     13: (LoAPtr   : ^LongIntArrType);
+     14: (InAPtr   : ^IntegerArrType);
+     15: (WoAPtr   : ^WordArrType);
+     16: (ByAPtr   : ^ByteArrType);
+     17: (ChAPtr   : ^CharArrType);
+     18: (DoAPtr   : ^DoubleArrType);
+     19: (SiAPtr   : ^SingleArrType);
+     20: (ShAPtr   : ^ShortIntArrType);
+  end;
+
+Const
+  TypSize1:array[Retyp..ShTyp] of word =
+    ((SizeOf(Real    )),
+     (SizeOf(LongInt )),
+     (SizeOf(Smallint )),
+     (SizeOf(Word    )),
+     (SizeOf(String  )),
+     (0               ),
+     (SizeOf(Char    )),
+     (SizeOf(Boolean )),
+     (SizeOf(Double  )),
+     (SizeOf(Single  )),
+     (SizeOf(Byte    )),
+     (SizeOf(ShortInt)));
+  TypStr1 :array[ReTyp..ShTyp] of String[08] =
+    (('Real   '),
+     ('Longint'),
+     ('Smallin'),
+     ('Word   '),
+     ('String '),
+     ('- - -  '),
+     ('Char   '),
+     ('Boolean'),
+     ('Double '),
+     ('Single '),
+     ('Byte   '),
+     ('ShortIn'));
+
+  MinAbsSingle=     1.5e-45;
+  MaxSingle   =     3.4e+38;
+
+  MinAbsReal  =     2.9e-39; {Ausgabe: 0.0000000000E+00}
+  MaxReal     =     1.7e+38; {ca.:  0.493409/MinAbsReal}
+
+  MinAbsDouble=     5.0e-324;
+  MaxDouble   =     1.7e308;
+
+  MinInteger  =      -32768;
+  MaxInteger  =      +32767;
+  MinSmallInt =  MinInteger;   // 08.01.09 P.W
+  MaxSmallInt =  MaxInteger;   // 08.01.09 P.W
+  MinLongInt  =    1 shl 31; {=-2147483648 zuweisbar ist aber nur: -2147483647}
+  MaxLongInt  = +2147483647;
+  MinWord     =           0;
+  MaxWord     =       65535;
+  MinByte     =           0;
+  MaxByte     =         255;
+
+  ERR_DiskRead     = 100;
+  ERR_DiskWrite    = 101;
+  Err_FileNotFound =   2;
+
+{--------------------------------------------------------------------}
+  {22.06.99 P.W}              // compare FileMode Const and fmOpen... consts of unit SysUtils
+  FileMode_ReadOnly   = 0;     {  Read only  (Nur Lesen)           }
+  FileMode_WriteOnly  = 1;     {  Write only (Nur Schreiben)       }
+  FileMode_ReadWrite  = 2;     {  Read/Write (Lesen und Schreiben) }
+  FileMode_ReadOtherWrite = 64;{  Pascal may read, Notepad write}
+  { FileMode := FileMode_ReadOnly; may not be changed globaly!
+   (for all files that are "appended" have to use reset and seek)
+  {avoid get problems if reading Files with attribute "READ ONLY"
+    by all functions using Reset together with typed or untyped files}
+    {Default of System.FileMode is FileMode_ReadWrite}
+
+    {Filemode:
+      0: ReadOnly
+      1: Write Only
+      2: Read Write
+      3: ?
+      4: ?
+      5 .. 15: Invalid access mode
+     16: ?
+     32: ?
+     64: Allows Continous reading while a second application rewrites the file
+         Read Only allow others to write
+     64+ 1: no read by us; no write by by others
+     64+ 2: write by us; no write by by others
+     64+ 4: no write by us; but by others
+     64+ 8: Invalid;
+     64+16: Invalid;
+     64+32: Invalid;
+    128: ?
+    255: Invalid access mode
+    256: Constant out of range
+    XX: no mode found where both may write!
+    }
+
+{--------------------------------------------------------------------}
+
+  OldMaxColor = 15;   {21.12.01 P.W}
+
+//  Sep         = ';';  {08.07.02 P.W}  // until 01.04.05 P.W
+    {for Ascii-Exp: start replace";" by Sep}
+    {done for UtAna, UtParam}
+
+
+const
+  TabStopChar = #9;                // 01.04.05 P.W
+  FixSem      = ';';               // 01.04.05 P.W
+  FixSem1     = ';';               // 01.04.05 P.W   where not shure (in QaResults if searched in Strings written with AsciiExpSep)
+
+var
+//  AsciiExpSep : Char = TabStopChar; // ';';        // 01.04.05 P.W
+  AsciiExpSep : Char = FixSem;  // again ";" CsvStat.exe needs ";"! 13.04.05 P.W
+  Glb_MacroFlg : Boolean = False; {17.10.02 P.W} // moved from TKeyApp to  GlbType for use by UMsgDelay 28.07.06 P.W
+  ContourCheckConcave      : Boolean = True;   // 16.07.07 P.W
+  StartPointLongestContour : Boolean = False;  // 16.07.07 P.W
+  DebugCBD                 : Boolean = False;  // 16.07.07 P.W
+
+
+function GetConnectedValueDbl(const Val; ConnectType: TConType): Double;     // 12.03.09 P.W
+function GetConnectedValueStr(const Val; ConnectType: TConType): AnsiString; // 12.03.09 P.W
+procedure SetConnectedValueDbl(var Val; ConnectType: TConType; const aValue: Double);     // 12.03.09 P.W
+procedure SetConnectedValueStr(var Val; ConnectType: TConType; const aValue: AnsiString); // 12.03.09 P.W
+
+function GetConnectedSize(ConnectedType: TConType): Integer;    // 12.03.09 P.W
+function GetConnectedType                 : TConType; overload; // 12.03.09 P.W
+function GetConnectedType(const val: int8): TConType; overload; // 12.03.09 P.W
+function GetConnectedType(const val: int16): TConType; overload; // 12.03.09 P.W
+function GetConnectedType(const val: int32): TConType; overload; // 12.03.09 P.W    
+function GetConnectedType(const val: int64): TConType; overload; // 12.03.09 P.W    
+function GetConnectedType(const val: uInt8): TConType; overload; // 12.03.09 P.W    
+function GetConnectedType(const val: uInt16): TConType; overload; // 12.03.09 P.W   
+function GetConnectedType(const val: uInt32): TConType; overload; // 12.03.09 P.W   
+function GetConnectedType(const val: uInt64): TConType; overload; // 12.03.09 P.W   
+function GetConnectedType(const val: float32): TConType; overload; // 12.03.09 P.W  
+function GetConnectedType(const val: float64): TConType; overload; // 12.03.09 P.W  
+//function GetConnectedType(const val: LVBoolean): TConType; overload; // 12.03.09 P.W
+function GetConnectedType(const val: char2): TConType; overload; // 12.03.09 P.W
+function GetConnectedType(const val: char3): TConType; overload; // 12.03.09 P.W
+function GetConnectedType(const val: char12): TConType; overload; // 12.03.09 P.W   
+function GetConnectedType(const val: char16): TConType; overload; // 12.03.09 P.W   
+function GetConnectedType(const val: char192): TConType; overload; // 12.03.09 P.W  
+function GetConnectedType(const val: AnsiString): TConType; overload; // 12.03.09 P.W
+
+function CharXAnsi(const val: char2): AnsiString; overload;    // 12.03.09 P.W
+function CharXAnsi(const val: char3): AnsiString; overload;    // 12.03.09 P.W
+function CharXAnsi(const val: char12): AnsiString; overload;    // 12.03.09 P.W
+function CharXAnsi(const val: char16): AnsiString; overload;    // 12.03.09 P.W
+function CharXAnsi(const val: char192): AnsiString; overload;    // 12.03.09 P.W
+
+Implementation
+  const Unit_Name = 'GlbType'; // 03.05.24 P.W
+
+procedure InitAppStratec;
+// modifications:
+// 07.01.08 P.W: code of FemurPcForm1.pas FormCreate to procedure
+var
+  Caption : String;
+begin
+  // v============== CAPTION ==================
+  Caption := ExtractFileName(Param_Str(0));
+
+  // --- AppStratec from name:
+  if      (Pos('KNMULTI', UpperCase(Caption)) > 0)
+  then AppStratec := AS_Analyse
+  else if (Pos('FEMURPC', UpperCase(Caption)) > 0)
+  then AppStratec := AS_MeasMod
+  else if (Pos('XBJOB', UpperCase(Caption)) > 0)
+  then AppStratec := AS_XbJob
+  else if (Pos('SVCOMP', UpperCase(Caption)) > 0)
+  then AppStratec :=   AS_SvComp
+  else if (Pos('CTFEM', UpperCase(Caption)) > 0)
+  then AppStratec :=   AS_BackPro
+  else if (Pos('XTRACT', UpperCase(Caption)) > 0)
+  then AppStratec :=   AS_Xtract
+  else if (Pos('XCTDIRECTOR', UpperCase(Caption)) > 0)
+  then AppStratec :=   AS_XctDirector
+  else if (Pos('BNLOCK', UpperCase(Caption)) > 0)
+  then AppStratec :=   AS_BnLock
+  ;
+end;
+
+function GetConnectedValueDbl(const Val; ConnectType: TConType): Double;
+// 12.03.09 P.W
+begin
+  Result := 0;
+  if Assigned(@Val) then
+    case ConnectType of
+      ct_None    : Result := 0;
+      ct_int8    : Result := int8     (Val); // ShortInt
+      ct_int16   : Result := int16    (Val); // SmallInt
+      ct_int32   : Result := int32    (Val); // Integer
+      ct_int64   : Result := int64    (Val); // Int64
+      ct_uInt8   : Result := uInt8    (Val); // Byte
+      ct_uInt16  : Result := uInt16   (Val); // Word
+      ct_uInt32  : Result := uInt32   (Val); // LongWord
+      ct_uInt64  : Result := uInt64   (Val); // ???
+      ct_float32 : Result := float32  (Val); // Single
+      ct_float64 : Result := float64  (Val); // Double
+      ct_LVBool  : Result := LVBoolean(Val); // Byte
+    end;
+end;
+
+function GetConnectedValueStr(const Val; ConnectType: TConType): AnsiString;
+// 12.03.09 P.W
+begin
+  Result := '';
+  if Assigned(@Val) then
+    case ConnectType of
+      ct_char2     : Result := char2     (Val); // [0..1]Char
+      ct_char3     : Result := char3     (Val); // [0..2]Char
+      ct_char12    : Result := char12    (Val); // [0..11]Char
+      ct_char16    : Result := char16    (Val); // [0..15]Char
+      ct_char192   : Result := char192   (Val); // [0..191]Char
+      ct_AnsiString: Result := AnsiString(Val); // AnsiString
+    end;
+end;
+
+procedure SetConnectedValueDbl(var Val; ConnectType: TConType; const aValue: Double);
+// 12.03.09 P.W
+begin
+  if Assigned(@Val) then
+    case ConnectType of
+      ct_int8    : int8     (Val) := Round(aValue); // ShortInt
+      ct_int16   : int16    (Val) := Round(aValue); // SmallInt
+      ct_int32   : int32    (Val) := Round(aValue); // Integer
+      ct_int64   : int64    (Val) := Round(aValue); // Int64
+      ct_uInt8   : uInt8    (Val) := Round(aValue); // Byte
+      ct_uInt16  : uInt16   (Val) := Round(aValue); // Word
+      ct_uInt32  : uInt32   (Val) := Round(aValue); // LongWord
+      ct_uInt64  : uInt64   (Val) := Round(aValue); // uInt64
+      ct_float32 : float32  (Val) :=       aValue ; // Single
+      ct_float64 : float64  (Val) :=       aValue ; // Double
+      ct_LVBool  : LVBoolean(Val) := Round(aValue); // Byte
+    end;
+end;
+
+procedure SetConnectedValueStr(var Val; ConnectType: TConType; const aValue: AnsiString);
+// 12.03.09 P.W
+type
+  charX = Array[0..MaxInt-1] of Char;
+var
+  Siz, Len, I, I1 : Integer;
+begin
+  if Assigned(@Val) then
+  begin
+    case ConnectType of
+      ct_char2     : Siz := SizeOf(char2);   // [0..1]Char
+      ct_char3     : Siz := SizeOf(char3);   // [0..2]Char
+      ct_char12    : Siz := SizeOf(char12);  // [0..11]Char
+      ct_char16    : Siz := SizeOf(char16);  // [0..15]Char
+      ct_char192   : Siz := SizeOf(char192); // [0..191]Char
+      ct_AnsiString: Siz := 0;               // AnsiString
+      else           Siz := 0;
+    end;
+    if ConnectType = ct_AnsiString then
+    begin
+      AnsiString(Val) := aValue;
+    end else
+    begin
+      Len := Length(aValue);
+      I1  := Min(Len, Siz);
+      for I := 0 to I1 -1 do
+        charX(Val)[I] := aValue[I+1];
+      for I := I1 to Siz -1 do
+        charX(Val)[I] := #0;
+    end;
+  end;
+end;
+
+function GetConnectedSize(ConnectedType: TConType): Integer;
+begin
+  case ConnectedType of
+    ct_None      : Result := 0;
+    ct_int8      : Result := SizeOf(int8      ); // ShortInt
+    ct_int16     : Result := SizeOf(int16     ); // SmallInt
+    ct_int32     : Result := SizeOf(int32     ); // Integer
+    ct_int64     : Result := SizeOf(int64     ); // Int64
+    ct_uInt8     : Result := SizeOf(uInt8     ); // Byte
+    ct_uInt16    : Result := SizeOf(uInt16    ); // Word
+    ct_uInt32    : Result := SizeOf(uInt32    ); // LongWord
+    ct_uInt64    : Result := SizeOf(uInt64    ); // uInt64
+    ct_float32   : Result := SizeOf(float32   ); // Single
+    ct_float64   : Result := SizeOf(float64   ); // Double
+    ct_LVBool    : Result := SizeOf(LVBoolean ); // Byte
+    ct_char2     : Result := SizeOf(char2     ); // [0..1]Char
+    ct_char3     : Result := SizeOf(char3     ); // [0..2]Char
+    ct_char12    : Result := SizeOf(char12    ); // [0..11]Char
+    ct_char16    : Result := SizeOf(char16    ); // [0..15]Char
+    ct_char192   : Result := SizeOf(char192   ); // [0..191]Char
+    ct_AnsiString: Result := SizeOf(AnsiString); // AnsiString     // 4!
+    else
+      raise(Exception.CreateFmt('ConnectedType not supported! (%d)', [Ord(ConnectedType)]));
+  end;
+end;
+
+function GetConnectedType: TConType;
+begin
+  Result := ct_None; // ShortInt
+end;
+function GetConnectedType(const val: int8): TConType;
+begin
+  Result := ct_int8; // ShortInt
+end;
+function GetConnectedType(const val: int16): TConType;
+begin
+  Result := ct_int16; // SmallInt 
+end;
+function GetConnectedType(const val: int32): TConType;
+begin
+  Result := ct_int32; // Integer 
+end;         
+function GetConnectedType(const val: int64): TConType;
+begin
+  Result := ct_int64; // Int64 
+end;           
+function GetConnectedType(const val: uInt8): TConType;
+begin
+  Result := ct_uInt8; // Byte 
+end;            
+function GetConnectedType(const val: uInt16): TConType;
+begin
+  Result := ct_uInt16; // Word 
+end;
+function GetConnectedType(const val: uInt32): TConType;
+begin
+  Result := ct_uInt32; // LongWord 
+end;      
+function GetConnectedType(const val: uInt64): TConType;
+begin
+  Result := ct_uInt64; // uInt64 
+end;        
+function GetConnectedType(const val: float32): TConType;
+begin
+  Result := ct_float32; // Single 
+end;      
+function GetConnectedType(const val: float64): TConType;
+begin
+  Result := ct_float64; // Double 
+end;      
+//function GetConnectedType(const val: LVBoolean): TConType;
+//begin
+//  Result := ct_LVBool; // Byte
+//end;
+function GetConnectedType(const val: char2): TConType;
+begin
+  Result := ct_char2; // [0..1]Char 
+end;      
+function GetConnectedType(const val: char3): TConType;
+begin
+  Result := ct_char3; // [0..2]Char 
+end;      
+function GetConnectedType(const val: char12): TConType;
+begin
+  Result := ct_char12; // [0..11]Char
+end;   
+function GetConnectedType(const val: char16): TConType;
+begin
+  Result := ct_char16; // [0..15]Char
+end;
+function GetConnectedType(const val: char192): TConType;
+begin
+  Result := ct_char192; // [0..191]Char
+end;
+function GetConnectedType(const val: AnsiString): TConType;
+begin
+  Result := ct_AnsiString; // AnsiString
+end;
+
+
+function CharAnyToAnsiString(const val; ConnectedType: TConType): AnsiString;    // 12.03.09 P.W
+begin
+  Result := GetConnectedValueStr(val, ConnectedType);
+end;
+
+function CharXAnsi(const val: char2): AnsiString;    // 12.03.09 P.W
+begin
+  Result := CharAnyToAnsiString(val, GetConnectedType(val));
+end;
+function CharXAnsi(const val: char3): AnsiString;    // 12.03.09 P.W
+begin
+  Result := CharAnyToAnsiString(val, GetConnectedType(val));
+end;
+function CharXAnsi(const val: char12): AnsiString;    // 12.03.09 P.W
+begin
+  Result := CharAnyToAnsiString(val, GetConnectedType(val));
+end;
+function CharXAnsi(const val: char16): AnsiString;    // 12.03.09 P.W
+begin
+  Result := CharAnyToAnsiString(val, GetConnectedType(val));
+end;
+function CharXAnsi(const val: char192): AnsiString;    // 12.03.09 P.W
+begin
+  Result := CharAnyToAnsiString(val, GetConnectedType(val));
+end;
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Init  part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+  InitAppStratec; // 07.01.08 P.W here instead of in FemurPcForm1.pas FormCreate
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+  InitAppStratec; // 07.01.08 P.W here instead of in FemurPcForm1.pas FormCreate
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+
+end.
