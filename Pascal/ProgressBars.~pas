@@ -1,0 +1,344 @@
+unit ProgressBars;
+
+interface
+
+uses
+  DebugUnit,        // 03.05.24 P.W
+  InitFinal_List,   // 03.05.24 P.W
+  HaltUnit,         // 03.05.24 P.W
+  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  Dialogs, ComCtrls, Grids, StdCtrls, Menus;
+
+type
+  TProgBarLbl = class
+    ProgBar  : TProgressBar;
+    lbl      : TLabel;
+    Caption0 : String;
+  end;
+
+type
+  TfrmProgBars = class(TForm)
+    ProgBar1: TProgressBar;
+    lblProgBar1: TLabel;
+    ProgBar2: TProgressBar;
+    ProgBar3: TProgressBar;
+    lblProgBar2: TLabel;
+    lblProgBar3: TLabel;
+    lblSeparator1: TLabel;
+    lblSeparator2: TLabel;
+    MainMenu1: TMainMenu;
+    Cancel1: TMenuItem;
+    procedure FormCreate(Sender: TObject);
+    procedure Cancel1Click(Sender: TObject);
+  private
+    fProgBars : Array of TProgBarLbl;
+    FirstStepTime,
+    CreationTime : TDateTime;
+    fLastAppProcMsg : TDateTime;
+    FMonitorDrive: Char;
+    CancelRequest : Boolean;
+    function GetProgBar(Index: Integer): TProgBarLbl;
+    procedure SetProgBar(Index: Integer; const Value: TProgBarLbl);
+    procedure SetCount(const Value: Integer);
+    function GetCount: Integer;
+    function GetCaption(Index: Integer): String;
+    procedure SetCaption(Index: Integer; const Value: String);
+    function GetProgressBar(Index: Integer): TProgressBar;
+    property ProgBar[Index: Integer]: TProgBarLbl Read GetProgBar Write SetProgBar;
+    property Count : Integer read GetCount write SetCount;
+    property ProgBars[Index: Integer]: TProgressBar Read GetProgressBar;
+    property Captions[Index: Integer]: String Read GetCaption Write SetCaption;
+    procedure SetMonitorDrive(const Value: Char);
+  public
+    procedure ProgBarInit(Index: Integer; aCaption: String; aMax: Integer; aStep:Integer=1);
+    procedure AllowCancel;
+    function ProgBarStepIt(Index: Integer): Boolean;
+    property MonitorDrive: Char read FMonitorDrive write SetMonitorDrive;
+  end;
+
+function GlbProgBars : TfrmProgBars;
+
+Implementation
+
+uses Math;
+  const Unit_Name = 'ProgressBars'; // 03.05.24 P.W
+
+{$R *.dfm}
+
+var
+  frmProgBars: TfrmProgBars;
+
+function GlbProgBars : TfrmProgBars;
+begin
+  if not Assigned(frmProgBars) then
+  begin
+    frmProgBars := TfrmProgBars.Create(nil);
+    frmProgBars.Parent := nil;
+  end;
+  Result := frmProgBars;
+end;
+
+{ TfrmProgressBars }
+
+procedure TfrmProgBars.FormCreate(Sender: TObject);
+begin
+  Count := 3;
+  CreationTime := Now;
+  FirstStepTime := CreationTime;
+
+  ProgBar[0].ProgBar := ProgBar1;
+  ProgBar[0].lbl     := lblProgBar1;
+  ProgBar[1].ProgBar := ProgBar2;
+  ProgBar[1].lbl     := lblProgBar2;
+  ProgBar[2].ProgBar := ProgBar3;
+  ProgBar[2].lbl     := lblProgBar3;
+
+  Caption := 'Progress';
+  CancelRequest := False;
+
+  ProgBarInit(0, '', 0);
+  ProgBarInit(1, '', 0);
+  ProgBarInit(2, '', 0);
+
+  ProgBars[0].HandleNeeded;   // otherwise stepIt .. do not work before form is first time visible
+  ProgBars[1].HandleNeeded;
+  ProgBars[2].HandleNeeded;
+
+end;
+
+function TfrmProgBars.GetCount: Integer;
+begin
+  Result := Length(fProgBars);
+end;
+
+procedure TfrmProgBars.SetCount(const Value: Integer);
+var
+  Len, I : Integer;
+begin
+  Len := Length(fProgBars);
+
+  // if shortened:
+  for I := Value to Len -1 do
+    FreeAndNil(fProgBars[I]);
+
+  SetLength(fProgBars, Value);
+
+  // if enlarged:
+  for I := Len to Value -1 do
+    fProgBars[I] := TProgBarLbl.Create;
+
+end;
+
+function TfrmProgBars.GetProgBar(Index: Integer): TProgBarLbl;
+begin
+  if (Index >= 0) and (Index < Count)
+  then Result := fProgBars[Index]
+  else Result := nil;
+end;
+
+procedure TfrmProgBars.SetProgBar(Index: Integer; const Value: TProgBarLbl);
+begin
+  if (Index >= 0) and (Index < Count) then
+  begin
+    fProgBars[Index] := Value;
+  end
+end;
+
+function TfrmProgBars.GetCaption(Index: Integer): String;
+begin
+  if (Index >= 0) and (Index < Count) then
+  begin
+    Result := ProgBar[Index].lbl.Caption;
+  end else
+  begin
+    Result := '';
+  end;
+end;
+
+procedure TfrmProgBars.SetCaption(Index: Integer; const Value: String);
+begin
+  if (Index >= 0) and (Index < Count) then
+  begin
+    ProgBar[Index].lbl.Caption := Value;
+  end;
+end;
+
+function TfrmProgBars.GetProgressBar(Index: Integer): TProgressBar;
+begin
+  if (Index >= 0) and (Index < Count) then
+  begin
+    Result := ProgBar[Index].ProgBar;
+  end else
+  begin
+    Result := nil;
+  end;
+end;
+
+procedure TfrmProgBars.ProgBarInit(Index: Integer; aCaption: String; aMax: Integer; aStep:Integer=1);
+begin
+  Cancel1.Visible := False;
+  CancelRequest := False;
+  if (Index >= 0) and (Index < Count) then
+  begin
+    Captions[Index]          := aCaption;
+    ProgBar [Index].Caption0 := aCaption;
+    ProgBars[Index].Position := 0;
+    ProgBars[Index].Max      := Max(0, aMax);
+    ProgBars[Index].Step     := aStep;
+  end;
+end;
+
+procedure TfrmProgBars.AllowCancel;
+begin
+  Cancel1.Visible := True;
+end;
+
+function TfrmProgBars.ProgBarStepIt(Index: Integer): Boolean;
+
+const
+  SecPerDay = 24.0 * 3600;
+
+  function AllProgBarsReady: Boolean;
+  var
+    I : Integer;
+  begin
+    Result := False;
+
+    for I := Count -1 downto 0 do
+      if ProgBars[I].Position < ProgBars[I].Max
+        then EXIT;
+
+    Result := True;
+  end;
+
+  function MaxUsedIdx : Integer;
+  var
+    I : Integer;
+  begin
+    for I := Count -1 downto 0 do
+      if ProgBars[I].Max > 0 then
+      begin
+        Result := I;
+        EXIT;
+      end;
+    Result := -1;
+  end;
+
+  function TotalMax(IdxStart: Integer = 0) : Integer;
+  var
+    I : Integer;
+  begin
+    Result := 1;
+    for I := IdxStart to Count -1 do
+      Result := Result * Max(1, ProgBars[I].Max);
+  end;
+
+  function TotalPosition : Integer;
+  var
+    I : Integer;
+  begin
+    Result := 0;
+    for I := 0 to Count -1 do
+      Result := Result + (ProgBars[I].Position -1) * TotalMax(I+1);
+  end;
+
+  procedure EstimateTimes(TimNow: TDateTime);
+  var
+    SecUsed, SecEst, SecRem : Double;
+  begin
+    SecUsed := Abs(TimNow - FirstStepTime) * SecPerDay;
+    if SecUsed > 0 then
+    begin
+      SecEst := SecUsed * TotalMax / Max(1, TotalPosition);
+      SecRem := SecEst - SecUsed;
+      lblSeparator2.Caption := Format('%1.0f/%1.0f (%1.0f) Sec.', [SecUsed, SecEst, SecRem]);
+    end;
+  end;
+var
+  TimNow : TDateTime;
+  PB : TProgressBar;
+begin
+  TimNow := Now;
+  if (Index >= 0) and (Index < Count) then
+  begin
+    PB := ProgBars[Index];
+    if (Index = 0) and (PB.Position = 0) then FirstStepTime := TimNow;
+    PB.StepIt;
+
+    if Abs(TimNow - fLastAppProcMsg) > 0.1 / SecPerDay then
+    begin
+      if (not Visible) and (Abs(TimNow - CreationTime) > 2.0 / SecPerDay) then Show;
+      Captions[Index] := ProgBar[Index].Caption0 + Format(' %d/%d', [PB.Position, PB.Max]);
+      EstimateTimes(TimNow);
+      Application.ProcessMessages;
+
+
+      if MonitorDrive > #0 then
+      begin
+        lblSeparator1.Caption :=
+          Format(
+            'Disk %s free %d [MB]',
+            [MonitorDrive, DiskFree(Ord(Upcase(MonitorDrive))-Ord('A') + 1) div (1024 * 1024)]);
+      end;
+      fLastAppProcMsg := Now;
+    end;
+
+    if AllProgBarsReady then Hide;
+  end;
+  Result := CancelRequest;
+end;
+
+procedure Test;
+var
+  fP : TfrmProgBars;
+  I : Integer;
+begin
+  fP := GlbProgBars;
+
+  fp.Caption := 'Test GlbProgBars';
+  fP.ProgBarInit(0, 'Files:',               100);
+  fP.ProgBarInit(1, 'Read DBI File',         10);
+  fP.ProgBarInit(2, 'Write Ascii Results', 1000);
+
+  for I := 1 to 20 do
+    fP.ProgBarStepIt(0);
+
+  for I := 1 to 2 do
+    fP.ProgBarStepIt(1);
+
+  for I := 1 to 200 do
+    fP.ProgBarStepIt(2);
+
+  fP.ShowModal;
+
+  FreeAndNil(frmProgBars);
+  H_alt(1);
+end;
+
+procedure TfrmProgBars.SetMonitorDrive(const Value: Char);
+begin
+  FMonitorDrive := Value;
+end;
+
+procedure TfrmProgBars.Cancel1Click(Sender: TObject);
+begin
+  CancelRequest := True;
+end;
+
+function Unit_Final(aMode: Integer=0): Integer;
+// Finalization part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  FreeAndNil(frmProgBars);
+end;
+initialization
+  InitFinal_Add(Unit_Name, nil, Unit_Final);
+//  Test;
+
+finalization
+(* -v--- moved to function Unit_Final // 03.05.24 P.W
+  FreeAndNil(frmProgBars);
+   -^--- moved to function Unit_Final // 03.05.24 P.W *)
+
+
+end.

@@ -1,0 +1,1593 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; changes: 3; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; changes: 15; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; changes: 1; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; changes: 12; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; changes: 3; (02.03.04 P.W)
+(*.+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+TKeyApp: application objects
+Input   :
+OutPut  :
+Version : @(#) KN_TApp.pas V:1.0
+Author  : M.Welsch
+Date    : 25.08.92
+Modified:
+Modification log:
+{03.06.93 Michael Welsch}
+{20.07.93 Michael Welsch} see c_510_2
+{04.12.93 } AT -> AltT, wg kollision mit TOPAZ commando At(...)
+{13.04.95 Michael Welsch}
+child TApp2 added,
+KeyMouseHandler,KeyToExtCode moved in TApp
+-> all Objects that uses keyboard input must be a child of TApp or must have
+an instance of TApp.
+{16.10.95 Michael Welsch} new macro mode MExtAutoRead/Write: used for
+startup automatic calculation coded in the job file XBANA.txt.
+{22.03.96 Michael Welsch} Accelarator from P.W. in TApp.KeyMouseHandler
+implemented. AccOn and AccOff can swith accelerator on/off.
+{05.11.96 Michael Welsch}
+Procedure TApp.SetKeystrokeMacroMode;
+{19.11.96 Michael Welsch}
+{19.12.96 MW} Macrofilename maybe the filename only. It will be extended
+with LocInitDir.
+{07.04.97 MW}
+  SaveMyState:=MNotActive; {07.04.97 MW} in ErrorMacro and CloseStream
+{18.04.97 MW}
+TApp.SkipKeyRangeCheck: Boolean;     {17.04.97 MW, used in menu hotkeys}
+{14.07.97 MW}
+  MANUALOBJECT       :  Byte  = 3;  {14.07.97 MW, stop for manual definition}
+{05.10.01 P.W}
+  Macro header (ASCII file) with creation date and time
+{23.10.01 P.W}
+  Function  TApp.CheckPicture
+  added PictureCh = '+' for positive floating points numbers
+{23.10.01 P.W} // until 28.07.06 P.W
+  CF8 supported to write a hardcopy of the graphic screen into
+      Temp\Screens\Scr#####.pcx
+  Handled by: FilScHookFunc and CF8_Pressed; FilScHookFunc will be
+  activated by KN_Print
+  // handled by FemurPcForm1
+{23.10.01 P.W}
+  Correction for support of Key "CPgUp" (Ctrl+PageUp):
+  ExtCodeAry : Entry of CPgUp was not on position 132 but on 131
+               (exchanged CPgUp with nomove at Pos 131 and 132)
+{04.06.02 P.W}
+  CF9 supported to export all images as *.CGM to Patient Folder
+{17.10.02 P.W}
+  Const Glb_MacroFlg added
+{24.10.02 P.W} Function TMacro.OpenRead no longer uses beep
+22.01.07 P.W: added CPgUp CPgDwn CPgUp_Pressed CPgDwn_Pressed
+  for use by UTKnApp like PgUp and PgDwn with Toogle 20 instead of 1
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+
+Unit TKeyApp;
+{$F+}
+{$O+}
+
+INTERFACE
+Uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  UseDelphi, // 30.04.04 P.W
+  Objects,
+  CRT,
+  Dos,
+  ErrConst,
+  UTGenOb, {19.11.96 Michael Welsch}
+  GlbDecs,
+  IOTools,
+  Accel,
+  ComNames,
+  GlbPath,
+  GlbFT,
+  GlbTools;
+
+Type                   {F11, F12 are not detected by ReadKey}
+    TExtCode    =
+    (nomove,NUL   ,STAB  ,AQ    ,AW    ,AE    ,AR    ,AltT  ,AY    ,AU    ,    // 000 .. 009
+     AI    ,AO    ,AP    ,AA    ,AS_   ,AD    ,AF    ,AG    ,AH    ,AJ    ,    // 010 .. 019
+     AK    ,AL    ,AZ    ,AX    ,AC    ,AV    ,AB    ,AN    ,AM    ,F1    ,    // 020 .. 029
+     F2    ,F3    ,F4    ,F5    ,F6    ,F7    ,F8    ,F9    ,F10   ,HOME  ,    // 030 .. 039
+     UP    ,PGUP  ,LEFT  ,RIGHT ,ENDE  ,DWN   ,PGDWN ,INS   ,DEL   ,SF1   ,    // 040 .. 049
+     SF2   ,SF3   ,SF4   ,SF5   ,SF6   ,SF7   ,SF8   ,SF9   ,SF10  ,CF1   ,    // 050 .. 059
+     CF2   ,CF3   ,CF4   ,CF5   ,CF6   ,CF7   ,CF8   ,CF9   ,CF10  ,AF1   ,    // 060 .. 069
+     AF2   ,AF3   ,AF4   ,AF5   ,AF6   ,AF7   ,AF8   ,AF9   ,AF10  ,CPTRSC,    // 070 .. 079
+     CLEFT ,CRIGHT,CEND  ,CPGDWN,CHOME ,A1    ,A2    ,A3    ,A4    ,A5    ,    // 080 .. 089
+     A6    ,A7    ,A8    ,A9    ,A0    ,CPGUP ,F11   ,F12   ,SF11  ,SF12  ,    // 090 .. 099
+     CF11  ,CF12  ,AF11  ,AF12  ,CR    ,ESC   ,BCKSP ,TAB   ,TASTE ,MOUSE ,    // 100 .. 119
+     _MOVE ,L_BUT ,M_BUT ,R_BUT  );                                            // 120 .. 123
+
+    TExtCodeAry =  Array[0..140] Of TExtCode;
+
+    TSetOfExtCode = Set Of TExtCode;
+
+Const
+    ExtCodeAry : TExtCodeAry =
+    (nomove,nomove,nomove,NUL   ,nomove,nomove,nomove,nomove,nomove,nomove,    // 000 .. 009
+     nomove,nomove,nomove,nomove,nomove,STAB  ,AQ    ,AW    ,AE    ,AR    ,    // 010 .. 019
+     AltT  ,AY    ,AU    ,AI    ,AO    ,AP    ,nomove,nomove,nomove,nomove,    // 020 .. 029
+     AA    ,AS_   ,AD    ,AF    ,AG    ,AH    ,AJ    ,AK    ,AL    ,nomove,    // 030 .. 039
+     nomove,nomove,nomove,nomove,AZ    ,AX    ,AC    ,AV    ,AB    ,AN    ,    // 040 .. 049
+     AM    ,nomove,nomove,nomove,nomove,nomove,nomove,nomove,nomove,F1    ,    // 050 .. 059
+     F2    ,F3    ,F4    ,F5    ,F6    ,F7    ,F8    ,F9    ,F10   ,nomove,    // 060 .. 069
+     nomove,HOME  ,UP    ,PGUP  ,nomove,LEFT  ,nomove,RIGHT ,nomove,ENDE  ,    // 070 .. 079
+     DWN   ,PGDWN ,INS   ,DEL   ,SF1   ,SF2   ,SF3   ,SF4   ,SF5   ,SF6   ,    // 080 .. 089
+     SF7   ,SF8   ,SF9   ,SF10  ,CF1   ,CF2   ,CF3   ,CF4   ,CF5   ,CF6   ,    // 090 .. 099
+     CF7   ,CF8   ,CF9   ,CF10  ,AF1   ,AF2   ,AF3   ,AF4   ,AF5   ,AF6   ,    // 100 .. 009
+     AF7   ,AF8   ,AF9   ,AF10  ,CPTRSC,CLEFT ,CRIGHT,CEND  ,CPGDWN,CHOME ,    // 110 .. 119
+     A1    ,A2    ,A3    ,A4    ,A5    ,A6    ,A7    ,A8    ,A9    ,A0    ,    // 120 .. 129
+     nomove,nomove,CPGUP ,F11   ,F12   ,SF11  ,SF12  ,CF11  ,CF12  ,AF11  ,    // 130 .. 139
+     AF12   );                                                                 // 140
+
+Type
+     tMacroVersion      = String[10];  {23.10.01 P.W}
+const
+    {MACROVERSION       :  tMacroVersion ='VER 2.1';}
+     MACROVERSION       :  tMacroVersion ='VER 2.2'; {23.10.01 P.W}
+       {^-- "VER 2.2" signals additional ParFilterInfo stored}
+     MinMacroVersSupported               ='VER 2.1'; {23.10.01 P.W}
+     MinMacroVersParFilterInfo           ='VER 2.2'; {23.10.01 P.W}
+
+     MACROCALLBACK      :  PProcedure= NIL; { gets called when macrostate is changing }
+                                            { used to call "Logo"}
+
+     EXTMACROEXT        :  String04 ='.CHE';
+     KEYMACROEXT        :  String04 ='.CHA';
+(*     EXTMACROLOC        :  PathStr  ='..\init\';*)
+
+     LOADOBJECT         :  Byte  = 0; {29.04.96 Michael Welsch, serves to skip ROI in macro}
+     SKIPOBJECT         :  Byte  = 1;
+     DYNAMICOBJECT      :  Byte  = 2;  {28.11.96 MW, dynamic reaction in macro replay
+                                       like selecting a ROI by it's name }
+     MANUALOBJECT       :  Byte  = 3;  {14.07.97 MW, stop for manual definition}
+     CONTHEADLEN        :  Byte  = 50; {26.11.96 Michael Welsch}
+
+Type
+
+     TMacroState         = (MNotActive,
+                            MRead,
+                            MExtRead,
+                            MWrite,
+                            MExtWrite,
+                            MExtAutoWrite,
+                            MExtAutoRead);
+const
+    MacroReadSet  = [MRead,  MExtRead,  MExtAutoRead ];  // 27.06.05 P.W
+    MacroWriteSet = [MWrite, MExtWrite, MExtAutoWrite];  // 27.06.05 P.W
+
+type
+     PMacroHeader        =  ^TMacroHeader; {26.11.96 Michael Welsch}
+     TMacroHeader        =  Packed Record // "Record" to "Packed Record" Chg#1649 (02.03.04 P.W)
+       _MACROVERSION     :  tMacroVersion; {version of macro format}
+       HeadLen           :  LongInt;       {length of this header }
+       SingleSliceFlg    :  Boolean;       {TRUE=single slice macro, FALSE = multi slice macro}
+       StartSliceNum     :  Smallint;       {only for multi slice macro: slice number to start from}
+       Reserve           :  String15;      { for further developement}
+     end;
+
+     { 11.08.95 Michael Welsch
+       Beschreibung der Funktion:
+       1. Modus "Keystrokerecorder" = MWRITE,MREAD
+          Es werden legiglich alle Tastatureingaben in einem Stream
+          auf der Platte gespeichert. Es findet beim Abspielen keine
+          Kontrolle über die mögliche ausführung der gewünschten Menü- //OemToAnsi Chg#1664 (02.03.04 P.W)
+          punkte statt! Standardextension = .CHA!
+       2. Modus "Erweiterter Macromodus" = MEXTWRITE,MEXTREAD
+          Die verschiedenen (Dialog)Objecte speichern spezifische Daten
+          im Macrostream ab. (z.B. Koordinaten eines ROI, MenüIDs usw). //OemToAnsi Chg#1663 (02.03.04 P.W)
+          Beim Abspielen findet die normale Kontrolle der MenüIDs statt! //OemToAnsi Chg#1662 (02.03.04 P.W)
+          Macroschreiben und lesen beginnt jeweils an definierten Positionen
+          d.h. schreiben und lesen bei definierten Anfangsbedingungen.
+          Im header eines Macro wird eine Versionsnummer gespeichert.
+          Macros mit ungültiger Versionsnummer werden abgelehnt. //OemToAnsi Chg#1661 (02.03.04 P.W)
+          Standardextension = .CHE!
+       3. Modus "Erweiterter Macromodus für automatische Auswertung" //OemToAnsi Chg#1660 (02.03.04 P.W)
+                 = MEXTAUTOWRITE,MEXTAUTOREAD
+          In der Meßmaske kann für jeden SITE eine startsequenz als //OemToAnsi Chg#1659 (02.03.04 P.W)
+          autom. Auswertung definiert werden. Sie wird von xbprep.exe (P.W.)
+          in die Datei ..\INTER\XBANA.TXT übertragen. Diese Startsequenz wird //OemToAnsi Chg#1658 (02.03.04 P.W)
+          nur beim ersten Aufruf der Messung, also in der Regel direkt
+          nach der Messung automatisch durchgeführt. Der Menüpunkt "Auto" //OemToAnsi Chg#1657 (02.03.04 P.W)
+          startet diese Sequenz auch später. Ausgewertet werden alle Slices. //OemToAnsi Chg#1656 (02.03.04 P.W)
+          Im Unterschied zu 2. werden keine Parameter und Roidaten etc im
+          Macro gespeichert, lediglich ein Roiname kann in der Sequenz
+          spezifiziert werden. Der Roiname wird allerdings nur als Vorschlag
+          gewertet, d.h. falls kein ROI dieses Namens vorhanden ist, wird das
+          aktuelle ROI genommen.
+          Es werden nicht alle Menüpunkte unterstützt (sind als Startsequenz //OemToAnsi Chg#1655 (02.03.04 P.W)
+          auch nicht sinnvoll!). Die Startsequenz dient hauptsächlich der //OemToAnsi Chg#1654 (02.03.04 P.W)
+          automatisierung der Standardanwendungen.
+          Unterstützt werden: //OemToAnsi Chg#1653 (02.03.04 P.W)
+          - alle Auswertungen: CALCBD,CORTBD...
+          - alle Unterpunkte der Auswertungen: TREND,REFERENCE,PRINT...
+          - Programmende : END, d.h. Programmende nach dem letzten Slice
+     ACHTUNG: NUR EINE INSTANZ BENUTZEN !!!!
+     }
+
+     PMacro              = ^TMacro;
+     TMacro              = Object(TObject_TP7)  {26.05.93 Michael Welsch} // "TObject" to "TObject_TP7" Chg#1634 (02.03.04 P.W)
+       MacroWait    :       Word;
+       MacroStream  :       PBufStream;
+       MacroContStream  :       PBufStream;
+       MacroState   :       TMacroState;
+       SaveMyState  :       TMacroState;
+       MacroRuns    :       Boolean;       // added to detect a macro that is waiting for user input 04.04.08 P.W
+       MacroFileName:       PathStr;
+       Error        :       Smallint;
+       EndAfterMacro   :       Boolean;
+       MacroHeader  :       PMacroHeader;   {23.10.01 P.W}
+             {^-- aim: enable reading of older versions}
+             {^-  will be set by Read- Write- GetDef- MacroHeader
+                          and by OpenRead }
+(*       RWCharFlg    :       Boolean;*)
+       Constructor Init;
+       Destructor  Done; virtual;
+       { used for persistance...}
+       Constructor Load(var S:TStream_TP7); // "TStream" to "TStream_TP7" Chg#1637 (02.03.04 P.W)
+       Procedure   Store(var S:TStream_TP7);virtual; // "TStream" to "TStream_TP7" Chg#1638 (02.03.04 P.W)
+       {..}
+       Function    Read(Var V;Size:Word):Smallint;
+       Function    CheckRead:Smallint;
+       Function    Write(Var V;Size:Word):Smallint;
+       Procedure   WriteContent(Str:String);
+       Function    _ExtMacroExist:Boolean; {23.07.97 MW}
+       Procedure   _PrepFileName(State:TMacroState);
+       Function    OpenRead(State:TMacroState):Smallint;
+       Function    OpenWrite(State:TMacroState;UseExisting:Boolean):Smallint;
+       Function    CloseStream:Smallint;
+       Procedure   ErrorMacro;
+       Procedure   GetNextItem(Var HCH:Char;RWCharFlg:Boolean);
+       Procedure   DoStopMacroNextSlice;
+       Procedure   DoStopMacro;
+       Procedure   PauseMacro;
+       Procedure   ResumeMacro;
+       Procedure   WriteMacroHeader(Var NH:TMacroHeader);
+       Function    ReadMacroHeader(Var NH:TMacroHeader):Smallint;
+       Procedure   SetMacroSliceType(SingleSliceType:Boolean);
+       Procedure   GetDefMacroHeader(Var NH : TMacroHeader);
+       Function    GetMacroVersion: TMacroVersion;   {23.10.01 P.W}
+     end;
+
+     PApp     =       ^TApp;
+     TApp     =       Object(TObject_TP7) // "TObject" to "TObject_TP7" Chg#1635 (02.03.04 P.W)
+     {  Allgemeines Object:
+     {  UKeyHandler steuert die Verarbeitung der üblichen Funktionstasten: //OemToAnsi Chg#1652 (02.03.04 P.W)
+     {  F1-F10, UP, DWM, PGUP, PGDWN, LEFT, RIGHT, HOME, ENDE, INS, DEL, BCKSP
+     {  Weiter Funktionstasten können mit MoreKeyHandler bearbeitet werden. //OemToAnsi Chg#1651 (02.03.04 P.W)
+     }
+     Listener   :       PApp;
+     Speaker    :       PApp;
+     FlowEvent  :       Boolean;
+     ExtCode    :       TExtCode;
+     InpCh      :       Char;
+     KeyFlg     :       Boolean;
+     { determines the behaviour in Macro MExtRead/Write mode
+       RWCharFlg is FALSE for default, that means the object doesn't save
+       just keystrokes but more complex data (like TGenButtonManager)
+       If RWCharFlg is TRUE, the object makes no difference for extended and
+       normal macro mode !}
+     RWCharFlg  :       Boolean;
+     Acc        :       PAccel;      {22.03.96 Michael Welsch}
+     SkipKeyRangeCheck: Boolean;     {17.04.97 MW, used in menu hotkeys}
+     Constructor Init;
+     Destructor Done;virtual;
+     { used for persistance...}
+     Constructor Load(var S:TStream_TP7); // "TStream" to "TStream_TP7" Chg#1639 (02.03.04 P.W)
+     Procedure  Store(var S:TStream_TP7);virtual; // "TStream" to "TStream_TP7" Chg#1640 (02.03.04 P.W)
+     {..}
+     Procedure ConnectListener(L:PApp);
+     Procedure DisConnectListener;
+     Function  GetExtCode:Boolean;Virtual;
+     Procedure KeyToExtCode;
+     Procedure AccOn;   {22.03.96 Michael Welsch}
+     Procedure AccOff;  {22.03.96 Michael Welsch}
+     FUNCTION  KeyMouseHandler(                         VAR MX,MY:REAL;
+                                 XLow,YLow,XHigh,YHigh:Real;XSTEP:REAL;YSTEP:REAL):TExtCode;
+
+     Procedure UKeyHandler; Virtual;
+     Procedure MoreKeyHandler; Virtual;
+     Function  CheckPicture(PictureCH:Char):Boolean;Virtual;
+
+     Procedure F1_Pressed; Virtual;
+     Procedure F2_Pressed; Virtual;
+     Procedure F3_Pressed; Virtual;
+     Procedure F4_Pressed; Virtual;
+     Procedure F5_Pressed; Virtual;
+     Procedure F6_Pressed; Virtual;
+     Procedure F7_Pressed; Virtual;
+     Procedure F8_Pressed; Virtual;
+     Procedure CF9_Pressed; Virtual;   {04.06.02 P.W}
+     Procedure F9_Pressed; Virtual;
+     Procedure F10_Pressed; Virtual;
+     Procedure UP_Pressed; Virtual;
+     Procedure DWN_Pressed; Virtual;
+     Procedure PGUP_Pressed; Virtual;
+     Procedure PGDWN_Pressed; Virtual;
+     Procedure CPGUP_Pressed; Virtual;  // 22.01.07 P.W
+     Procedure CPGDWN_Pressed; Virtual; // 22.01.07 P.W
+     Procedure LEFT_Pressed; Virtual;
+     Procedure RIGHT_Pressed; Virtual;
+     Procedure HOME_Pressed; Virtual;
+     Procedure ENDE_Pressed; Virtual;
+     Procedure INS_Pressed; Virtual;
+     Procedure DEL_Pressed; Virtual;
+     Procedure BCKSP_Pressed; Virtual;
+     Procedure TASTE_Pressed;Virtual;
+     Procedure TAB_Pressed;Virtual;
+     Procedure IdleTask;Virtual;{Overwritten by TMenuApp.Pas TMenApp.IdleTask}
+     Procedure SetKeystrokeMacroMode; {05.11.96 Michael Welsch}
+     end;
+
+     {11.04.95 Michael Welsch
+      GetExtCode returns alwyas with true, the routine is running in a loop until a key is pressed
+     }
+     TApp2     =       Object(TApp)
+     HelpContext    :  WORD;
+     Function  GetExtCode:Boolean;Virtual;
+     Function  RunKeyBoard:TExtCode;Virtual;
+     { used for persistance...}
+     Constructor Load(var S:TStream_TP7); // "TStream" to "TStream_TP7" Chg#1641 (02.03.04 P.W)
+     Procedure  Store(var S:TStream_TP7);virtual; // "TStream" to "TStream_TP7" Chg#1642 (02.03.04 P.W)
+     {..}
+     end;
+
+Const
+   TAppErrorLog         :String[12] = 'AppError.log';
+   MACROBUFSIZE         =  128;
+var // const
+  RApp : TStreamRec = (
+    ObjType           :100;
+    VmtLink           :TypeOf(TApp); // "Ofs(TypeOf" to "TypeOf" Chg#3703 (02.03.04 P.W)
+    Load              :@TApp.Load;
+    Store             :@TApp.Store );
+  RApp2 : TStreamRec = (
+    ObjType           :101;
+    VmtLink           :TypeOf(TApp2); // "Ofs(TypeOf" to "TypeOf" Chg#3704 (02.03.04 P.W)
+    Load              :@TApp2.Load;
+    Store             :@TApp2.Store );
+  RMacro : TStreamRec = (
+    ObjType           :102;
+    VmtLink           :TypeOf(TMacro); // "Ofs(TypeOf" to "TypeOf" Chg#3705 (02.03.04 P.W)
+    Load              :@TMacro.Load;
+    Store             :@TMacro.Store );
+
+//Const
+//   Glb_MacroFlg : Boolean = False; {17.10.02 P.W} // moved from TKeyApp to  GlbType for use by UMsgDelay 28.07.06 P.W
+Var
+   Macro                  :       TMacro;      {11.08.95 Michael Welsch, global instance of macro}
+   GlbSaveMacroExtFileName:       PathStr;
+   GlbIdleProc            :       TProcedure;
+
+//   PtrScHookProc          :       TProcedure;
+//   FilScHookFunc          :       TFuncStr  ;  {23.10.01 P.W} // until 28.07.06 P.W (not used under windows)
+     {^-- like PrintScreen but only to file (Temp\Screens\Scr#####.pcx)}
+
+   {23.01.96 Michael Welsch}{ temp. used in extended macro mode }
+   MacroSliceColl         :       PCollection;
+
+Procedure EmptyKeyBuf;
+(*
+Procedure KeyToExtCode(Var Ch:Char;Var ExtCode:TExtCode);
+FUNCTION KeyMouseHandler(                         VAR MX,MY:REAL;
+                            XLow,YLow,XHigh,YHigh:Real;STEP:REAL;
+                                                     Var CH:Char):TExtCode;
+Function  KNWatchKeys(SetOfExtCode:TSetOfExtCode):Boolean;
+*)
+Procedure StopProc;
+Procedure RegisterTKeyApp;
+Implementation
+  const Unit_Name = 'TKeyApp'; // 03.05.24 P.W
+
+Procedure RegisterTKeyApp;
+begin
+  RegisterType(RApp);
+  RegisterType(RApp2);
+  RegisterType(RMacro);
+end;
+{---------------------------------------------------------------------------}
+Procedure EmptyKeyBuf;
+begin
+     If KeyPressed Then
+     begin
+        Repeat
+          ReadKey;
+        Until Not(KeyPressed);
+     end;
+end;
+{---------------------------------------------------------------------------}
+
+{----------------------------------------------------------------------------}
+Procedure StopProc;
+begin
+   EmptyKeyBuf;
+   Beep(1000,0.5);
+   Repeat Until KeyPressed;
+   EmptyKeyBuf;
+end;
+{----------------------------------------------------------------------------}
+{     TMacro              = Object(TObject_TP7)   {26.05.93 Michael Welsch} // "TObject" to "TObject_TP7" Chg#1636 (02.03.04 P.W)
+{----------------------------------------------------------------------------}
+Constructor TMacro.Init;
+begin
+  inherited Init;
+  MacroState:=MNotActive;
+  SaveMyState:=MNotActive;
+  MacroRuns := False; // 04.04.08 P.W
+  MacroWait:=0;
+  MacroFileName:= 'AppMacro.cha';
+  MacroStream:=NIL;
+  MacroContStream:=NIL;
+  MacroHeader:=NIL;  {23.10.01 P.W}
+  Error:=0;
+  EndAfterMacro:=FALSE;
+end;
+{----------------------------------------------------------------------------}
+Destructor  TMacro.Done;
+begin
+  CloseStream;
+  If Assigned(MacroHeader) then {23.10.01 P.W}
+    Dispose(MacroHeader);
+
+  inherited Done;
+end;
+{----------------------------------------------------------------------------}
+{ used for persistance...}
+Constructor TMacro.Load(var S:TStream_TP7); // "TStream" to "TStream_TP7" Chg#1643 (02.03.04 P.W)
+Var
+  MacroPos     :       LongInt;
+begin
+  S.Read(MacroState,SizeOf(MacroState));
+  S.Read(SaveMyState,SizeOf(SaveMyState));
+  S.Read(MacroWait,SizeOf(MacroWait));
+  S.Read(MacroPos,SizeOf(MacroPos));
+  S.Read(MacroFileName,SizeOf(MacroFileName));
+  S.Read(Error,SizeOf(Error));
+  S.Read(EndAfterMacro,SizeOf(EndAfterMacro));
+  MacroStream:=NIL;
+  MacroContStream:=NIL;
+  MacroHeader:=NIL;  {23.10.01 P.W}
+  If MacroState<>MNotActive Then
+  begin
+    Case MacroState  Of
+      MRead,MExtRead,MExtAutoRead    : OpenRead(MacroState);
+      MWrite,MExtWrite,MExtAutoWrite : OpenWrite(MacroState,TRUE);
+    end;
+    If Error=0 Then
+    begin
+      MacroStream^.Seek(MacroPos);
+      Error:=MacroStream^.Status;
+    end;
+  end;
+  If MacroState=MExtWrite Then         {19.11.96 Michael Welsch}
+  begin
+    S.Read(MacroPos,SizeOf(MacroPos));
+    If MacroContStream<>NIL Then
+       MacroContStream^.Seek(MacroPos);
+  end;
+
+end;
+{----------------------------------------------------------------------------}
+Procedure   TMacro.Store(var S:TStream_TP7); // "TStream" to "TStream_TP7" Chg#1644 (02.03.04 P.W)
+Var
+  MacroPos     :       LongInt;
+begin
+  S.Write(MacroState,SizeOf(MacroState));
+  S.Write(SaveMyState,SizeOf(SaveMyState));
+  S.Write(MacroWait,SizeOf(MacroWait));
+  If MacroState<>MNOTActive Then
+     MacroPos:=MacroStream^.GetPos
+  else
+     MacroPos:=0;
+  S.Write(MacroPos,SizeOf(MacroPos));
+  S.Write(MacroFileName,SizeOf(MacroFileName));
+  S.Write(Error,SizeOf(Error));
+  S.Write(EndAfterMacro,SizeOf(EndAfterMacro));
+  If MacroState=MExtWrite Then
+  begin
+    MacroPos:=MacroContStream^.GetPos;
+    S.Write(MacroPos,SizeOf(MacroPos));
+  end;
+end;
+{----------------------------------------------------------------------------}
+(*.**************************************************************************)
+Function    TMacro.CheckRead:Smallint;
+(***************************************************************************
+Date/Author      :{11.08.95 Michael Welsch}
+Description      : check before and after read operation. If the end of
+the stream is reached, (Status=stReadError = -3) the macrostate is reseted
+to MNotActive.
+ATTENTION: This Proc. is called automatically by Read(..). If direct reading
+(by MacroStream^.Read(..)) is used, capsulate the reading like this:
+If Macro.CheckRead=0 Then
+begin
+  MacroStream^.Read(..)
+  Macro.CheckRead;
+end
+***************************************************************************
+return           : 0 = OK, -3=EOF or not avail.
+heap             : x, call closestream
+Global Variables
+ - affected      : x, TApperrorlog file may be changed
+ - predefined    :
+---------------------------------------------------------------------------
+virtual          :
+change  status   : x
+***************************************************************************
+Date/Modification:
+**************************************************************************.*)
+Var
+  txt            :    Text;
+  Res   :       Smallint;
+begin
+  If MacroStream=NIL Then
+  begin
+    CheckRead:=stReadError;
+    Exit;
+  end;
+  Res:=MacroStream^.Status;
+  If (Res=0) And
+     (MacroStream^.GetPos=MacroStream^.GetSize) Then
+     Res:=stReadError;            { reach EOF }
+  If (Res<>0) Then
+  begin
+    If (Res<>stReadError) Then
+    begin
+      Assign(txt,FExpand(TAppErrorlog)); // FExpand added (04.03.04 P.W)
+      If FileExist(TAppErrorlog) Then Append(txt)
+      else Rewrite(txt);
+      Writeln(txt,FT_( '=',MU,30));
+      Writeln(txt,'Macroerror: IoResult=',Res);
+      Writeln(txt,FT_( '=',MU,30));
+      Close(txt);
+    end;
+    CloseStream;
+    ErrorMacro;
+  end;
+  CheckRead:=Res;
+end;
+{----------------------------------------------------------------------------}
+Function    TMacro.Read(Var V;Size:Word):Smallint;
+{ return : 0 = success, caller can use V,
+         <>0 = fail,V is not changed
+}
+Var
+  Res            :    Smallint;
+begin
+  If MacroWait<>0 Then Delay(MacroWait);
+
+  Res:=CheckRead;
+  If Res=0 Then
+  begin
+    MacroStream^.Read(V,Size);
+    Res:=MacroStream^.Status;
+(*    CheckRead; *) {13.10.95 Michael Welsch}
+  end;
+  Read:=Res;
+end;
+{----------------------------------------------------------------------------}
+Function    TMacro.Write(Var V;Size:Word):Smallint;
+begin
+  MacroStream^.Write(V,Size);
+  Write:=MacroStream^.Status;
+end;
+{----------------------------------------------------------------------------}
+(*.**************************************************************************)
+Function    TMacro.OpenWrite
+ (
+  State         :TMacroState; { I  - may be MWrite or MExtWrite }
+  UseExisting   :Boolean      { I  - False=overwrite or True=may be appended }
+ ):Smallint;
+(***************************************************************************
+Date/Author      :{11.08.95 Michael Welsch}
+Description      :Open an macro file for writing. If UseExisting=True the
+filemode is only stOpenwrite (file must exist), seek to the end of file to
+append data.
+Fileextensions are automatically changed between modes:
+Keystroke = *.cha,
+extended  = *.che,
+***************************************************************************
+return           : status of stream
+heap             : x
+Global Variables
+ - affected      :
+ - predefined    :
+---------------------------------------------------------------------------
+virtual          :
+change  status   : x
+***************************************************************************
+Date/Modification:
+{26.11.96 Michael Welsch} Macro header implemented
+{05.10.01 P.W}
+  Macro Header (Ascii contentfile) Creation date and time added
+**************************************************************************.*)
+
+Var
+  Res   :       Smallint;
+  Str   :       String;
+  NH    :       TMacroHeader;
+  TempTime         : String05; {05.10.01 P.W}
+begin
+  Error:=0;
+  If MacroStream<>NIL Then
+  begin
+    Dispose(MacroStream,Done);
+    MacroStream:=NIL;
+  end;
+  If MacroContStream<>NIL Then
+  begin
+    Dispose(MacroContStream,Done);
+    MacroContStream:=NIL;
+  end;
+  GlbSaveMacroExtFileName:=MacroFileName;
+  _PrepFileName(State);
+  Macrostate:=State;
+  If (MacroState<>MExtAutoWrite) Then
+     Beep(100,0.5);
+  Str:=DoFSplit(MacroFileName,C_DirNam)
+       +'.TXT';
+  If UseExisting Then
+  begin
+(*     MacroStream:=New(PBufStream,Init(MacroFileName,stOpenWrite,MACROBUFSIZE));*)
+     {26.11.96 Michael Welsch open file for read and write!!}
+     MacroStream:=New(PBufStream,Init(MacroFileName,stOpen,MACROBUFSIZE));
+     If State=MExtWrite Then
+        MacroContStream:=New(PBufStream,Init(Str,stOpenWrite,MACROBUFSIZE))
+  end else
+  begin
+     MacroStream:=New(PBufStream,Init(MacroFileName,stCreate,MACROBUFSIZE));
+     If (State in [MExtWrite,MExtAutoWrite]) Then
+     begin
+       GetDefMacroHeader(NH);
+       Write(NH,SizeOf(NH));
+(*        Write(MACROVERSION,SizeOf(MACROVERSION));*)
+     end;
+
+     If State=MExtWrite Then
+     begin
+       MacroContStream:=New(PBufStream,Init(Str,stCreate,MACROBUFSIZE));
+       WriteContent(MACROVERSION);
+       WriteContent(FT('Single slice macro',FL,CONTHEADLEN));
+         {^- will be overwritten later if a multi slice macro! }
+         {   by Procedure TMacro.SetMacroSliceType             }
+       {v--- add creation date and time 05.10.01 P.W}
+         GetSysTimeHHPMM(TempTime);
+         WriteContent(
+           FT('Created at',FM,20)
+           + ' ('
+           + ConvDate(FT('DD.MM.YYYY',FL,10))
+           + ') '
+           + ConvDate(MyGetDate)
+           + ' '
+           + TempTIME
+           );
+         WriteContent('UserId = ' + GlbUserId);
+       {^--- add creation date and time 05.10.01 P.W}
+     end;
+  end;
+  Res:=MacroStream^.Status;
+  If Res<>0 Then
+    CloseStream;
+  Error:=Res;
+  If MACROCALLBACK<>NIL Then
+     MACROCALLBACK^;
+  OpenWrite:=Res;
+end;
+{----------------------------------------------------------------------------}
+Function    TMacro._ExtMacroExist:Boolean;
+begin
+  _PrepFileName(MEXTRead);
+  _ExtMacroExist:=FileExist(MacroFileName);
+end;
+{----------------------------------------------------------------------------}
+Procedure   TMacro._PrepFileName(State:TMacroState);
+begin
+
+  {19.12.96 MW}
+  If Pos('\',MacroFileName)=0 Then
+     MacroFileName:=LocInitDir+MacroFileName;
+
+  MacroFileName:=DoFSplit(MacroFileName,C_DirNam);
+  Case State Of
+    MRead,MWrite       : MacroFileName:=MacroFileName+KEYMACROEXT;
+    MEXTRead,MEXTWrite : MacroFileName:=MacroFileName+EXTMACROEXT;
+    MExtAutoRead,MExtAutoWrite
+                       : MacroFileName:=LocInterDir+AUTOMACRONAME; {11.03.96 Michael Welsch}
+  end;
+end;
+{----------------------------------------------------------------------------}
+(*.**************************************************************************)
+Function    TMacro.OpenRead
+ (
+  State:TMacroState     { I  - may be MRead or MExtRead }
+ ):Smallint;
+(***************************************************************************
+Date/Author      : {11.08.95 Michael Welsch}
+Description      : opens a macro stream. Automatic switch of the extension
+for MRead (.CHA) and MExtRead (.CHE). In MExtRead mode, the macroversion
+is checked.
+***************************************************************************
+return           : status of the stream
+heap             : x
+Global Variables
+ - affected      :
+ - predefined    :
+---------------------------------------------------------------------------
+virtual          :
+change  status   : x
+***************************************************************************
+Date/Modification:
+{26.11.96 Michael Welsch,Macroheader implemented
+{24.10.02 P.W} no longer beep
+**************************************************************************.*)
+
+Var
+(*  _MACROVERSION :       String10;*)
+  NH               : TMacroHeader;
+  Res              : Smallint;      {23.10.01 P.W}
+begin
+  Error:=0;
+  If MacroStream<>NIL Then
+  begin
+    Dispose(MacroStream,Done);
+    MacroStream:=NIL;
+  end;
+  GlbSaveMacroExtFileName:=MacroFileName;
+  _PrepFileName(State);
+{  Beep(100,0.5);}          {until: 24.10.02 P.W}
+  Macrostate:=State;
+  If FileExist(MacroFileName) Then
+  begin
+    MacroStream:=New(PBufStream,Init(MacroFileName,stOpenRead,MACROBUFSIZE));
+    If (State in [MExtRead,MExtAutoRead]) Then
+    begin
+      Res:=Read(NH,SizeOf(NH));
+      If (Res=0) then                         {23.10.01 P.W}
+      begin
+        If Not Assigned(MacroHeader) then
+          MacroHeader := New(PMacroHeader);
+        MacroHeader^ := NH;
+      end;
+{      If (NH._MACROVERSION<>MACROVERSION) Then}         {u.: 23.10.01 P.W}
+      If (NH._MACROVERSION < MinMacroVersSupported)      {s.: 23.10.01 P.W}
+         or
+         (NH._MACROVERSION > MacroVersion)
+      Then 
+      begin
+        CloseStream;
+        ErrorMacro;
+        Error:=Error_WrongMacroVersion;
+      end else
+        Error:=MacroStream^.Status;
+
+(*
+      Read(_MACROVERSION,SizeOf(_MACROVERSION));
+      If _MACROVERSION<>MACROVERSION Then
+      begin
+        CloseStream;
+        ErrorMacro;
+        Error:=Error_WrongMacroVersion;
+      end else
+        Error:=MacroStream^.Status;
+*)
+    end else
+      Error:=MacroStream^.Status;
+  end else
+  begin
+    Macrostate:=MNotActive;
+    Error:=Error_MacroNotFound;
+(*    OpenRead:=Error_MacroNotFound;*)
+  end;
+  If MACROCALLBACK<>NIL Then
+     MACROCALLBACK^;
+  OpenRead:=Error;
+  MacroRuns := (Error =0); // 04.04.08 P.W
+end;
+{----------------------------------------------------------------------------}
+Function    TMacro.CloseStream:Smallint;
+begin
+  Result := 0; // Result defined 25.08.04 P.W
+
+  Error:=0;
+  If MacroStream<>NIL Then
+  begin
+    If (MacroState<>MExtAutoWrite) Then
+       Beep(100,0.5);
+    Dispose(MacroStream,Done);
+    MacroStream:=NIL;
+    Macrostate:=MNotActive;
+    SaveMyState:=MNotActive; {07.04.97 MW}
+    MacroFileName:=GlbSaveMacroExtFileName;
+    EmptyKeyBuf;
+    If MACROCALLBACK<>NIL Then
+       MACROCALLBACK^;
+  end;
+  If MacroContStream<>NIL Then
+  begin
+    Dispose(MacroContStream,Done);
+    MacroContStream:=NIL;
+  end;
+end;
+{----------------------------------------------------------------------------}
+Procedure TMacro.ErrorMacro;
+begin
+  Beep(2000,0.5);
+  Macrostate:=MNotActive;
+  SaveMyState:=MNotActive; {07.04.97 MW}
+  MacroRuns := False; // 04.04.08 P.W
+end;
+{----------------------------------------------------------------------------}
+(*.**************************************************************************)
+Procedure  TMacro.GetNextItem
+ (
+  Var HCH       :Char;     {  O - character input from keyboard or macro }
+  RWCharFlg     :Boolean   { I  - TRUE=keyboard is simulated in extended macro }
+ );
+(***************************************************************************
+Date/Author      : {11.08.95 Michael Welsch}
+Description      : Input from keyboard or macro character.
+RWCharFlg is a field of the keybourd object (TApp). It determines if
+the keyboard is simulated in the extended macro mode too.(default=false).
+If a child of TApp doesn't save specific data in the extended macro stream,
+it should set it's RWCharFlg=TRUE to save at least keystrokes.
+***************************************************************************
+return           :
+heap             :
+Global Variables
+ - affected      :
+ - predefined    :
+---------------------------------------------------------------------------
+virtual          :
+change  status   :
+***************************************************************************
+Date/Modification:
+**************************************************************************.*)
+
+begin
+  Case Macrostate Of
+   MRead     : Read(HCh,SizeOf(HCH));
+   MExtRead,
+   MExtAutoRead  : begin
+                 If RWCharFlg Then
+                    Read(HCh,SizeOf(HCH))
+                 else
+                    HCh:=ReadKey;
+
+               end;
+   MWrite    : begin
+                 HCh:=ReadKey;
+                 Write(HCh,SizeOf(HCH));
+               end;
+   MExtWrite,
+   MExtAutoWrite
+             : begin
+                 HCh:=ReadKey;
+                 If RWCharFlg Then
+                   Write(HCh,SizeOf(HCH));
+               end;
+   else
+                HCh:=ReadKey;
+  end;
+
+end;
+{----------------------------------------------------------------------------}
+Procedure  TMacro.DoStopMacroNextSlice;
+begin
+(*
+  If MacroState<>MNotActive Then
+  begin
+    Macro.CloseStream;
+    Macro.ErrorMacro;
+  end;
+*)
+  Macro.CloseStream;
+  Macro.ErrorMacro;
+end;
+{----------------------------------------------------------------------------}
+Procedure  TMacro.DoStopMacro;
+begin
+  DoStopMacroNextSlice;
+  If (MacroSliceColl<>NIL) Then
+  begin
+    MacroSliceColl^.DeleteAll;
+    Dispose(MacroSliceColl,Done);
+    MacroSliceColl:=NIL;
+    AutoStartFlg:=FALSE;
+  end;
+  MacroRuns := False; // 04.04.08 P.W
+end;
+{----------------------------------------------------------------------------}
+Procedure  TMacro.PauseMacro;
+begin
+  SaveMyState:=MacroState;
+  MacroState:=MNotActive; {04.03.97 MW}
+end;
+{----------------------------------------------------------------------------}
+Procedure  TMacro.ResumeMacro;
+begin
+  MacroState:=SaveMyState;
+end;
+
+{----------------------------------------------------------------------------}
+Procedure  TMacro.WriteContent(Str:String);
+begin
+  WriteStringInStream(Str,MacroContStream^);
+  WriteCRLFInStream(MacroContStream^);
+end;
+
+{----------------------------------------------------------------------------}
+Procedure   TMacro.WriteMacroHeader(Var NH:TMacroHeader);
+Var
+   SP   :       LongInt;
+begin
+  If (MacroState<>MEXTWrite) Or (MacroStream=NIL) Then
+     Exit;
+  SP:=MacroStream^.GetPos;
+  MacroStream^.Seek(0);
+  MacroStream^.Write(NH,SizeOf(NH));
+
+  If Not Assigned(MacroHeader) then     {23.10.01 P.W}
+    MacroHeader := New(PMacroHeader);
+  MacroHeader^ := NH;                   {23.10.01 P.W}
+
+  MacroStream^.Seek(SP);
+end;
+{----------------------------------------------------------------------------}
+Function   TMacro.ReadMacroHeader(Var NH:TMacroHeader):Smallint;
+Var
+   SP           :       LongInt;
+   Res          :       Smallint;
+   CloseFlg     :       Boolean;
+begin
+  Res := 0; // Res defined 25.08.04 P.W
+
+  FillChar(NH, SizeOf(NH), #0);
+  CloseFlg:=(MacroStream=NIL);
+  If CloseFlg Then { this expects that macrofilename contains the wanted macro!! }
+  begin
+    _PrepFileName(MEXtRead);
+    MacroStream:=New(PBufStream,Init(MacroFileName,stOpenRead,1024));
+  end;
+  If MacroStream<>NIL Then
+  begin
+    SP:=MacroStream^.GetPos;
+    MacroStream^.Seek(0);
+    Res:=Read(NH,SizeOf(NH)); { attention!! this may dispose the macrostream!!!}
+
+    If (Res=0) then                         {23.10.01 P.W}
+    begin
+      If Not Assigned(MacroHeader) then
+        MacroHeader := New(PMacroHeader);
+      MacroHeader^ := NH;
+    end;
+
+    If (SP>=0)
+       And
+       (MacroStream<>NIL)
+       And
+       (SP<=MacroStream^.GetSize)
+       Then
+       MacroStream^.Seek(SP)
+    else
+       Res:=-1;
+    If CloseFlg And (MacroStream<>NIL) Then
+    begin
+      Dispose(MacroStream,Done);
+      MacroStream:=NIL;
+      Macrostate:=MNotActive;
+    end;
+  end;
+  ReadMacroHeader:=Res;
+end;
+{----------------------------------------------------------------------------}
+Procedure   TMacro.SetMacroSliceType(SingleSliceType:Boolean);
+Var
+  NH : TMacroHeader;
+  SP : LongInt;
+begin
+  If ReadMacroHeader(NH)=0 Then
+  begin
+    NH.SingleSliceFlg:=SingleSliceType;
+    WriteMacroHeader(NH)
+  end;
+  If MacroContStream<>NIL Then
+  begin
+    SP:=MacroContStream^.GetPos;
+    MacroContStream^.Seek(Length(MACROVERSION)+2);  { seek all characters + CR+LF}
+    WriteContent(FT(
+                 FT('Multi slice macro, starting with: ',FM,40)
+                 +GetIntStr(NH.StartSliceNum,3),FL,CONTHEADLEN));
+    MacroContStream^.Seek(SP);
+  end;
+end;
+{----------------------------------------------------------------------------}
+Function    TMacro.GetMacroVersion: TMacroVersion;   {23.10.01 P.W}
+begin
+  If Assigned(MacroHeader)
+    then GetMacroVersion := MacroHeader^._MacroVersion
+    else GetMacroVersion := MACROVERSION;
+end;
+{----------------------------------------------------------------------------}
+Procedure   TMacro.GetDefMacroHeader(Var NH : TMacroHeader);
+begin
+  FillChar(NH, SizeOf(NH), #0);
+  With NH Do
+  begin
+    _MACROVERSION      :=MACROVERSION;
+    HeadLen            :=SizeOf(NH);
+    SingleSliceFlg     :=TRUE;
+    StartSliceNum      :=1;
+  end;
+
+  If Not Assigned(MacroHeader) then     {23.10.01 P.W}
+    MacroHeader := New(PMacroHeader);
+  MacroHeader^ := NH;                   {23.10.01 P.W}
+end;
+{----------------------------------------------------------------------------}
+{                             Methoden von TApp
+{----------------------------------------------------------------------------}
+
+Constructor TApp.Init;
+begin
+   Deb0('C TApp.Init 0');
+   inherited init;
+   ExtCode:=nomove;
+   InpCh:=#0;
+   KeyFlg:=False;
+   Listener:=NIL;
+   Speaker:=NIL;
+   FlowEvent:=TRUE;
+   RWCharFlg:=FALSE;
+   Acc:=NIL;
+   Deb0('C TApp.Init 1-');
+end;
+{----------------------------------------------------------------------------}
+Destructor TApp.Done;
+begin
+  DisConnectListener;
+  AccOff;
+  inherited done;
+end;
+{----------------------------------------------------------------------------}
+{ used for persistance...}
+Constructor TApp.Load(var S:TStream_TP7); // "TStream" to "TStream_TP7" Chg#1645 (02.03.04 P.W)
+begin
+  S.Read(ExtCode,SizeOf(ExtCode));
+  S.Read(InpCh,SizeOf(InpCh));
+  S.Read(KeyFlg,SizeOf(KeyFlg));
+  S.Read(RWCharFlg,SizeOf(RWCharFlg));
+  Listener:=NIL;
+  Speaker:=NIL;
+  Acc:=NIL;
+end;
+{----------------------------------------------------------------------------}
+Procedure  TApp.Store(var S:TStream_TP7); // "TStream" to "TStream_TP7" Chg#1646 (02.03.04 P.W)
+begin
+  S.Write(ExtCode,SizeOf(ExtCode));
+  S.Write(InpCh,SizeOf(InpCh));
+  S.Write(KeyFlg,SizeOf(KeyFlg));
+  S.Write(RWCharFlg,SizeOf(RWCharFlg));
+end;
+{..}
+{----------------------------------------------------------------------------}
+Procedure  TApp.ConnectListener(L:PApp);
+begin
+  Listener:=L;
+  L^.Speaker:=@Self;
+end;
+{----------------------------------------------------------------------------}
+Procedure  TApp.DisConnectListener;
+begin
+  If Listener<>NIL Then
+  begin
+    Listener^.Speaker:=NIL;
+    Listener:=NIL;
+  end;
+end;
+{----------------------------------------------------------------------------}
+(*.*************************************************************************
+TApp.GetExtCode: interpreting keystrokes
+Input   :
+OutPut  : setting field EXTCODE and InpCh,
+          Returns :  True if keypressed
+                     False if not
+Version : @(#) KN_EDI.PAS V:1.0
+Author  : M.W.
+Date    : 19.08.92
+Modified: 20.08.92
+Modification log:
+(M.W.20.08.92) If Not(KeyPressed) Then Exit;
+(M.W.25.08.92) val of Keypressed in Flg.
+****************************************************************************)
+
+Function  TApp.GetExtCode:Boolean;
+begin
+    If Not(KeyFlg) Then
+       KeyFlg:=KeyPressed Or (Macro.Macrostate=MREAD)
+               Or ((Macro.Macrostate=MEXTREAD) And RWCharFlg); {04.11.96 Michael Welsch}
+    If Not(KeyFlg) Then
+    begin
+      GetExtCode:=False;
+      Exit;
+    end;
+    KeyToExtCode;
+    KeyFlg:=False;   {26.07.95 Michael Welsch}
+    GetExtCode:=True;
+
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.KeyToExtCode;
+
+(*.*************************************************************************
+GetNextChar: read a character from the keyboard (and possibly write that character
+in the Macrofile), or read a character from the Macrofile.
+Input   : Character from keyboard or file,
+OutPut  : returns a character, write that character into file
+Version : @(#) KN_KEY.PAS V:1.0
+Author  : M.Welsch
+Date    : 16.09.92
+Modified:
+Modification log:
+(25.11.92): MacroWait implemented;
+****************************************************************************)
+  Function GetNextChar:Char;
+  Var
+    HCh            :    Char;
+
+  begin
+  (*
+    With Macro Do
+    begin
+      Case Macrostate Of
+       MRead     : Read(HCh,SizeOf(HCH));
+       MWrite    : begin
+                     HCh:=MyReadKey;
+                     Write(HCh,SizeOf(HCH));
+                   end;
+       else        HCh:=MyReadKey;
+      end;
+    end;
+  *)
+    Macro.GetNextItem(HCH,RWCharFlg);
+    GetNextChar:=HCh;
+  end;
+
+Var
+  Ch2   :       Char;
+
+begin
+   InpCh:=GetNextChar;
+   If InpCh=#0 Then
+   begin
+      Ch2:=GetNextChar;
+      ExtCode:=ExtCodeAry[Ord(Ch2)];
+{GlbDebugMsg('TKeyApp, Ord(Ch2): '+GetIntStr(Ord(Ch2),1)+' Ord(ExtCode): '+GetIntStr(Ord(ExtCode),1));}
+   end
+   else If     InpCh=#13 Then ExtCode:=CR
+   else If     InpCh=#27 Then ExtCode:=ESC
+   else If     InpCh=#8  Then ExtCode:=BCKSP
+   else If     InpCh=#9  Then ExtCode:=TAB
+   else ExtCode:=TASTE;
+end;
+{----------------------------------------------------------------------------}
+Procedure  TApp.AccOn;
+begin
+  If Acc<>NIL Then
+     Dispose(Acc,Done);
+  Acc:=New(PAccel, Init([Byte(LEFT), Byte(RIGHT),
+                          Byte(UP), Byte(DWN)      ]));
+  Acc^.CircleRoundFlg:=TRUE;
+end;
+{----------------------------------------------------------------------------}
+Procedure  TApp.AccOff;
+begin
+  If Acc<>NIL Then
+  begin
+    Dispose(Acc,Done);
+    Acc:=NIL;
+  end;
+end;
+
+{----------------------------------------------------------------------------}
+(*.*************************************************************************
+KeyMouseHandler: get keystrokes and mousemoves
+Input   : glb. variable MS ( 1=mouse, 0=no mouse ),
+          Mx,My real worldkoordinates, step for moving cursor, cursor or
+          mousemoves only in steps bigger than "step/2" are recognized
+          -> EXTCode = MOVE, else Extcode=nomove
+OutPut  : returns ExtCode ( see KN_GLB ),
+          inputcharacter (CH) and new cursor coordinates (MX,MY)
+Version : @(#) KN_KEY V:1.0
+Author  : M.Welsch
+Date    : 15.02.92
+Modified: 24.08.92
+Modification log:
+{22.03.96 Michael Welsch} Accelarator implemented.
+{17.04.97 MW}SkipKeyRangeCheck
+// Values MX, MY must be defined by callor to avoid exceptions! KeyMouseHandler; 25.08.04 PW
+
+****************************************************************************)
+FUNCTION TApp.KeyMouseHandler(                         VAR MX,MY:REAL;
+                               XLow,YLow,XHigh,YHigh:Real;
+                               XSTEP:REAL;YSTEP:REAL):TExtCode;
+
+VAR
+  MouseX, MouseY: Integer;  // 30.04.04 P.W
+BEGIN
+  Deb0('TApp.KeyMouseHandler 0');
+  REPEAT
+    ExtCode:=nomove; {22.03.96 Michael Welsch}
+
+    if (GetOkButtonDown(False) > 0) then      // 05.05.04 P.W
+    begin
+      ExtCode := _Move;
+      InpCh   := #0;
+    end else
+    If (GetListBoxClickLine(False) > 0) then  // 30.04.04 P.W
+    begin
+      ExtCode := _Move;
+      InpCh   := #0;
+    end else
+    If IsPaneClicked(MouseX, MouseY) then     // 30.04.04 P.W
+    begin
+      if addr(MX) = addr(MY) then
+      begin  // used by UtParam Threshold Dialog: Up or Right the same
+        MX  := GetPaneKeyXValue(MouseX);
+      end else
+      begin
+        MX  := GetPaneKeyXValue(MouseX);
+        MY  := GetPaneKeyYValue(MouseY);
+      end;
+      ExtCode := _MOVE;
+      InpCh   := #0;
+    end;
+
+    If Acc<>NIL Then
+       Acc^.PreWaitKey;
+(*    IF KEYPRESSED Or (Macro.Macrostate=MREAD) THEN*)
+    IF KEYPRESSED Or (Macro.Macrostate=MREAD)
+       Or ((Macro.Macrostate=MEXTREAD) And RWCharFlg) THEN {04.11.96 Michael Welsch}
+    BEGIN
+      FlowEvent:=TRUE;
+      SkipKeyRangeCheck:=FALSE;
+      KeyToExtCode;
+
+      UKeyHandler;
+      If (Acc<>NIL) And (Macro.MacroState=MNotActive) Then
+      begin
+        Acc^.PostWaitKey(Word(ExtCode), Byte(ExtCode));
+        Case ExtCode Of
+          LEFT,RIGHT : Acc^.IncAccProcR(MX,ExtCode=RIGHT,XStep,XLow,XHigh);
+          UP,DWN     : Acc^.IncAccProcR(MY,ExtCode=UP   ,YStep,YLow,YHigh);
+        end;
+      end else
+      begin
+        Case ExtCode Of
+          LEFT : MX := MX-XSTEP;
+          RIGHT: MX := MX+XSTEP;
+          UP   : MY := MY+YSTEP;
+          DWN  : MY := MY-YSTEP;
+        end;
+      end;
+      Case ExtCode Of
+        SF1  : Macro.OpenWrite(MWrite,FALSE);  { keystroke recorder }
+        SF2  : Macro.CloseStream;
+        SF3  : Macro.OpenRead(MRead);
+	SF10 : begin
+(*                 If Service Then
+		 begin
+                   TestWindow;
+                 end;
+*)
+               end;
+      end;
+      If Not SkipKeyRangeCheck Then
+      begin
+        If MX<XLow Then MX:=XHigh;
+        If MX>XHigh Then MX:=XLow;
+        If MY<YLow Then MY:=YHigh;
+        If MY>YHigh Then MY:=YLow;
+      end;
+(*
+      If Service Then
+      begin
+         Writeln('Cursorposition: CX= ',MX:3:0,' CY= ',MY:3:0,' in Worldkoordinaten');
+      end;
+*)
+    end else
+    begin
+      Delay(1);  // 02.11.05 P.W   frees system resources
+      GlbIdleProc;
+      IdleTask;
+    end;
+
+
+  UNTIL ExtCode <> nomove ;
+  KeyMouseHandler:=ExtCode;
+  Deb0('TApp.KeyMouseHandler x-');
+END ;
+{----------------------------------------------------------------------------}
+Procedure TApp.IdleTask;
+begin
+
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.UKeyHandler;
+begin
+  Case ExtCode Of
+     F1       : F1_Pressed;
+     F2       : F2_Pressed;
+     F3       : F3_Pressed;
+     F4       : F4_Pressed;
+     F5       : F5_Pressed;
+     F6       : F6_Pressed;
+     F7       : F7_Pressed;
+     F8       : F8_Pressed;
+     CF9      : CF9_Pressed;     {04.06.02 P.W}
+     F9       : F9_Pressed;
+     F10      : F10_Pressed;
+     UP       : UP_Pressed;
+     DWN      : DWN_Pressed;
+     PGUP     : PGUP_Pressed;
+     PGDWN    : PGDWN_Pressed;
+     CPGUP    : CPGUP_Pressed;   // 22.01.07 P.W
+     CPGDWN   : CPGDWN_Pressed;  // 22.01.07 P.W
+     LEFT     : LEFT_Pressed;
+     RIGHT    : RIGHT_Pressed;
+     HOME     : HOME_Pressed;
+     ENDE     : ENDE_Pressed;
+     INS      : INS_Pressed;
+     DEL      : DEL_Pressed;
+     BCKSP    : BCKSP_Pressed;
+     TASTE    : TASTE_Pressed;
+     TAB      : TAB_Pressed;
+     else MoreKeyHandler;
+  end;
+  If (Listener<>NIL) And FlowEvent Then
+  begin
+    Listener^.ExtCode:=ExtCode;
+    Listener^.UKeyHandler;
+  end;
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.MoreKeyHandler;      { Vom Erben überschrieben } //OemToAnsi Chg#1650 (02.03.04 P.W)
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.F1_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.F2_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.F3_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.F4_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.F5_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.F6_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.F7_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.F8_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.CF9_Pressed;  {04.06.02 P.W}
+begin
+  {Overwritten by UtKnApp.Pas TMKNApp.CF9_Pressed;}
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.F9_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.F10_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.UP_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.DWN_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.PGUP_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.PGDWN_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.CPGUP_Pressed;  // 22.01.07 P.W
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.CPGDWN_Pressed; // 22.01.07 P.W
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.LEFT_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.RIGHT_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.HOME_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.ENDE_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.INS_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.DEL_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.BCKSP_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.TASTE_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.TAB_Pressed;
+begin
+end;
+{----------------------------------------------------------------------------}
+Function  TApp.CheckPicture(PictureCH:Char):Boolean;
+(*
+  Modifications:
+{23.10.01 P.W}
+  added PictureCh = '+' for positive floating points numbers
+*)
+Var
+  Flg   :       Boolean;
+begin
+{GlbDebugMsg('TKeyApp.Pas TApp.CheckPicture "'+PictureCH+'"');}
+  Flg:=True;
+  If PictureCH='x' Then
+  begin
+    CheckPicture:=TRUE;
+    Exit;
+  end;
+  Case PictureCh Of
+   '!' : begin  { to upcase }
+           InpCh:=UpCase(InpCh);
+           Flg:=True;
+         end;
+   'A' : begin  { alpha upcase }
+           InpCh:=UpCase(InpCh);
+           Flg:=((ORD(InpCh)>=65) And (ORD(InpCh)<=90));  {"A" .. "Z"}
+         end;
+   'a' : begin  { alpha }
+           Flg:=((ORD(InpCh)>=65) And (ORD(InpCh)<=90))   {"A" .. "Z"}
+                Or
+                ((ORD(InpCh)>=97) And (ORD(InpCh)<=122)); {"a" .. "z"}
+         end;
+   '9' : begin  { numeric and space }
+           Flg:=((ORD(InpCh)>=48) And (ORD(InpCh)<=57))   {"0" .. "9"}
+                Or
+                (ORD(InpCh)=32);                          {" "}
+         end;
+   '+' : begin  {23.10.01 P.W}
+                { numeric and space and dec. point BUT not "-"}
+           Flg:=((ORD(InpCh)>=48) And (ORD(InpCh)<=57))   {"0" .. "9"}
+                Or
+                (ORD(InpCh)=32)                           {" "}
+                Or
+                (ORD(InpCh)=43)                           {"+"}
+                Or
+                (ORD(InpCh)=46);                          {"."}
+         end;
+   '#' : begin  { numeric and space and sign and dec. point}
+           Flg:=((ORD(InpCh)>=48) And (ORD(InpCh)<=57))   {"0" .. "9"}
+                Or
+                (ORD(InpCh)=32)                           {" "}
+                Or
+                (ORD(InpCh)=43)                           {"+"}
+                Or
+                (ORD(InpCh)=45)                           {"-"}
+                Or
+                (ORD(InpCh)=46);                          {"."}
+         end;
+    'n': Flg:=False;
+   end;
+   CheckPicture:=Flg;
+end;
+{----------------------------------------------------------------------------}
+Procedure TApp.SetKeystrokeMacroMode;
+{ this will save and replay keystrokes in macro mode !!!
+ MUST BE CALLED BEFORE RUN!!! }
+begin
+  RWCharFlg:=TRUE; {04.11.96 Michael Welsch}
+end;
+{----------------------------------------------------------------------------}
+
+{----------------------------------------------------------------------------}
+{     TApp2     =       Object(TApp)
+{----------------------------------------------------------------------------}
+Function  TApp2.GetExtCode:Boolean;
+begin
+  KeyToExtCode;
+  GetExtCode:=TRUE;
+end;
+{----------------------------------------------------------------------------}
+Function  TApp2.RunKeyBoard:TExtCode;
+begin
+  FlowEvent:=TRUE;
+  GetExtCode;
+  UKeyHandler;
+  RunKeyBoard:=ExtCode;
+end;
+{----------------------------------------------------------------------------}
+{ used for persistance...}
+Constructor TApp2.Load(var S:TStream_TP7); // "TStream" to "TStream_TP7" Chg#1647 (02.03.04 P.W)
+begin
+  inherited Load(S);
+  S.Read(HelpContext,SizeOf(HelpContext));
+end;
+{----------------------------------------------------------------------------}
+Procedure  TApp2.Store(var S:TStream_TP7); // "TStream" to "TStream_TP7" Chg#1648 (02.03.04 P.W)
+begin
+  inherited Store(S);
+  S.Write(HelpContext,SizeOf(HelpContext));
+end;
+{----------------------------------------------------------------------------}
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  MACROCALLBACK          := NIL;
+//!!
+  FillChar(Macro, SizeOf(Macro), #0);
+  GlbSaveMacroExtFileName:= '';
+  GlbIdleProc            := nil;
+  MacroSliceColl         := nil;
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Init  part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+  GlbIdleProc:=DoNothingProc;
+  Macro.Init;
+
+  RegisterTKeyApp;
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+  GlbIdleProc:=DoNothingProc;
+  Macro.Init;
+
+  RegisterTKeyApp;
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.

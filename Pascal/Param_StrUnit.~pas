@@ -1,0 +1,126 @@
+unit Param_StrUnit;    // 19.04.24 P.W
+
+interface
+
+uses
+  Dialogs,
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  SysUtils;
+
+var
+  Global_Param_Str2 : String = '/DATA_C:\XCT\AV002\A0020000\I0020003.???';
+  Global_WorkingDir : String = 'C:\XCT\';
+function Param_Str(ParamNr: Integer): String;
+procedure CheckSetParamWorkingDir;
+procedure Set_Global_WorkingDir(GlbDir: String); stdCall;
+
+Implementation
+  const Unit_Name = 'Param_StrUnit'; // 03.05.24 P.W
+
+procedure Set_Global_WorkingDir(GlbDir: String); stdCall;
+begin
+  if GlbDir[Length(GlbDir)]='\'
+    then Global_WorkingDir := GlbDir
+    else Global_WorkingDir := GlbDir + '\';
+
+  CheckSetParamWorkingDir;
+end;
+
+function ParamWorkingDir: String;
+begin
+  // Result := ExtractFilePath(Param_Str(0)); // has terminating backslash and GetWorkingDir has not
+  Result := Global_WorkingDir;
+end;
+
+procedure CheckSetParamWorkingDir;
+begin
+  if (GetWorkingDir <> ParamWorkingDir) then
+  begin
+    ChDir(ParamWorkingDir);
+  end;
+end;
+
+function Param_Str_org(ParamNr: Integer): String;
+begin
+  if (ParamNr >= 0) and (ParamNr <= ParamCount)
+    then Result := ParamStr(ParamNr)
+    else Result := '';
+end;
+
+function Param_Str(ParamNr: Integer): String;
+// /SITE_1 /DATA_C:\XCT\AV002\A0020000\I0020002.???
+begin
+  Case ParamNr of
+//  0:   Result := 'C:\XCT\CALC\KNMULTI.EXE';
+//  0:   Result := 'C:\XctAnaDLL\KNMULTI.EXE';  // force beeing developement path
+    0:   Result := 'C:\XCT\KNMULTI.EXE';        // also         developement path !!
+
+    1:   Result := '/SITE_1';
+    2:   Result := Global_Param_Str2;
+    else Result := '';
+  end;
+ Handle_DLL_Exception('Unexpected call of Param_Str; ParamNr=%d -> "%s"', [ParamNr, Result]);
+end;
+
+procedure Deb_Param_Info;
+var
+  I : Integer;
+  Res0, Res1, Res2: String;
+begin
+  for I:= 0  to ParamCount do
+  begin
+    Deb0('ParamStr (%d)="%s"', [I, ParamStr (I)]);
+    Deb0('Param_Str(%d)="%s"', [I, Param_Str(I)]);
+  end;
+end;
+
+procedure Test;
+var
+  I : Integer;
+  Res0, Res1, Res2: String;
+begin
+  for I:= 0  to ParamCount do
+  begin
+    Res0 := ParamStr(I);
+    Res1 := Param_Str_org(I);
+    Res2 := Param_Str(I);
+    ShowMessageFmt(
+      '"%s"'+sLineBreak+
+      '"%s"'+sLineBreak+
+      '"%s"'
+          , [Res0, Res1, Res2]);
+  end;
+end;
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+//  Global_Param_Str2 := '/DATA_C:\XCT\AV002\A0020000\I0020003.???'; // no!
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Init  part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+// Test;
+  Deb_Param_Info;
+  Deb0('WorkingDir: "%s"', [GetWorkingDir]);
+  ChDir(ExtractFilePath(Param_Str(0)));
+//ShowMessageFmt('WorkingDir: "%s"', [ExpandFileName('.')]);
+  Deb0          ('WorkingDir: "%s"', [ExpandFileName('.')]);
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+// Test;
+  Deb_Param_Info;
+  Deb0('WorkingDir: "%s"', [GetWorkingDir]);
+  ChDir(ExtractFilePath(Param_Str(0)));
+//ShowMessageFmt('WorkingDir: "%s"', [ExpandFileName('.')]);
+  Deb0          ('WorkingDir: "%s"', [ExpandFileName('.')]);
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.

@@ -1,0 +1,154 @@
+unit ThreadView;
+
+interface
+
+uses
+  Classes {$IFDEF MSWINDOWS} , Windows , Dialogs, Forms, Types {$ENDIF};
+
+type
+  TThreadView = class(TThread)
+  private
+    procedure SetName;
+    procedure HelloMessage;
+    procedure ShowHelloMessage;
+    procedure CheckFreeHelloMessage;
+    procedure UpdateHelloMessage;
+  protected
+    frm : TForm;
+    InfoPtr : ^Integer;
+    procedure Execute; override;
+  public
+    constructor Create(CreateSuspended: Boolean; var aInfo: Integer);
+  end;
+
+Implementation
+
+uses TypInfo, SysUtils;
+  const Unit_Name = 'ThreadView'; // 03.05.24 P.W
+
+{ Important: Methods and properties of objects in visual components can only be
+  used in a method called using Synchronize, for example,
+
+      Synchronize(UpdateCaption);
+
+  and UpdateCaption could look like,
+
+    procedure TThreadView.UpdateCaption;
+    begin
+      Form1.Caption := 'Updated in a thread';
+    end; }
+
+{$IFDEF MSWINDOWS}
+type
+  TThreadNameInfo = record
+    FType: LongWord;     // must be 0x1000
+    FName: PChar;        // pointer to name (in user address space)
+    FThreadID: LongWord; // thread ID (-1 indicates caller thread)
+    FFlags: LongWord;    // reserved for future use, must be zero
+  end;
+{$ENDIF}
+
+{ TThreadView }
+
+procedure TThreadView.SetName;
+{$IFDEF MSWINDOWS}
+var
+  ThreadNameInfo: TThreadNameInfo;
+{$ENDIF}
+begin
+{$IFDEF MSWINDOWS}
+  ThreadNameInfo.FType := $1000;
+  ThreadNameInfo.FName := 'ThreadView';
+  ThreadNameInfo.FThreadID := $FFFFFFFF;
+  ThreadNameInfo.FFlags := 0;
+
+  try
+    RaiseException( $406D1388, 0, sizeof(ThreadNameInfo) div sizeof(LongWord), @ThreadNameInfo );
+  except
+  end;
+{$ENDIF}
+end;
+
+procedure TThreadView.ShowHelloMessage;
+// ecapsulation for use by Synchronize
+begin
+  ShowMessage('ThreadView Execute'); // synchronize waits until ShowMessage Terminates
+end;
+
+procedure TThreadView.HelloMessage;
+// ecapsulation for use by Synchronize
+begin
+  if not Assigned(frm) then
+  begin
+    frm := TForm.Create(nil);
+    frm.parent := nil;
+  end;
+  frm.show;
+end;
+
+procedure TThreadView.CheckFreeHelloMessage;
+// ecapsulation for use by Synchronize
+begin
+  FreeAndNil(frm);
+end;
+
+procedure TThreadView.UpdateHelloMessage;
+// ecapsulation for use by Synchronize
+begin
+  if Assigned(frm) and (frm.Visible) then
+  begin
+    frm.Caption := Format('ThreadView Info: %d', [InfoPtr^]);
+  end;
+end;
+
+
+procedure TThreadView.Execute;
+begin
+  SetName;
+  { Place thread code here }
+  Synchronize(HelloMessage);
+//  HelloMessage;    // undefined size of Message box ...!
+  while not Terminated do
+  begin
+    Synchronize(HelloMessage);     // access to VCL GDI must use Synchronize!
+    Sleep(500);
+    if Assigned(frm) then
+    begin
+      if (not frm.Visible) then
+      begin
+        Synchronize(CheckFreeHelloMessage);
+        Terminate;   // sets only Terminated to true
+        InfoPtr^ := -1;
+      end else
+      begin
+        Inc(InfoPtr^);
+        Synchronize(UpdateHelloMessage);
+      end;
+    end;
+  end;
+  Synchronize(CheckFreeHelloMessage);
+end;
+
+// Thread priorities
+// Value	        Priority
+// tpIdle	        The thread executes only when the system is idle.
+//                Windows won't interrupt other threads to execute a thread with tpIdle priority.
+// tpLowest	      The thread's priority is two points below normal.
+// tpLower	      The thread's priority is one point below normal.
+// tpNormal	      The thread has normal priority.
+// tpHigher	      The thread's priority is one point above normal.
+// tpHighest    	The thread's priority is two points above normal.
+// tpTimeCritical	The thread gets highest priority.
+
+constructor TThreadView.Create(CreateSuspended: Boolean; var aInfo: Integer);
+begin
+  inherited Create(CreateSuspended);
+  InfoPtr := @aInfo;
+//  Priority := tpIdle;
+//  FreeOnTerminate := True;
+end;
+
+// SecondThread := TThreadView.Create(false); {create and run the thread }
+
+
+end.

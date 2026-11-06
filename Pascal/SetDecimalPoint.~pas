@@ -1,0 +1,59 @@
+unit SetDecimalPoint;
+// modifications:
+// 11.02.05 P.W:
+//   Application.UpdateFormatSettings set to False
+//   This avoids that DecimalSeparator is
+//   changed later by procedure SysUtils.pas GetFormatSettings
+//     beeing called by TApplication.CheckIniChange
+//      messages: RM_TaskbarCreated or WM_WININICHANGE
+//  Nevertheless if GetFormatSettings is called then
+//    DecimalSeparator is modified
+
+interface
+
+const
+  DecimalSeparatorFix = '.';
+
+Implementation
+
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  Forms,              // 11.02.05 P.W
+  SysUtils;
+
+  const Unit_Name = 'SetDecimalPoint'; // 03.05.24 P.W
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Init  part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+  if Assigned(Application) then                   // 11.02.05 P.W
+    Application.UpdateFormatSettings := False;
+
+  ThousandSeparator := ''''; // a simple '
+  DecimalSeparator  := DecimalSeparatorFix;
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+  if Assigned(Application) then                   // 11.02.05 P.W
+    Application.UpdateFormatSettings := False;
+
+  ThousandSeparator := ''''; // a simple '
+  DecimalSeparator  := DecimalSeparatorFix;
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+
+
+end.
+
+

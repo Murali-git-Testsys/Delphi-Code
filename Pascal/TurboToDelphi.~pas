@@ -1,0 +1,397 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; changes: 2; (02.03.04 P.W)
+// Turbo To Delphi; Replace "TypeOf" to "TypeOf"; changes: 1; (02.03.04 P.W) // "Ofs(TypeOf" to "TypeOf" Chg#3686 (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; changes: 1; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; changes: 1; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+(*
+Module: TurboToDelphi
+Created: 20.02.04 P.W
+Changes: see in folder Changes the files with same name
+         but extension ".pas" replaced by ".txt" \
+         Changes\ TurboToDelphi.Txt
+Purpose:
+  Help to convert Turbo Pascal Code to Delphi Code.
+
+  Replace all assembler routines by empty routines
+  which call ErrorNotSupported of unit TurboToDelphi;
+  This helps to detect step by step the routines which are used
+  and to fill in the code. To avoid problems:
+  Do not direct use the new delphi units (the compiler will crash soon)
+  but use the pure delphi unit TurboToDelphi to support the
+  needed routines of SysUtils, ...
+
+LOOK out : Pointer to objects differ from Object as parameter
+   according virtual methods. See DoStreamError(PStream_TP7...) // "PStream" to "PStream_TP7" Chg#60 (02.03.04 P.W)
+   if TStream_TP7 is used as type then only the basic type is // "TStream" to "TStream_TP7" Chg#59 (02.03.04 P.W)
+   supported (S.GetFileName)
+
+Changes done:
+  TSearchRec VmtLink is not everywhere set commented out like
+    "// VmtLink := TypeOf(...)^);"
+  change to:
+    "VmtLink := TypeOf(...);
+
+23.03.05 P.W:
+  FindFirst FindNext additional FindClose checked for 25 projects
+  The Turbo Pascal FindFirst FindNext renamed to FindFirstDE FindNextDE
+    to avoid conflicts between units DOS and SysUtils
+
+27.06.08 P.W: DisableRequestSound added to disable sound when FemGlb.pas TestPathFlg is set to true;
+  To Type TReqSound some constants added to support windows Messagebeep
+
+25.08.09 P.W: Move DisableRequestSound to GlbDecs.pas
+
+02.11.09 P.W: AppProcMsgTimeSumGlb introduced this allows to detect
+  that measurement of time is invalid because of moving resizing windows ...
+
+What remains to do:
+  Look out: FileMode constants are not supported by DOS replacements!
+  {
+  Crt DelayCNT is used by FemCmd3.pas
+    Function TFemCmd.ReadData
+      Function CalcIntvCtrLimBackProj: Smallint;
+        to estimate CPU time used by Backprojection
+           and a value of 100000 is used as quess to avoid division by zero
+   no longer a problem: DelayH.pas adapted 02.11.09 P.W}
+
+*)
+unit TurboToDelphi;
+
+interface
+
+uses
+  GlbDecs,           // 25.08.09 P.W
+  GlbPath,           // 22.06.07 P.W
+  MsgBox,            // 17.06.05 P.W
+  Windows,
+  Math,
+  Forms,
+  SysUtils,
+  DateUtils;
+
+  // TAppStratec moved to GlbType.pas 20.12.07 P.W
+var
+  LaunchedByKnMulti : Boolean = False;         // 25.10.04 P.W.
+
+//const
+//  DeltaAppProcMsgSecDef = 0.05;
+type
+  TReqSound = (RS_None, RS_Error, RS_Start, RS_End, RS_Wait,          // 22.06.07 P.W
+               RS_Beep, RS_MB_OK, RS_MB_ICONHAND, RS_MB_ICONQUESTION, // 27.06.08 P.W
+               RS_MB_ICONEXCLAMATION, RS_MB_ICONASTERISK );           // 27.06.08 P.W
+
+{
+RS_None
+RS_Error
+RS_Start
+RS_End
+RS_Wait
+RS_Beep
+RS_MB_OK
+RS_MB_ICONHAND
+RS_MB_ICONQUESTION
+RS_MB_ICONEXCLAMATION
+RS_MB_ICONASTERISK
+}
+
+
+var
+  DeltaAppProcMsgSecDef : Double  = 0.05; // longer for FemurPc if Win98: 0.2!
+  DeltaAppProcMsgSec    : Double  = 0.05; // DeltaAppProcMsgSecDef;
+  RequestSound          : TReqSound = RS_None; // Integer = -1  to TReqSound: 22.06.07 P.W
+//  DisableRequestSound   : Boolean = False;  // 27.06.08 P.W  // set to true when femGlb.pas testPathflg is true
+            // DisableRequestSound from TurboToDelphi to GlbDecs 25.08.09 P.W
+  AppProcMsgTimeSumGlb : Double = 0.0;        // 02.11.09 P.W
+
+const
+   //DebugMode = True; // used in TurboToDelphi.pas ApplicationProcessMessages, Slows down Drawing ...
+  DebugMode = False;
+const        // the following constants are only for temporary use
+             // while "Turbo to Delphi" is in work!
+  DelayCNTDefault = 50000; // default for CRT.PAS (08.03.04 P.W)
+                           // DelayCNT is used by FemCmd3 to estimate
+                           // Backprocjetion time
+  //TerminateMsg   = True;
+
+  CriticalChanges  = True;  // marks parts that may be partly correct
+  // ^-- used in Unit Objects "constructor TObject_TP7.Init"
+  // ^-- and ChkMove.pas
+
+Procedure ChkEnableMainForm; // 07.01.08 P.W
+Procedure DelphiSleep(msDelay: Integer);
+
+function  AppBlockChkGlb_Blocked: Boolean;
+procedure ApplicationProcessMessages;
+
+Procedure ErrLogOut(const Msg: AnsiString);
+procedure ErrorLogMsg(const Msg: AnsiString);
+procedure ErrorNotSupported(UnitName, Msg: AnsiString);
+
+Implementation
+
+uses
+  MPlayer,
+  FemurPcForm1,
+  Classes;
+  const Unit_Name = 'TurboToDelphi'; // 03.05.24 P.W
+
+procedure MediaPlay(MediaFile: AnsiString); // 22.06.07 P.W
+// replaces old code:
+//   if (mpCanPlay in frmMain.mdplyMeasurement.Capabilities) then // here wrong! must be post open!
+//   begin
+//     frmMain.mdplyMeasurement.FileName := 'xx.wav'
+//     frmMain.mdplyMeasurement.Open;
+//     frmMain.mdplyMeasurement.Play;
+//   end;
+{
+-------------------------------------------------------
+Value         Capability
+-------------------------------------------------------
+mpCanEject    Can eject media
+mpCanPlay     Can play media
+mpCanRecord   Can record media
+mpCanStep     Can step forward or backward within media
+mpUsesWindow  Uses a window for displaying output
+-------------------------------------------------------
+}
+begin
+  if not FileExists(MediaFile) then EXIT;
+
+  try
+    frmMain.mdplyMeasurement.FileName := MediaFile;
+    frmMain.mdplyMeasurement.Open;
+    // Capabilities post Open:
+    if (mpCanPlay in frmMain.mdplyMeasurement.Capabilities) then
+      frmMain.mdplyMeasurement.Play;
+//    raise(ERangeError.Create('not in range')); // for test
+  except // ignore or handle exception:
+//    on E: Exception do;
+//      ShowMessage(E.Message);
+  end;
+end;
+
+const
+  AppBlockChkPrevMax = 1;
+type
+  TAppBlockChk = record   //29.11.07 P.W
+    // used to detect when application is paused because of moving a window
+    StartFlg   : Boolean;
+    StartTime,
+    CurSec     : TDateTime;
+    CurCtr     : Integer;  // times ApplicationprocessMessages has been called in CurrentSec
+    PrevCount  : Integer;
+    PrevSec    : Array[0 .. AppBlockChkPrevMax] of TDateTime;
+    PrevCtr    : Array[0 .. AppBlockChkPrevMax] of Integer;
+  end;
+
+procedure AppBlockChkUpd(var ABC: TAppBlockChk; CurTime: TDateTime);
+//29.11.07 P.W
+const
+  SecStep = 1.0;
+var
+  I : Integer;
+begin
+  if not ABC.StartFlg then
+  begin
+    ABC.StartFlg     := True;
+    ABC.StartTime    := CurTime;
+    ABC.CurSec       := CurTime;
+    ABC.CurCtr       := 0;
+    ABC.PrevCount    := 0;
+  end;
+
+  if (SecondSpan(ABC.CurSec, CurTime) < SecStep) then
+  begin // in current second
+    Inc(ABC.CurCtr);
+  end else
+  begin // new second
+    // shift to higher index
+    ABC.PrevCount := Min(ABC.PrevCount +1, AppBlockChkPrevMax);
+    for I := 1 to AppBlockChkPrevMax do
+    begin
+      ABC.PrevSec[I] := ABC.PrevSec[I-1];
+      ABC.PrevCtr[I] := ABC.PrevCtr[I-1];
+    end;
+    // insert Cur at [0]
+    ABC.PrevSec[0]:= ABC.CurSec;
+    ABC.PrevCtr[0]:= ABC.CurCtr;
+
+    // init current
+    ABC.CurSec := CurTime;
+    ABC.CurCtr := 0;
+  end;
+end;
+
+function AppBlockChk_Blocked(var ABC: TAppBlockChk): Boolean;
+//29.11.07 P.W
+label
+  L_Ok, L_Blocked;
+begin
+  if (not ABC.StartFlg)                                then goto L_Ok;
+
+  if (SecondSpan(ABC.CurSec, SysUtils.GetTime) > 2.0)  then goto L_Blocked;
+
+  if (ABC.PrevCount  = 0)                              then goto L_Ok;
+
+  if (SecondSpan(ABC.CurSec, ABC.PrevSec[0]  ) > 2.0)  then goto L_Blocked;
+  if (ABC.PrevCtr[0] < 5)                              then goto L_Blocked;
+
+  if (ABC.PrevCount  = 1)                              then goto L_Ok;
+
+  if (ABC.PrevCtr[1] < 5)                              then goto L_Blocked;
+  if (SecondSpan(ABC.CurSec, ABC.PrevSec[1]  ) > 4.0)  then goto L_Blocked;
+
+ L_Ok:
+  Result := False;  // not blocked
+  EXIT;
+
+ L_Blocked:
+  Result := True;   // blocked detected
+end;
+
+var
+  AppTimer       : TDateTime = 0;
+  AppBlockChkGlb : TAppBlockChk;    // 29.11.07 P.W
+
+function AppBlockChkGlb_Blocked: Boolean;
+//29.11.07 P.W
+// used by FemCmd2.pas CheckDeviceResponding
+begin
+  Result := AppBlockChk_Blocked(AppBlockChkGlb)
+end;
+
+procedure ApplicationProcessMessages;
+// purpose:
+//   a) avoid too many calls of Application.ProcessMessages
+//   b) support RequestSound
+//   c) support AppBlockChkUpd to allow DeviceResponding check to detect blocked appplication
+// modifications:
+// 22.06.07 P.W: enable support of Requested sound again.
+// 29.11.07 P.W: support AppBlockCheck
+// 27.06.08 P.W: support DisableRequestSound
+var
+  CurTime : TDateTime;
+begin
+  if (DeltaAppProcMsgSec < 0.001) then EXIT;
+  CurTime := SysUtils.GetTime;
+  AppBlockChkUpd(AppBlockChkGlb, CurTime);  // 29.11.07 P.W
+  If (AppTimer = 0) or (Abs(AppTimer - CurTime)* 3600.0 * 24.0 > DeltaAppProcMsgSec)
+or DebugMode
+  then
+  begin
+    AppTimer := CurTime;
+    if (RequestSound <> RS_None) then
+    begin
+      if DisableRequestSound then   // 27.06.08 P.W
+        RequestSound := RS_None;
+
+//    if (mpCanPlay in frmMain.mdplyMeasurement.Capabilities) then     // is false before the first open!// here u. 22.06.07 P.W
+      Case RequestSound of
+        RS_Error{1}: begin   // ErrBox
+             MediaPlay(LocMediaDir+'Sound_Error.wav'); //C:\WINDOWS\Media\chord.wav
+           end;
+        RS_Start{2}: begin  // Sound_Start
+             MediaPlay(LocMediaDir+'Sound_Start.wav'); //C:\WINDOWS\Media\chimes.wav
+           end;
+        RS_End{3}: begin  // Sound_End
+             MediaPlay(LocMediaDir+'Sound_End.wav');   //C:\WINDOWS\Media\ding.wav
+           end;
+        RS_Wait{4}: begin  // Sound_Wait
+             MediaPlay(LocMediaDir+'Sound_Wait.wav');  //C:\WINDOWS\Media\chimes.wav
+           end;
+        // v---  27.06.08 P.W:
+        RS_Beep:               MessageBeep($FFFFFFFF);  // -> MessageBeep(-1);
+        RS_MB_OK:              MessageBeep(MB_OK);
+        RS_MB_ICONHAND:        MessageBeep(MB_ICONHAND);
+        RS_MB_ICONQUESTION:    MessageBeep(MB_ICONQUESTION);
+        RS_MB_ICONEXCLAMATION: MessageBeep(MB_ICONEXCLAMATION);
+        RS_MB_ICONASTERISK:    MessageBeep(MB_ICONASTERISK);
+
+      end;
+      RequestSound := RS_None;
+    end;
+    Application.ProcessMessages;
+  end;
+  AppProcMsgTimeSumGlb := AppProcMsgTimeSumGlb + SecondSpan(SysUtils.GetTime, CurTime); // 02.11.09 P.W
+end;
+
+Procedure ChkEnableMainForm; // 07.01.08 P.W
+var
+  MF : TForm;
+begin
+  if Assigned(Application.MainForm) then
+  begin
+    MF := Application.MainForm;
+    if not MF.Visible then MF.Visible := True;
+    if not MF.Enabled then MF.Enabled := True;
+  end;
+end;
+
+Procedure DelphiSleep(msDelay: Integer);
+var
+  DelayPart : Integer;
+begin
+  Repeat
+    DelayPart := Min(msDelay, 100);  
+    ApplicationProcessMessages;      // call also for msDelay = 0 !
+    Sleep(DelayPart);
+    Dec(msDelay, DelayPart);
+  until (msDelay <= 0);
+end;
+
+var
+  ErrLogFirstFlg : Boolean = True;
+  ErrLogFil : String = '';
+
+procedure ErrMessageBox(const Msg: AnsiString);
+// 23.03.05 P.W
+// Duplicates: TurboToDelphi.pas and Objects.pas
+begin
+  MessageBox1(0, PChar(Msg), nil, MB_OK or MB_ICONWARNING+MB_TASKMODAL);
+end;
+
+Procedure ErrLogOut(const Msg: AnsiString);
+// Modifications:
+// 23.03.05 P.W: do no longer write to ErrLogOut
+//   but present errors in ErrMessageBox directly
+begin
+  //-------------------------------
+  If (Msg = '') then EXIT;
+  //-------------------------------
+  ErrMessageBox(MSG) // 23.03.05 P.W
+end;
+
+//var
+//  ErrMsgList : TStringList = nil;
+
+procedure ErrorLogMsg(const Msg: AnsiString);
+// Convert Turbo to Delphi
+// Created: 20.02.04 P.W
+// Purpose: Support Message for not supported code
+// Modifications:
+// 23.03.05 P.W: do no longer use ErrMsgList and ErrLogOut
+//   but present errors in ErrMessageBox directly
+begin
+  ErrMessageBox(MSG) // 23.03.05 P.W
+end;
+
+procedure ErrorNotSupported(UnitName, Msg: AnsiString);
+// Convert Turbo to Delphi
+// Created: 20.02.04 P.W
+// Purpose: Support Message for not supported code
+// Modifications:
+// 23.03.05 P.W: do no longer call ErrorLogMsg
+begin
+  Msg := UnitName + ' Error, "' + Msg + '" is not supported! "';
+  ErrMessageBox(MSG) // 23.03.05 P.W
+end;
+
+end.
+
+
+
+
+

@@ -1,0 +1,75 @@
+object frmMsgDelay: TfrmMsgDelay
+  Left = 95
+  Top = 91
+  Width = 537
+  Height = 236
+  Caption = 'frmMsgDelay'
+  Color = clBtnFace
+  Font.Charset = ANSI_CHARSET
+  Font.Color = clWindowText
+  Font.Height = -16
+  Font.Name = 'Courier New'
+  Font.Style = [fsBold]
+  OldCreateOrder = False
+  OnClose = FormClose
+  PixelsPerInch = 96
+  TextHeight = 18
+  object Panel2: TPanel
+    Left = 0
+    Top = 168
+    Width = 521
+    Height = 29
+    Align = alBottom
+    TabOrder = 0
+    object btnOk: TButton
+      Left = 6
+      Top = 6
+      Width = 214
+      Height = 20
+      Cancel = True
+      Caption = 'Close Message'
+      Default = True
+      ModalResult = 1
+      TabOrder = 0
+      OnClick = btnOkClick
+    end
+    object btnHoldMsg: TButton
+      Left = 232
+      Top = 6
+      Width = 213
+      Height = 20
+      Caption = 'Hold Message'
+      TabOrder = 1
+      OnClick = btnHoldMsgClick
+    end
+    object btnCancel: TButton
+      Left = 119
+      Top = 31
+      Width = 214
+      Height = 20
+      Cancel = True
+      Caption = 'Cancel'
+      TabOrder = 2
+      OnClick = btnCancelClick
+    end
+  end
+  object memMsg: TMemo
+    Left = 0
+    Top = 0
+    Width = 521
+    Height = 168
+    Align = alClient
+    Alignment = taCenter
+    Color = clBtnFace
+    ReadOnly = True
+    ScrollBars = ssVertical
+    TabOrder = 1
+    WantReturns = False
+  end
+  object tmrClose: TTimer
+    Enabled = False
+    OnTimer = tmrCloseTimer
+    Left = 464
+    Top = 32
+  end
+end

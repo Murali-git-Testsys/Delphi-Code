@@ -1,0 +1,572 @@
+unit OrientDirUse;
+// created: 26.01.09 P.W
+// purpose: Support Orientation Direction Information
+// Uses TOrientDirRec of XGlb.pas
+//
+
+interface
+
+uses
+  HaltUnit,
+  SysUtils, Math, IniFiles, Windows, Classes, Masks,
+  GraphGlb, Graph0,
+  UMsgDelay,
+  ComNames,
+  GlbPath,
+  GlbType,
+  ReadPar,
+  XctVersion,
+  XGlb;
+
+// FemSvInfo.pas
+function  IsOrientInfoSup(const ODR: tOrientDirRec): Boolean;
+
+// UtArray.pas UtKnPane.pas
+function  IsOrientInfoImageSup(const ODR: tOrientDirRec): Boolean;
+
+// CtFemNd.pas
+function  GetCtMirrorHoriz(const ODR: tOrientDirRec; const Default: Boolean): Boolean;
+function  GetCtMirrorVert (const ODR: tOrientDirRec; const Default: Boolean): Boolean;
+
+// FemSvIo.pas
+function  GetSvMirrorHoriz(const ODR: tOrientDirRec; const Default: Boolean; InvertFlg:Boolean=False): Boolean;
+function  GetSvMirrorVert (const ODR: tOrientDirRec; const Default: Boolean): Boolean;
+
+// UtArray.pas
+function  GetCtPixRowDirStr(const ODR: tOrientDirRec): String02;
+function  GetCtPixColDirStr(const ODR: tOrientDirRec): String02;
+
+// UtArray.pas UtKnPane.pas
+function  GetSvPixRowDirStr(const ODR: tOrientDirRec): String02;
+function  GetSvPixColDirStr(const ODR: tOrientDirRec): String02;
+
+// XbJob1.pas
+procedure SetOrientDir_ByMaskName(out ODR: tOrientDirRec; const DTR: tDevTypRec; const MaskName: AnsiString);
+
+// CtFemNd.pas  FemSvIo.pas
+procedure SetVersionNrImage(var ODR: tOrientDirRec);
+
+procedure DrawOrientInfo(Ix0, Iy0, Idx, Idy: Integer; PixRowDirStr, PixColDirStr: String02);
+
+Implementation
+  const Unit_Name = 'OrientDirUse'; // 03.05.24 P.W
+
+const
+  CtMirrorHoriz_Msk   = 1 shl 0;
+  CtMirrorVert_Msk    = 1 shl 1;
+  SvMirrorHoriz_Msk   = 1 shl 2;
+  SvMirrorVert_Msk    = 1 shl 3;
+
+type // Orientation Markers:
+  // Head-Foot; Left-Right; Anterior-Posterior; compare Dicom standard Annex A PS 3.17 - 2007 Page 13 ... 21
+  // H-F; L-R; A-P
+  tOrientDir = (Ori_None, Ori_Head, Ori_Foot, Ori_Left, Ori_Right, Ori_Anterior, Ori_Posterior);
+const
+  OrientBitsPerLevel =   4;
+  OrientBitsMsk      = $0F;
+  OrientDir_Chars : Array [tOrientDir] of Char =
+    ('-', 'H', 'F', 'L', 'R', 'A', 'P');
+  OrientDir_Names : Array [tOrientDir] of AnsiString =     
+    ('-', 'Head', 'Foot', 'Left', 'Right', 'Anterior', 'Posterior');
+
+
+function CleanStringUpperCase(const S: AnsiString): AnsiString;
+// Trim Left and Right Spaces or Tabs (Tabs convert to Spaces); only single spaces
+var
+  ResPos       : Integer;
+  InTabOrSpace : Boolean;
+  procedure TabOrSpace;
+  begin
+    InTabOrSpace := ResPos > 0;
+  end;
+  procedure AppendChar(Ch: Char);
+  begin
+    Inc(ResPos);
+    if InTabOrSpace then
+    begin
+      Result[ResPos]:= ' ';
+      Inc(ResPos);
+      InTabOrSpace := False;
+    end;
+    Result[ResPos] := UpCase(Ch);
+  end;
+var
+  LS, I: Integer;
+begin
+  ResPos       := 0;
+  InTabOrSpace := False;
+
+  LS := Length(S);
+  SetLength(Result, LS);
+  for I := 1 to LS do
+  begin
+    case S[I] of
+      ' ',#9: TabOrSpace;
+      else    AppendChar(S[I]);
+    end;
+  end;
+  SetLength(Result, ResPos);
+end;
+
+procedure TestCleanStringUpperCase;
+var
+  A, B : AnsiString;
+begin
+  A := '  Jo k   er   ';
+  A := 'Joker';
+  B := CleanStringUpperCase(A);
+  if B = A then;
+  H_alt(1);
+end;
+
+
+
+function  OrientChars2PixelDir(const OrientChars:String02): Byte;
+  function OrientChar2OrientDir(const OrientChar: Char): tOrientDir;
+  var
+    OD : tOrientDir;
+  begin
+    Result := Ori_None;
+    for OD := Low(tOrientDir) to High(tOrientDir) do
+      if UpperCase(OrientChar) = UpperCase(OrientDir_Chars[OD]) then
+      begin
+        Result := OD;
+        Break;
+      end;
+  end;
+  function OrientDirShifted(const OD: tOrientDir; Level: Byte): Byte;
+  begin
+    Result := Ord(OD) * 1 shl (Level * OrientBitsPerLevel);
+  end;
+var
+  L : Integer;
+begin
+  Result := 0;
+
+  for L := 0 to Min(2, Length(OrientChars)) -1 do
+     Result := Result + OrientDirShifted(OrientChar2OrientDir(OrientChars[L+1]), L);
+end;
+
+function  IsOrientDirStrValid(S: AnsiString): Boolean;
+var
+  Len, I : Integer;
+  Ok : Boolean;
+  OD : tOrientDir;
+begin
+  Len := Length(S);
+  Result := (1 <= Len) and (Len <= 2);
+  If Result then
+  begin
+    S := UpperCase(S);
+    for I := 1 to Len do
+    begin
+      Ok := False;
+      for OD := Low(tOrientDir) to High(tOrienTDir) do
+        if OrientDir_Chars[OD] = S[I] then
+        begin
+          Ok := True;
+          Break;
+        end;
+      if not Ok then Result := False;
+    end;
+  end;
+end;
+
+function  PixelDir2OrientChars(PixDir: Byte): String02;
+  function GetOrientCharString(PixDir, Level: Byte): String;
+  var
+    Idx : Integer;
+  begin
+    Idx := (PixDir shr (Level * OrientBitsPerLevel)) and OrientBitsMsk;
+    case Idx of
+      Ord(Low(tOrientDir))+1 .. Ord(High(tOrientDir)):
+        Result := OrientDir_Chars[tOrientDir(Idx)];
+      else Result := ''; //OrientDir_Chars[Ori_None];
+    end;
+  end;
+var
+  L : Integer;
+begin
+  Result := '';
+  for L := 0 to 1 do
+    Result := Result + GetOrientCharString(PixDir, L);
+end;
+
+procedure TestOrientDir;
+  function CheckOk(OrientChars:String02): Boolean;
+  var
+    B : String;
+    I : Integer;
+  begin
+    I := 1;
+    While I <= Length(OrientChars) do
+    begin
+      if OrientChars[I]=OrientDir_Chars[Ori_None] then
+        Delete(OrientChars, I, 1)
+      else
+        Inc(I);
+    end;
+
+    B := PixelDir2OrientChars(OrientChars2PixelDir(OrientChars));
+    Result := OrientChars = B;
+    if not Result then
+    begin
+    Result := OrientChars = B;
+    end;
+  end;
+var
+  Ok : Boolean;
+  Ctr : Integer;
+  procedure Test(OrientChars:String02);
+  begin
+    Inc(Ctr);
+    if not CheckOk(OrientChars) then
+      Ok := False;
+  end;
+const
+  OA = Low(tOrientDir);
+  OB = High(tOrientDir);
+var
+  OD1, OD2: tOrientDir;
+begin
+  Ok := True;
+  Ctr := 0;
+
+//  Test('aa-');
+//  Test('aaa');
+  Test('ab');
+  Test('');
+  for OD1 := OA to OB do
+    Test(OrientDir_Chars[OD1]);
+
+  for OD1 := OA to OB do
+    for OD2 := OA to OB do
+      Test(OrientDir_Chars[OD1]+OrientDir_Chars[OD2]);
+
+  if not Ok then
+  begin
+    if Ctr > 0 then;
+  end;
+
+  H_alt(1);
+end;
+
+procedure  SetOrientInfoRec_MirrorBits(var OIR: tOrientDirRec; const CtMirHoriz, CtMirVert, SvMirHoriz, SvMirVert: Boolean);
+  procedure SetBit(Msk: Byte);
+  begin
+    OIR.Info_MirrorBits := OIR.Info_MirrorBits or Msk;
+  end;
+begin
+  OIR.Info_MirrorBits := 0;
+  if CtMirHoriz then SetBit(CtMirrorHoriz_Msk);
+  if CtMirVert  then SetBit(CtMirrorVert_Msk );
+  if SvMirHoriz then SetBit(SvMirrorHoriz_Msk);
+  if SvMirVert  then SetBit(SvMirrorVert_Msk );
+end;
+
+function  InitOrientDirRec_MirrorBits(const CtMirHoriz, CtMirVert, SvMirHoriz, SvMirVert: Boolean): tOrientDirRec;
+begin
+  FillChar(Result, SizeOf(Result), #0);
+  SetOrientInfoRec_MirrorBits(Result, CtMirHoriz, CtMirVert, SvMirHoriz, SvMirVert);
+end;
+
+function  IsOrientInfoSup(const ODR: tOrientDirRec): Boolean;
+// true when measured by versions which store Info_MirrorBits
+// if true then since version 6.20 A (=6201) the image will be backprojected as at measurement time and
+// mirror changes in typ file are ignored! 
+begin
+  Result := (ODR.VersionNrHead >= XctVersion.VersionNrHead_SupOrientDir);
+end;
+
+function  IsOrientInfoImageSup(const ODR: tOrientDirRec): Boolean;
+// false when backprojected by older versions which do not care about Info_MirrorBits
+// or measured by versions which do not store Info_MirrorBits
+// when true: Mirror is as at measurement time and does not depend on current type file setting
+begin
+  Result := IsOrientInfoSup(ODR) and (ODR.VersionNrImage>= XctVersion.VersionNrHead_SupOrientDir);
+end;
+
+function  GetCtMirrorHoriz(const ODR: tOrientDirRec; const Default: Boolean): Boolean;
+begin
+  if IsOrientInfoSup(ODR) then
+    Result := ((ODR.Info_MirrorBits and CtMirrorHoriz_Msk)  <> 0)
+  else
+    Result := Default;
+end;
+
+function  GetCtMirrorVert(const ODR: tOrientDirRec; const Default: Boolean): Boolean;
+begin
+  if IsOrientInfoSup(ODR) then
+    Result := ((ODR.Info_MirrorBits and CtMirrorVert_Msk )  <> 0)
+  else
+    Result := Default;
+end;
+
+function  GetSvMirrorHoriz(const ODR: tOrientDirRec; const Default: Boolean; InvertFlg:Boolean=False): Boolean;
+begin
+  if IsOrientInfoSup(ODR) then
+    Result := ((ODR.Info_MirrorBits and SvMirrorHoriz_Msk)  <> 0) xor InvertFlg
+  else
+    Result := Default;
+end;
+
+function  GetSvMirrorVert(const ODR: tOrientDirRec; const Default: Boolean): Boolean;
+begin
+  if IsOrientInfoSup(ODR) then
+    Result := ((ODR.Info_MirrorBits and SvMirrorVert_Msk )  <> 0)
+  else
+    Result := Default;
+end;
+
+function  GetCtPixRowDirStr(const ODR: tOrientDirRec): String02;
+begin
+  if IsOrientInfoSup(ODR) then
+    Result := PixelDir2OrientChars(ODR.CtPixRowDir)
+  else
+    Result := '';
+end;
+
+function  GetCtPixColDirStr(const ODR: tOrientDirRec): String02;
+begin
+  if IsOrientInfoSup(ODR) then
+    Result := PixelDir2OrientChars(ODR.CtPixColDir)
+  else
+    Result := '';
+end;
+
+function  GetSvPixRowDirStr(const ODR: tOrientDirRec): String02;
+begin
+  if IsOrientInfoSup(ODR) then
+    Result := PixelDir2OrientChars(ODR.SvPixRowDir)
+  else
+    Result := '';
+end;
+
+function  GetSvPixColDirStr(const ODR: tOrientDirRec): String02;
+begin
+  if IsOrientInfoSup(ODR) then
+    Result := PixelDir2OrientChars(ODR.SvPixColDir)
+  else
+    Result := '';
+end;
+
+function OrientDir_SetOrient_Mask(var ODR: tOrientDirRec; const MaskName: AnsiString): Boolean;
+// Read Masks.Ini
+// search for a section "Masks xyz*.*" that matches best to MaskName
+// from this section read Orientation
+// from the Orientation get CtPixelRowDirection ...
+// if nothing found return false and empty Orientation
+
+  function CheckReadDirByte(var aResult: Boolean; MI: TMemIniFile; const Section, Ident: AnsiString): Byte;
+  var
+    DirStr: AnsiString;
+  begin
+    DirStr  := MI.ReadString(Section, Ident, '');
+    if IsOrientDirStrValid(DirStr) then
+    begin
+      // aResult : no change!
+      Result  := OrientChars2PixelDir(DirStr);
+    end else
+    begin
+      aResult := False;
+      Result  := 0;
+      ShowMessageExt('Warning: Parameter "%s" = "%s" is missing or invalid; section "%s"; file: "%s"!',
+          [Ident, DirStr, Section, ExpandFileName(LocMasksIniName)], MB_ICONEXCLAMATION);
+    end;
+  end;
+var
+  MI : TMemIniFile;
+  SL, ML : TStringList;
+  S, Msk, MatchSec, OriSec : AnsiString;
+  I, P  : Integer;
+  CtPixRowDirStr,
+  CtPixColDirStr,
+  SvPixRowDirStr,
+  SvPixColDirStr            : String02;
+
+begin
+  Result := FileExists(LocMasksIniName);
+  if not Result then
+    ShowMessageExt('Warning: File "%s" not found!', [ExpandFileName(LocMasksIniName)], MB_ICONEXCLAMATION);
+  if Result then
+  begin // if Result [A]
+    SL := TStringList.Create;  // Section List
+    ML := TStringList.Create;  // Match List
+    MI := TMemIniFile.Create(LocMasksIniName);
+    // search sections Masks xyz*.* best match to MaskName:
+    MI.ReadSections(SL);
+    for I := 0 to SL.Count -1 do
+    begin // for I
+
+      S := CleanStringUpperCase(SL[I]);
+
+      P := Pos('MASKS ', S);
+      if (P = 1) then
+      begin
+        Msk := Copy(S, 7, Length(S) -6);
+        if MatchesMask(MaskName, Msk) then
+        begin
+          ML.AddObject(Msk, Pointer(I));
+        end;
+      end;
+    end;  // for I
+
+    Result := (ML.Count > 0);
+
+    if Result then
+    begin // prefer exact match otherwise first match:
+      MatchSec := '';
+      for I := 0 to ML.Count -1 do
+        if (UpperCase(MaskName) = ML[I]) then
+        begin
+          MatchSec := SL[Integer(ML.Objects[I])]; // use exact match
+          Break;  // no further comparison
+        end;
+      if MatchSec = '' then
+         MatchSec := SL[Integer(ML.Objects[0])];  // use first match
+      Result := (MatchSec <> '');
+    end;
+
+    if Result then
+    begin
+      OriSec := MI.ReadString(MatchSec, 'Orientation',            '');
+      Result := MI.SectionExists(OriSec);
+      if not Result then
+        ShowMessageExt('Warning: Section "%s" not found; file: "%s"!',
+          [OriSec, ExpandFileName(LocMasksIniName)], MB_ICONEXCLAMATION);
+
+    end;
+
+    if Result then
+    begin
+      ODR.CtPixRowDir := CheckReadDirByte(Result, MI, OriSec, 'CtPixelRowDirection'   );
+      ODR.CtPixColDir := CheckReadDirByte(Result, MI, OriSec, 'CtPixelColumnDirection');
+      ODR.SvPixRowDir := CheckReadDirByte(Result, MI, OriSec, 'SvPixelRowDirection'   );
+      ODR.SvPixColDir := CheckReadDirByte(Result, MI, OriSec, 'SvPixelColumnDirection');
+    end;
+
+    MI.Free;
+    ML.Free;
+    SL.Free;
+  end;  // if Result [A]
+
+  if not Result then
+  begin
+    ODR.CtPixRowDir := 0;
+    ODR.CtPixColDir := 0;
+    ODR.SvPixRowDir := 0;
+    ODR.SvPixColDir := 0;
+  end;
+
+end;
+
+procedure SetOrientDir_ByMaskName(out ODR: tOrientDirRec; const DTR: tDevTypRec; const MaskName: AnsiString);
+begin
+  ODR := InitOrientDirRec_MirrorBits(DTR.CtMirrorHoriz, DTR.CtMirrorVert,
+                                     DTR.SvMirrorHoriz, DTR.SvMirrorVert);
+  OrientDir_SetOrient_Mask(ODR, MaskName);
+  ODR.VersionNrHead := XctVersion.VersionNrHead;
+end;
+
+procedure SetVersionNrImage(var ODR: tOrientDirRec);
+begin
+  ODR.VersionNrImage := XctVersion.VersionNrHead;
+end;
+
+procedure Test_SetOrientDir_ByMaskName;
+var
+  ODR: tOrientDirRec;
+begin
+  SetOrientDir_ByMaskName(ODR, GlbDevTypPtr^, 'RaDius.000');
+  SetOrientDir_ByMaskName(ODR, GlbDevTypPtr^, 'RaDius.090');
+  H_alt(1);
+end;
+
+procedure DrawOrientInfo(Ix0, Iy0, Idx, Idy: Integer; PixRowDirStr, PixColDirStr: String02);
+var
+  IxA1, IyA1, IxA2, IyA2, IdA : Integer;
+  procedure DrawArrows;
+  begin
+    Graph0.DrawArrow(Ix0, Iy0, IxA1, IyA1, IdA);
+    Graph0.DrawArrow(Ix0, Iy0, IxA2, IyA2, IdA);
+  end;
+const
+  FGCol = C_White; //C_LGray;
+  BGCol = C_Black;
+var
+  FGColSav, BGColSav         : Word;
+  VP                         : ViewPortType;
+  XMax, YMax, TWRStr, THCStr : Integer;
+  TW, TH, dx1, dy1, dx2, dy2 : Integer;
+begin
+  IdA  := Round(0.4 * DefaultTextWidth);
+
+  IxA1 := Ix0 + Idx;
+  IyA1 := Iy0;
+  IxA2 := Ix0;
+  IyA2 := Iy0 + Idy;
+
+  FGColSav := Graph0.GetColor;
+  BGColSav := Graph0.GetBkColor;
+
+    Graph0.SetColor  (BGCol);
+    Graph0.SetBkColor(BGCol);
+
+    Graph0.SetPenWidth(3);
+    DrawArrows;
+
+    Graph0.SetColor  (FGCol);
+    Graph0.SetBkColor(FGCol);
+    Graph0.SetPenWidth(1);
+    DrawArrows;
+
+    Graph0.SetColor  (FGCol);
+    Graph0.SetBkColor(BGCol);
+
+    SetTextStyle(0,0,1);
+    SetTextMode(TM_Opaque);
+    SetTextJustify(LeftText,BottomText);
+
+
+    TW  := Graph0.TextWidth ('X');
+    TH  := Graph0.TextHeight('X');
+    dx1 := Round(+0.20 * TW);
+    dy1 := Round(+0.55 * TH);
+    dx2 := Round(-0.50 * TW);
+    dy2 := Round(+1.20 * TH);
+
+    // prepare check: are PixRowDirStr and PixColDirStr inside viewport?
+    GetViewSettings(VP);
+    XMax := Abs(VP.x2 - VP.x1);
+    YMax := Abs(VP.y2 - VP.y1);
+
+    // check that X is not outside viewport
+    TWRStr := Graph0.TextWidth (PixRowDirStr);
+    if IxA1+dx1 + TWRStr > XMax then
+    begin
+      dx1 := - TWRStr;
+      dy1 := dy1 + TH;
+    end;
+    // check that Y is not outside viewport
+    THCStr := Graph0.TextHeight(PixColDirStr);
+    if IyA2+dy2 + THCStr > YMax then
+    begin
+      dy2 := 0;
+      dx2 := dx2 + TW;
+    end;
+
+    Graph0.OutTextXY(IxA1+dx1, IyA1+dy1, PixRowDirStr);
+    Graph0.OutTextXY(IxA2+dx2, IyA2+dy2, PixColDirStr);
+
+  Graph0.SetColor  (FGColSav);
+  Graph0.SetBkColor(BGColSav);
+end;
+
+
+
+initialization
+//  TestCleanStringUpperCase;       // for debugging only!
+//  Test_SetOrientDir_ByMaskName;   // Only for debugging!
+//  TestOrientDir;                  // Only for debugging!
+
+end.

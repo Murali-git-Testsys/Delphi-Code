@@ -1,0 +1,997 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; changes: 43; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+(*.+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+(*+ ~ ~                                                    ) %15nV0.%22v) +*)
+(*+ Module Name/Vers.: @(#)TurbExt1 V.:1.00                             ) +*)
+(*+ Author           : P.Wueseke                                          +*)
+(*+ Date             : --.--.90                                           +*)
+(*+ Description      : Global Tools (Formating of Numbers...)             +*)
+(*+ ~ ~                                                       : %15d%30w: +*)
+(*+ Last modified/By : 08.10.02 / P.Wueseke                               +*)
+(*+ Date/Modification: 01.02.96 P.W / InvValOptD introduced               +*)
+(*+ Date/Modification: 01.02.96 P.W / InvValR --> InvValD                 +*)
+(*
+Modifications:
+{08.10.02 P.W}
+  Function InvValOptD format improved from for example ".010" to "0.01"
+{23.07.03 P.W: remove "V-"}
+{23.07.03 P.W}
+  Post bad expiriences with compiler option "V-"
+  I removed also the untyped (VAR TXT) parameters to avoid
+  protection faults
+  Changes every where where String(Txt) has been use
+*)
+(*+ Date/Modification  (end of list)                                      +*)
+(*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.*)
+Unit TurbExt1;
+
+  {******************************************************************}
+  {*                                                                *}
+  {*    UNIT TURBOEXT -                                             *}
+  {*                                                                *}
+  {*    +UpperCaseGerFunc                                            *}
+  {*                                                                *}
+  {******************************************************************}
+
+INTERFACE
+
+  USES
+    Crt,
+    Dos,
+    GlbFT,
+    GlbType;
+
+Procedure AddChar(Var Txt:String; Ch:Char);
+  { Nur Strings der Länge 255! } //OemToAnsi Chg#234 (02.03.04 P.W)
+Procedure AddStr(Var Txt:String; Tadd:String);
+  { Nur Strings der Länge 255! } //OemToAnsi Chg#233 (02.03.04 P.W)
+Procedure Beep(Hight,Time:Word);
+Function MPos(txt1,txt2:string;Var p:Byte):Byte;
+Function CharFullChange(txt:String;old,new:char):String;
+Function CentreTxt(Txt:String; Ch:Char; FieldLen:Byte):String;
+Function MidStr(txt:String;FieldLen:Smallint):String;
+Function InvVal(l:Longint;s:word):String20;
+Function InvValD(D: Double; s, n: Word): String40;
+Function InvValOptD(D: Double; MinFieldLen: Byte; DelZeroFlg: Boolean): String;
+Function TechVal(R:Real; Ziff:Word):String20;
+Function ValR(txt:String20; Var Ok:Boolean):Real;
+Function ValL(txt:String20; Var Ok:Boolean):LongInt;
+Function UpCaseGer(Ch:Char):Char;
+Procedure UpperCaseGerProc(Var Txt: String);
+Function UpperCaseGerFunc(Txt:String):String;
+Function LowerCaseGer(Ch:Char):Char;
+Procedure LowerCaseGerProc(Var Txt: String);
+Function LowerCaseGerFunc(Txt:String):String;
+Function NextPos(Search,Txt:String; LastPos:Smallint):Byte;
+  { Suchen ab LastPos+1 auf Vorkommen,
+  { kein weiteres Vorkommen : NextPos = 0  (nicht LastPos!)
+  { ansonsten               : NextPos = nächste Position (>LastPos) //OemToAnsi Chg#232 (02.03.04 P.W)
+  }
+Procedure AusTausch(Var Txt : String; OldTxt, NewTxt : String);
+Procedure RepAusTausch(Var Txt : String; OldTxt, NewTxt : String);
+Procedure FullAusTausch(Var Txt : String; OldTxt, NewTxt : String);
+Function RepChar(Ch:Char;len:Smallint):String;
+Function RepTxt(Txt : String; Len : Smallint):String;
+Function TextSpace(txt:String;len:byte):String;
+Function Gesperrt(txt:string):String;
+{ Procedure InitLocalWtxt(Var LWTxt:Text; Var LWstr:String); {}
+Procedure DelChar(Var Txt: String; ch:char);
+Function DelDouble(Txt:String; ch:char):String;
+Procedure DelSpcRight(VAR Txt: String);
+Procedure DelSpcLeft (Var Txt: String);
+Function SpaceReduced(Txt:String):String;
+{
+Function NullStr(L,Len:LongInt):string30;
+ersetzt durch LeadZero--v
+}
+Function LeadZero(Nr,Len:LongInt):String;
+Procedure SplittText( Var Txt, Splitt, SuccSplitt : String;
+                      SplittSet : CharSetType);
+{ Input:   Txt, SplittSet
+{ Output:  Txt, Splitt, SuccSplitt
+{ Wirkung: Txt wird zeichenweise in Splitt übertragen, bis zum Auftreten //OemToAnsi Chg#231 (02.03.04 P.W)
+{          eines der in SplittSet übergebenen Zeichen. //OemToAnsi Chg#230 (02.03.04 P.W)
+{          Txt wird um diesen Teil gekürzt. Die weiteren gefunden //OemToAnsi Chg#229 (02.03.04 P.W)
+{          Trennzeichen werden in SuccSplitt zurückgegeben. //OemToAnsi Chg#228 (02.03.04 P.W)
+}
+Function WordIn(txt,txt2:String):Boolean;
+Function StripTxt(Var txt:String; Separator:Char):String;
+Function CodeStrToChar(CodeStr:String04; Var Ch:Char):Boolean;
+{  Function ParPart(Par:string04; Var buf; VarTyp:TypType):Boolean;}
+Procedure ConcatProc(Var Txt: String; SizeTxt:Word; a,b,c,d:String);
+Function CodeTxt(Txt:String):String;
+Function ChkNo(Opt,Mode:String):LongInt;
+Function StripExt (PStr: PathStr; Var EStr: ExtStr): PathStr;
+
+Const
+  TrennerSet : Set of Char =
+    [#0,  ',', ' ', '.', FixSem, ':', '''', '?', '!','=',
+     '+', '-', '*', '/', '(', ')', '[', ']', '{', '}' ];
+   { #0 muß in TrennerSet sein und #1 darf es nicht (wegen Func.WordIn! } //OemToAnsi Chg#227 (02.03.04 P.W)
+
+
+Implementation
+  const Unit_Name = 'TurbExt1'; // 03.05.24 P.W
+
+{-------------------------------------------------------------------------}
+{  Device    fuer Writeln >Writeln(Wtxt,  .......... );                   }
+{  Ergebnis: WStr (STRING);                                               }
+{-------------------------------------------------------------------------}
+(*
+{$F+}
+FUNCTION WTXTINOUT(VAR F : TEXTREC) : Smallint ;
+{ (" ":03.06.93 P.W) $F-}
+
+{var
+  p   :^Char;
+  WP  :^String;
+  l   :Longint absolute P;{}
+BEGIN
+  {----------------------------v}
+    WStr[0] := CHR(F.BUFPOS) ; {}
+  {  p:=Pointer(F.BufPtr);
+
+    dec(l);
+    Wp:=Pointer(P);
+    p^:=Chr(F.BufPos);  {}
+  {----------------------------^}
+
+  IF F.BUFPOS < F.BUFSIZE THEN WTXTINOUT := 0
+  ELSE WTXTINOUT := 160 ;
+  F.BUFPOS := 0 ;
+END ;
+
+{   Procedure InitLocalWtxt(Var LWTxt:Text; Var LWstr:String);
+begin
+  TextRec(LWtxt):=TextRec(Wtxt);
+  With TextRec(LWTxt) do
+  begin
+    BufPtr:=@LWstr[1];
+  end;
+  LWstr:='';
+end;
+{}
+*)
+{--------------------------------------------------------------------------}
+
+Procedure AddChar(Var Txt:String; Ch:Char);
+{ Nur Strings der Länge 255! } //OemToAnsi Chg#226 (02.03.04 P.W)
+Var
+  Len : Byte absolute Txt;
+begin
+  if Len=255 then exit;
+  inc(Len);
+  Txt[Len]:=Ch;
+end;
+
+Procedure AddStr(Var Txt:String; Tadd:String);
+{ Nur Strings der Länge 255! } //OemToAnsi Chg#225 (02.03.04 P.W)
+(*
+Var
+  A   : Byte absolute Txt;
+  B   : Byte absolute Tadd;
+*)
+begin
+  (*
+  For B:=1 to Min(B,255-A) do
+  begin
+    Inc(A);
+    Txt[A]:=Tadd[B];
+  end;
+  *)
+  Txt := Txt + Tadd;
+end;
+
+Procedure Beep(Hight,Time:Word);
+begin
+  sound(Hight);
+  Delay(Time);
+  nosound;
+end;
+
+Function MPos(txt1,txt2:string;Var p:Byte):Byte;
+begin
+  p:=pos(Txt1,Txt2);
+  Mpos:=p;
+end;
+
+
+Function CharFullChange(txt:String;old,new:char):String;
+begin
+  While(Pos(Old,Txt)>0) do Txt[pos(old,txt)]:=new;
+  CharFullChange:=Txt;
+end;
+
+Function CentreTxt(Txt:String; Ch:Char; FieldLen:Byte):String;
+Var
+  Len         : Byte absolute Txt;
+begin
+  if FieldLen>254 then FieldLen:=254;
+  if Len<FieldLen then
+  begin
+    While Len<FieldLen do Txt:=Ch + Txt + Ch;
+    Len:=FieldLen;
+  end;
+  CentreTxt:=Txt;
+end;
+
+Function MidStr(txt:String;FieldLen:Smallint):String;
+{var l:Smallint;}
+begin
+  MidStr:=FT_(Txt,FC,FieldLen);
+end;
+
+Function InvVal(l:Longint;s:word):String20;
+var txt:string20;
+begin
+  Str(l:s,Txt);
+  InvVal:=Txt;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : InvValD                                            **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 01.02.96                                           **)
+(** Description      :   Double to Formated String                        **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ?                                                  **)
+(** Input            : D, s, n                                            **)
+(** Output           : RETURN (String40): Ret                             **)
+(** Global Variables                                                      **)
+(**  - affected      : ?                                                  **)
+(**  - predefined    : ?                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function InvValD(D: Double; s, n: Word): String40;
+Var
+  Txt : String40;
+begin
+  Str(D :s :n, Txt);
+  InvValD:=Txt;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : InvValOptD                                         **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 01.02.96                                           **)
+(** Description      : Optimize Format of Double: Use maximum of dezimals **)
+(** Description      :   to use MinFieldLen                               **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : DelSpcLeft                                         **)
+(** Input            : D, MinFieldLen, DelZeroFlg                         **)
+(** Output           : RETURN: Formated Double as String                  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(*
+Modifications:
+{08.10.02 P.W}
+  Function InvValOptD format improved from for example ".010" to "0.01"
+*)
+(**************************************************************************.*)
+Function InvValOptD(D: Double; MinFieldLen: Byte; DelZeroFlg: Boolean): String;
+Var
+  Txt              : String;
+  PointDeleted     : Boolean;
+begin
+  Str(D:40:20, Txt);
+  DelSpcLeft (Txt);
+
+  If DelZeroFlg and (Txt[1] = '0') then Delete(Txt, 1, 1);
+  PointDeleted:=False;
+  While(Length(Txt) > MinFieldLen) and (not PointDeleted) do
+  begin
+    PointDeleted := PointDeleted or (Txt[Length(Txt)] = '.');
+    SetLength(Txt, Length(Txt)-1); // Dec(Txt[0]);
+  end;
+  If DelZeroFlg and (Txt[1] = '.') and (Txt[Length(Txt)] = '0') then
+  begin {From ".010" to "0.01"}        {08.10.02 P.W}
+    SetLength(Txt, Length(Txt)-1); // Dec(Txt[0]);    {Delete last zero}
+    Txt := '0'+Txt; {Add zero at begin}
+  end;
+  InvValOptD:=Txt;
+end;
+
+Function TechVal(R:Real; Ziff:Word):String20;
+var
+  txt         : string20;
+  P           : Smallint;
+begin
+  if Ziff< 3 then Ziff:= 3;  { sonst klappt das Kommasetzen nicht! }
+  if Ziff>15 then Ziff:=15;
+  Str(r:1:Ziff+1,Txt);
+  p:=Pos('.',Txt);
+  Delete(Txt,p,1);
+  Txt:=Copy(Txt,1,Ziff);
+  Case p of
+     2.. 4: begin
+              Insert('.',Txt,p);
+              Txt:=Txt+'  ';
+            end;
+     5.. 7: begin
+              Insert('.',Txt,p-3);
+              Txt:=Txt+' K';
+            end;
+     8..10: begin
+              Insert('.',Txt,p-6);
+              Txt:=Txt+' M';
+            end;
+    11..13: begin
+              Insert('.',Txt,p-9);
+              Txt:=Txt+' G';
+            end;
+    else Txt:= RepChar('*',Ziff)+ '***';
+  end;
+  TechVal:=Txt;
+end;
+
+Function ValR(txt:String20; Var Ok:Boolean):Real;
+var err:LongInt;//word;
+    r:Real;
+begin
+  val(txt,R,Err);
+  ok:=Ok and (Err=0);
+  ValR:=R;
+end;
+
+Function ValL(txt:String20; Var Ok:Boolean):LongInt;
+var err:LongInt;//word;
+    L:LongInt;
+begin
+  val(txt,L,Err);
+  ok:=Ok and (Err=0);
+  ValL:=L;
+end;
+
+(* ohne Umlaute:
+Procedure UpperCaseInlineProc(VAR txt:string);
+Begin
+  inline
+     ($c4/$be/txt/         {     LES DI, txt[BP]               }
+      $26/$8a/$0D/         {     MOV CL,ES:[DI]                }
+      $fe/$c1/             {     INC CL                        }
+      $fe/$c9/             { L1: DEC CL                        }
+      $74/$13/             {     JZ  L2                        }
+      $47/                 {     INC DI                        }
+      $26/$80/$3d/$61/     {     CMP ES:BYTE PTR[DI], 'a'      }
+      $72/$f5/             {     JB  L1                        }
+      $26/$80/$3D/$7a/     {     CMP ES:BYTE PTR[DI], 'z'      }
+      $77/$ef/             {     JA  L1                        }
+      $26/$80/$2d/$20/     {     SUB ES:BYTE PTR[DI], 20H      }
+      $eb/$e9);            {     JMP SHORT L1                  }
+                           { L2:                               }
+End;
+*)
+(* Läuft nicht unter TurboPascal 6.0! : //OemToAnsi Chg#224 (02.03.04 P.W)
+Function UpCaseGer(Ch:Char):Char;
+begin
+  inline(
+      $58/         {         pop ax          ; Ch -> AX                 }
+      $3C/$61/     {         cmp al,'a'                                 }
+      $72/$1B/     {         jb UpSet        ; -> kleiner als 'a'       }
+      $3C/$7A/     {         cmp al,'z'                                 }
+      $76/$15/     {         jbe SetUp       ; in 'a' .. 'z': Umsetzen  }
+      $3C/$84/     {         cmp al,'ä'                                 } //OemToAnsi Chg#223 (02.03.04 P.W)
+      $75/$02/     {         jnz Up1                                    }
+      $B0/$8E/     {         mov al,'Ä'                                 } //OemToAnsi Chg#222 (02.03.04 P.W)
+      $3C/$94/     { Up1:    cmp al,'ö'                                 } //OemToAnsi Chg#221 (02.03.04 P.W)
+      $75/$02/     {         jnz Up2                                    }
+      $B0/$99/     {         mov al,'Ö'                                 } //OemToAnsi Chg#220 (02.03.04 P.W)
+      $3C/$81/     { Up2:    cmp al,'ü'                                 } //OemToAnsi Chg#219 (02.03.04 P.W)
+      $75/$07/     {         jnz Up1                                    }
+      $B0/$9A/     {         mov al,'Ü'                                 } //OemToAnsi Chg#218 (02.03.04 P.W)
+      $EB/$03/$90/ {         jmp UpSet       ; [ + NOP ]                }
+      $2C/$20);    { SetUp:  sub al,'a'-'A'  ; Übersetzung              } //OemToAnsi Chg#217 (02.03.04 P.W)
+                   { UpSet:  equ *                                      }
+end;
+*)
+
+Function UpCaseGer(Ch:Char):Char;
+begin
+  if (Ch>='a') and (Ch<='z') then dec(Ch,$20)
+//else if Ch = '„' then Ch :='Ž' //OemOriginal
+  else if Ch = 'ä' then Ch :='Ä' //OemToAnsi Chg#216 (02.03.04 P.W)
+//else if Ch = '”' then Ch :='™' //OemOriginal
+  else if Ch = 'ö' then Ch :='Ö' //OemToAnsi Chg#215 (02.03.04 P.W)
+//else if Ch = '' then Ch :='š'; //OemOriginal
+  else if Ch = 'ü' then Ch :='Ü'; //OemToAnsi Chg#214 (02.03.04 P.W)
+  UpCaseGer:=Ch;
+end;
+
+Procedure UpperCaseGerInlineProc(VAR txt:string);
+{ Inclusive Umlaute äöü } //OemToAnsi Chg#213 (02.03.04 P.W)
+Begin
+  (*
+  inline
+     ($c4/$be/txt/         {     LES DI, txt[BP]               }
+      $26/$8a/$0D/         {     MOV CL,ES:[DI]                }
+      $fe/$c1/             {     INC CL                        }
+      $fe/$c9/             { L1: DEC CL                        }
+      $74/$33/             {     JZ  L6                        }
+      $47/                 {     INC DI                        }
+      $26/$80/$3d/$61/     {     CMP ES:BYTE PTR[DI], 'a'      }
+      $72/$f5/             {     JB  L1                        }
+      $26/$80/$3D/$7a/     {     CMP ES:BYTE PTR[DI], 'z'      }
+      $77/$06/             {     JA  L2                        }
+      $26/$80/$2d/$20/     {     SUB ES:BYTE PTR[DI], 20H      }
+      $eb/$e9/             {     JMP SHORT L1                  }
+
+      $26/$80/$3D/$84/     { L2: CMP ES:BYTE PTR[DI], 'ä'      } //OemToAnsi Chg#212 (02.03.04 P.W)
+      $75/$04/             {     JNZ L3                        }
+      $26/$80/$05/$0A/     {     ADD ES:BYTE PTR[DI], 0AH      }
+
+      $26/$80/$3D/$94/     { L3: CMP ES:BYTE PTR[DI], 'ö'      } //OemToAnsi Chg#211 (02.03.04 P.W)
+      $75/$04/             {     JNZ L4                        }
+      $26/$80/$05/$05/     {     ADD ES:BYTE PTR[DI], 05H      }
+
+      $26/$80/$3D/$81/     { L4: CMP ES:BYTE PTR[DI], 'ü'      } //OemToAnsi Chg#210 (02.03.04 P.W)
+      $75/$04/             {     JNZ L5                        }
+      $26/$80/$05/$19/     {     ADD ES:BYTE PTR[DI], 19H      }
+
+      $EB/$C9);            { L5: JMP L1                        }
+
+                           { L6:                               }
+  *)
+  Txt := DelphiUpperCase(Txt);
+End;
+
+Procedure UpperCaseGerProc(Var Txt: String);
+(*
+Modifications:
+{23.07.03 P.W}
+  Change "Var Txt" to "Var Txt: String" for higher security
+*)
+begin
+  UpperCaseGerInlineProc(Txt);
+end;
+
+Function UpperCaseGerFunc(Txt:String):String;
+begin
+  UpperCaseGerProc(Txt);
+  UpperCaseGerFunc:=Txt;
+end;
+
+
+
+Function LowerCaseGer(Ch:Char):Char;
+begin
+  if (Ch>='A') and (Ch<='Z') then inc(Ch,$20)
+//else if Ch = 'Ž' then Ch :='„' //OemOriginal
+  else if Ch = 'Ä' then Ch :='ä' //OemToAnsi Chg#209 (02.03.04 P.W)
+//else if Ch = '™' then Ch :='”' //OemOriginal
+  else if Ch = 'Ö' then Ch :='ö' //OemToAnsi Chg#208 (02.03.04 P.W)
+//else if Ch = 'š' then Ch :=''; //OemOriginal
+  else if Ch = 'Ü' then Ch :='ü'; //OemToAnsi Chg#207 (02.03.04 P.W)
+  LowerCaseGer:=Ch;
+end;
+
+Procedure LowerCaseGerInlineProc(VAR txt:string);
+{ Inclusive Umlaute ÄÖÜ } //OemToAnsi Chg#206 (02.03.04 P.W)
+Begin
+  (*
+  inline
+     ($c4/$be/txt/         {     LES DI, txt[BP]               }
+      $26/$8a/$0D/         {     MOV CL,ES:[DI]                }
+      $fe/$c1/             {     INC CL                        }
+      $fe/$c9/             { L1: DEC CL                        }
+      $74/$33/             {     JZ  L6                        }
+      $47/                 {     INC DI                        }
+      $26/$80/$3d/$41/     {     CMP ES:BYTE PTR[DI], 'A'      }
+      $72/$f5/             {     JB  L1                        }
+      $26/$80/$3D/$5a/     {     CMP ES:BYTE PTR[DI], 'Z'      }
+      $77/$06/             {     JA  L2                        }
+      $26/$80/$05/$20/     {     ADD ES:BYTE PTR[DI], 20H      }
+      $eb/$e9/             {     JMP SHORT L1                  }
+
+      $26/$80/$3D/$8E/     { L2: CMP ES:BYTE PTR[DI], 'Ä'      } //OemToAnsi Chg#205 (02.03.04 P.W)
+      $75/$04/             {     JNZ L3                        }
+      $26/$80/$2D/$0A/     {     SUB ES:BYTE PTR[DI], 0AH      }
+
+      $26/$80/$3D/$99/     { L3: CMP ES:BYTE PTR[DI], 'Ö'      } //OemToAnsi Chg#204 (02.03.04 P.W)
+      $75/$04/             {     JNZ L4                        }
+      $26/$80/$2D/$05/     {     SUB ES:BYTE PTR[DI], 05H      }
+
+      $26/$80/$3D/$9A/     { L4: CMP ES:BYTE PTR[DI], 'Ü'      } //OemToAnsi Chg#203 (02.03.04 P.W)
+      $75/$04/             {     JNZ L5                        }
+      $26/$80/$2D/$19/     {     SUB ES:BYTE PTR[DI], 19H      }
+
+      $EB/$C9);            { L5: JMP L1                        }
+
+                           { L6:                               }
+   *)
+   Txt := DelphiLowerCase(Txt);
+End;
+
+Procedure LowerCaseGerProc(Var Txt: String);
+(*
+Modifications:
+{23.07.03 P.W}
+  Change "Var Txt" to "Var Txt: String" for higher security
+*)
+begin
+  LowerCaseGeRInlineProc(Txt);
+end;
+
+Function LowerCaseGerFunc(Txt:String):String;
+begin
+  LowerCaseGerProc(Txt);
+  LowerCaseGerFunc:=Txt;
+end;
+
+Function NextPos(Search,Txt:String; LastPos:Smallint):Byte;
+{ Suchen ab LastPos+1 auf Vorkommen,
+{ kein weiteres Vorkommen : NextPos = 0  (nicht LastPos!)
+{ ansonsten               : NextPos = nächste Position (>LastPos) //OemToAnsi Chg#202 (02.03.04 P.W)
+}
+Var
+  P           : Smallint;
+begin
+  Delete(Txt, 1, LastPos);
+  P:= Pos(Search,Txt);
+  if P>0 then inc(P,LastPos);
+  NextPos:= P;
+end;
+
+Procedure AusTausch(Var Txt : String; OldTxt, NewTxt : String);
+Var
+  p           : word;
+begin
+  p:=Pos(OldTxt, Txt);
+  if p>0 then
+  begin
+    Delete(Txt, p, length(OldTxt));
+    Insert(NewTxt, Txt, p);
+  end;
+end;
+
+Procedure RepAusTausch(Var Txt : String; OldTxt, NewTxt : String);
+{ Auch Ausführung falls OldTxt=NewText oder Teilmenge davon! //OemToAnsi Chg#201 (02.03.04 P.W)
+{ Keine Prüfung, ob durch Austausch wieder OldText als TeilString entsteht //OemToAnsi Chg#200 (02.03.04 P.W)
+{ (s.Bsp.).
+{ Beispiele:
+{   Txt              OldTxt      NewTxt       -->     Txt
+{   /-55/-77/-55     -55         -66                  /-66/-77/-66
+{
+{  ab--cdcd          --cd        ----         -->    ab----cd
+{                                                    (nicht: ab------ !)
+{
+{  ----ab            --ab        abcd         -->    --abcd
+{                                                    (nicht: abcdcd !)
+{
+}
+
+
+Var
+  p           : word;
+begin
+  if (Length(OldTxt)=0) then exit;
+  p:=Pos(OldTxt, Txt);
+  while p>0 do
+  begin
+    Delete(Txt, p, length(OldTxt));
+    Insert(NewTxt, Txt, p);
+    p:=NextPos(OldTxt, Txt, p-1+Length(NewTxt));
+  end;
+end;
+
+Procedure FullAustausch(Var Txt : String; OldTxt, NewTxt : String);
+{  Ausführung wie RepAustausch, falls OldTxt in NewText enthalten ist! //OemToAnsi Chg#199 (02.03.04 P.W)
+{  Vollständiges Austauschen von OldTxt, auch wenn OldTxt durch //OemToAnsi Chg#198 (02.03.04 P.W)
+{  vorangehende Tauschaktion erst entstanden ist!
+{  ab--cdcd          --cd        ----         -->    ab------
+{                                                    (nicht: ab----cd wie
+{                                                     bei RepAustausch!)
+{
+{  ----ab            --ab        abcd         -->    abcdcd
+{                                                    (nicht: --abcd wie
+{                                                     bei RepAustausch!)
+}
+Var
+  LastTxt     : String;
+begin
+
+  repeat
+    LastTxt:=Txt;
+    RepAustausch(Txt, OldTxt, NewTxt);
+  until (Txt=LastTxt) or (Pos(OldTxt,NewTxt)>0);
+end;
+
+Function RepChar(Ch:Char; Len:Smallint):String;
+Var
+  S           : String;
+begin
+  if Len>255 then Len:=255;
+  if Len<0   then Len:=0;
+  FillChar(S,SizeOf(S),Ch);
+  SetLength(S, Len); // S[0]:=Char(Len);
+  RepChar:=S;
+end;
+
+Function RepTxt(Txt : String; Len : Smallint):String;
+Var
+  S           : String;
+begin
+  if Len>255 then Len:=255;
+  if Len<0   then Len:=0;
+  if Txt='' then Txt:=' ';
+  S:='';
+  While Length(S)<Len do S:=S+Txt;
+  SetLength(S, Len); // S[0]:=Char(Len);
+  RepTxt:=S;
+end;
+
+Function TextSpace(txt:String;len:byte):String;
+begin
+  TextSpace:=Txt+RepChar(' ',Len-Length(Txt));
+end;
+
+Function Gesperrt(txt:String):String;
+var len,i:Smallint;
+    t1:string;
+begin
+  FillChar(t1,SizeOf(t1),' ');
+  len:=Length(Txt);
+  if Len>120 then len:=120;
+  for i:=1 to len do
+  begin
+    t1[2*i-1]:=Txt[i];
+  end;
+  SetLength(t1, Len*2-1); // t1[0]:=char(Len*2-1);
+  Gesperrt:=t1;
+end;
+
+Procedure DelChar(Var Txt: String; ch:char);
+(*
+Modifications:
+{23.07.03 P.W}
+  Change "Var Txt" to "Var Txt: String" for higher security
+*)
+begin
+  While Pos(ch,Txt)>0 do delete(Txt,Pos(ch,Txt),1);
+end;
+
+Function DelDouble(Txt:String; ch:char):String;
+begin
+  While Pos(ch+ch,Txt)>0 do
+    delete(Txt,Pos(ch+ch,Txt),1);
+  DelDouble:=Txt;
+end;
+
+PROCEDURE DelSpcRight(VAR Txt: String);
+(*
+Modifications:
+{23.07.03 P.W}
+  Change "Var Txt" to "Var Txt: String" for higher security
+*)
+BEGIN
+  While
+    (Txt[Length(Txt)]=' ') or
+    (Txt[Length(Txt)]=#9)
+    do SetLength(Txt, Length(Txt)-1); // do Dec(Txt[0]);
+END ;
+{--------------------------------------------------------------------------}
+
+PROCEDURE DELSPCLEFT (VAR Txt: String) ;
+(*
+Modifications:
+{23.07.03 P.W}
+  Change "Var Txt" to "Var Txt: String" for higher security
+*)
+BEGIN
+  While (Length(Txt)>0) and
+        ((Txt[1]=' ') OR (Txt[1]=#9))
+  do Delete(Txt,1,1);
+END ;
+
+Function SpaceReduced(Txt:String):String;
+begin
+  DelSpcRight(Txt);
+  DelSpcLeft (Txt);
+  Txt:=CharFullChange(Txt,#9,' ');
+  While Pos('  ',Txt)>0 do delete(txt,Pos('  ',txt),1);
+  SpaceReduced:=Txt;
+end;
+
+{--------------------------------------------------------------------------}
+{
+Function NullStr(L,Len:LongInt):string30;
+var txt:string30;
+begin
+  txt:=InvVal(L,Len);
+  NullStr:=CharFullChange(Txt,' ','0');
+end;
+}
+
+Function LeadZero(Nr,Len:LongInt):String;
+Var
+  Txt         : String;
+begin
+  Str(Nr,Txt);
+  While (Length(Txt)<Len) do Txt:='0'+Txt;
+  if (Length(Txt)>Len) then Txt:='';
+  LeadZero:=Txt;
+end;
+{--------------------------------------------------------------------------}
+
+Procedure SplittText( Var Txt, Splitt, SuccSplitt : String;
+                      SplittSet : CharSetType);
+{ Input:   Txt, SplittSet
+{ Output:  Txt, Splitt, SuccSplitt
+{ Wirkung: Txt wird zeichenweise in Splitt übertragen, bis zum Auftreten //OemToAnsi Chg#197 (02.03.04 P.W)
+{          eines der in SplittSet übergebenen Zeichen. //OemToAnsi Chg#196 (02.03.04 P.W)
+{          Txt wird um diesen Teil gekürzt. Die weiteren gefunden //OemToAnsi Chg#195 (02.03.04 P.W)
+{          Trennzeichen werden in SuccSplitt zurückgegeben. //OemToAnsi Chg#194 (02.03.04 P.W)
+}
+var
+  Ready       : Boolean;
+begin
+  Splitt:='';
+  SuccSplitt:='';
+  Ready:=False;
+  While (Length(Txt)>0) and (not Ready) do
+  begin
+    if (Txt[1] in SplittSet) then
+    begin
+      Ready:=True;
+      While (Length(Txt)>0) and (Txt[1] in SplittSet) do
+      begin
+        SuccSplitt:=SuccSplitt+Txt[1];
+        Delete(Txt,1,1);
+      end;
+    end else
+    begin
+      Splitt:=Splitt+Txt[1];
+      Delete(Txt,1,1);
+    end;
+  end;
+
+end;
+
+{--------------------------------------------------------------------------}
+
+Function WordIn(txt,txt2:String):Boolean;
+{ Kommt Txt als Wort in Txt2 vor? }
+{ Stringlänge max. 254 Zeichen!   } //OemToAnsi Chg#193 (02.03.04 P.W)
+{ Achtung bei #0 oder #1 in Txt!  }
+  Label Neu;
+  var ok:Boolean;
+      p:Word;
+begin
+  Txt2[Length(Txt2)+1]:=#0;
+ Neu:
+  p:=Pos(txt,txt2);
+
+  ok:=(p>0) and (Length(Txt)>0);
+  if ok then
+  begin
+    ok:=(txt2[Length(Txt)+p] in TrennerSet);
+    if p>1 then ok:=ok and (Txt2[p-1] in TrennerSet);
+    if not ok then
+    begin
+      if (Txt[1] in TrennerSet) then Txt2[p]:=#0
+                                else Txt2[p]:=#1;
+      Goto Neu;
+    end;
+  end;
+  WordIn:=Ok;
+end;
+
+Function StripTxt(Var txt:String; Separator:Char):String;
+var p:word;
+begin
+  p:=Pos(Separator, Txt);
+  if p=0 then p:=Length(Txt)+1;
+  StripTxt:=Copy(Txt,1,p-1);
+  Delete(Txt,1,p);
+end;
+
+Function CodeStrToChar(CodeStr:String04; Var Ch:Char):Boolean;
+(*
+Modifications:
+{23.07.03 P.W: remove "V-"}
+*)
+Var
+  Ok               : Boolean;
+  Code             : Word;
+  Err              : LongInt; //Word;
+  ValStr           : String;       {23.07.03 P.W: remove "V-"}
+begin
+  Ok:=False;
+  { $ V - }  {23.07.03 P.W: remove "V-"}
+  {DelSpcRight(CodeStr); {u.: 23.07.03 P.W: remove "V-"}
+  ValStr  :=CodeStr;         {23.07.03 P.W: remove "V-"}
+  DelSpcRight(ValStr);       {23.07.03 P.W: remove "V-"}
+  CodeStr := ValStr;         {23.07.03 P.W: remove "V-"}
+  {$V+}
+  Case CodeStr[1] of
+    '"':begin
+          Ok:=(Length(CodeStr)=3) and (CodeStr[3]='"');
+          Ch:=CodeStr[2];
+        end;
+    '0'..'9',
+    '#','$':
+        begin
+          if CodeStr[1]='#' then delete(CodeStr,1,1);
+          Val(CodeStr,Code,Err);
+          Ok:=Err=0;
+          Ch:=Char(Code);
+        end;
+    else; { Kommentar }
+  end;
+  if not ok then ch:=#0;
+  CodeStrToChar:=Ok;
+end;
+
+(*
+Function ParPart(Par:string04; Var buf; VarTyp:TypType):Boolean;
+var
+  i,
+  err,
+  p      : Word;
+  D      : Double;
+  L      : Longint;
+  Vptr   : VarPtrType;
+  pstr   : String;
+  ready  : Boolean;
+begin
+  Par:=UpperCaseGerFunc(Par);
+  Vptr.Adresse:=Ptr(seg(Buf),ofs(Buf));
+  i:=0;
+  Ready:=False;
+  while (not ready) and (i<20) do
+  begin
+    inc(i);
+    pstr:=UpperCaseGerFunc(Param_Str(i));
+    p:=Pos('/'+Par,pstr);
+    Ready:=P>0;
+  end;
+  if Ready then
+  begin
+    delete(pstr,1,p+Length(Par));
+    p:=Pos('/',Pstr);
+    if p=0 then p:=Length(Pstr)+1;
+    p:=min(p,32);
+    Pstr:=Copy(Pstr,1,p-1);
+    With VPtr do
+    Case VarTyp of
+      ChTyp: if Length(Pstr)>0 then ChPtr^:=Pstr[1] else ChPtr^:=#0;
+      StTyp: StPtr^:=Pstr;
+      else
+      begin
+        Case VarTyp of
+          ReTyp,
+          SiTyp,
+          DoTyp:  Val(Pstr,D,Err);
+          Else    Val(Pstr,L,Err);  { Real versteht nicht $10 }
+        end;
+        Ready:= (Err=0);
+        if Ready then
+        case VarTyp of
+          ReTyp:  RePtr^:=D;
+          SiTyp:  SiPtr^:=D;
+          DoTyp:  DoPtr^:=D;
+          LoTyp:  LoPtr^:=RoundL(L);
+          InTyp:  InPtr^:=RoundI(L);
+          WoTyp:  WoPtr^:=RoundW(L);
+          ByTyp:  ByPtr^:=Round(L);
+          ShTyp:  ShPtr^:=Round(L);
+        end;
+      end;
+    end;
+  end;
+  ParPart:=Ready;
+end;
+*)
+
+Procedure ConcatProc(Var Txt: String; SizeTxt:Word; a,b,c,d:String);
+{ Verknüpfung b+c verlangt 256 Byte Stack und killt somit manche //OemToAnsi Chg#192 (02.03.04 P.W)
+{ rekursiven Proceduren
+}
+(*
+Modifications:
+{23.07.03 P.W}
+  Change "Var Txt" to "Var Txt: String" for higher security
+*)
+begin
+  Txt:=Copy(A+B+C+D,1,SizeTxt-1);
+end;
+
+Function CodeTxt(Txt:String):String;
+Var
+  H           : String;
+begin
+  H:='';
+  While (Length(Txt)>0) and (Length(H)<240)  do
+  begin
+    if (txt[1]<#30) or (txt[1]=#255)
+      then h:=H+'<'+InvVal(ord(txt[1]),1)+'>'
+      else H:=H+Txt[1];
+    delete(Txt,1,1);
+  end;
+  if Txt<>''then H:=H+'<+ ...>';
+  CodeTxt:=H;
+end;
+
+Function ChkNo(Opt,Mode:String):LongInt;
+Var
+  Nr          : LongInt;
+  Err         : LongInt;
+  P           : Smallint;
+  Txt         : String;
+begin
+  Txt:='';
+  Nr:=0;
+  P:=Pos(Opt,Mode);
+  if (P>0) then
+  begin
+    P:=P+Length(Opt);
+    While (Length(Mode)>=P) and (Mode[P] in ['0'..'9','$','+','-','.']) do
+    begin
+      Txt:=Txt+Mode[P];
+      Inc(P);
+    end;
+    if Txt='' then Nr:=1
+    else Val(Txt,Nr,Err);
+  end;
+  ChkNo:=Nr;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : StripExt                                           **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 02.11.94                                           **)
+(** Description      : Strip Extension from PStr                          **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : FSplit                                             **)
+(** Input            : PStr                                               **)
+(** Output           : EStr                                               **)
+(** Output           : RETURN (PathStr): Ret                              **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function StripExt (PStr: PathStr; Var EStr: ExtStr): PathStr;
+Var
+  Ret              : PathStr;
+  DStr             : DirStr;
+  NStr             : NameStr;
+begin  {Func. StripExt}
+  EStr:='';
+  if PStr='' then Ret:='' else
+  begin
+    FSplit(PStr, DStr, NStr, EStr);
+    Ret:=DStr+NStr;
+  end;
+  StripExt:=Ret;
+end;   {Func. StripExt}
+
+{--- INIT ---------------------------------------------------------------}
+
+(*
+BEGIN
+
+  TEXTREC(Wtxt) := TEXTREC(OUTPUT) ;
+  WITH TEXTREC(Wtxt) DO
+  BEGIN
+    INOUTFUNC := @WTXTINOUT ;
+    FLUSHFUNC := @WTXTINOUT ;
+    BUFPTR := @WStr[1] ;
+    BUFSIZE := 255 ;
+  END ;
+  WStr := '' ;
+  *)
+END.

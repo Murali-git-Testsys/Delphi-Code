@@ -1,0 +1,19 @@
+unit Param_Str;
+
+interface
+
+uses
+  System;
+
+function Param_Str(ParamNr: Integer): String;
+
+implementation
+function Param_Str(ParamNr: Integer): String;
+begin
+  if (ParamNr >= 0) and (ParamNr <= ParamCont)
+    then Result := ParamStr(ParamNr)
+    else Result := '';
+end;
+
+
+end.

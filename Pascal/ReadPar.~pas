@@ -1,0 +1,3118 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; changes: 2; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; changes: 10; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; changes: 1; (02.03.04 P.W)
+(*.+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+(*+ ~ ~                                                    ) %15nV0.%22v) +*)
+(*+ Module Name/Vers.: @(#)ReadPar V.:1.00                              ) +*)
+(*+ Author           : P.Wueseke                                          +*)
+(*+ Date             : 12.10.96                                           +*)
+(*+ Description      : Read parameter files project XCT2000...            +*)
+(*+ ~ ~                                                       : %15d%30w: +*)
+(*+ Date/Modification: 27.11.96 P.W / Support "PFADD01.DOC"               +*)
+(*+ Date/Modification: 29.11.96 P.W / Support HvLastSeconds               +*)
+(*+ Date/Modification: 02.12.96 P.W / Add GetDevTypPtr                    +*)
+(*+ Date/Modification: 06.12.96 P.W / Support GlbDetRec                   +*)
+(*+ Date/Modification: 09.12.96 P.W / Support Parameter for HvCheck       +*)
+(*+ Date/Modification: 09.12.96 P.W / ReadDevTypRec : Read Par. Hv-Check  +*)
+(*+ Date/Modification: 10.12.96 P.W / Support "MECHPAR" in Device.SNR     +*)
+(*+ Date/Modification: 12.12.96 P.W / add MotorCtrl to *.MCH              +*)
+(*+ Date/Modification: 21.01.97 P.W / add "HvTimeOut" to Device.SNR       +*)
+(*+ Date/Modification: 21.01.97 P.W / add "MotorTimeOut" to Device.SNR    +*)
+(*+ Date/Modification: 30.01.97 P.W / Support Default Parameter for       +*)
+(*+ Date/Modification: 30.01.97 P.W + "Threshold" (TestStand 2)           +*)
+(*+ Date/Modification: 30.01.97 P.W + Record: ThrDefRec                   +*)
+(*+ Date/Modification: 30.01.97 P.W + Add func. ReadThrDefRec             +*)
+(*+ Date/Modification: 06.03.97 P.W / GetDevTypPtr sup. empty "DeviceTyp" +*)
+(*+ Date/Modification: 20.03.97 P.W / Section "Backprojection" from       +*)
+(*+ Date/Modification: 20.03.97 P.W + Device.Snr to *.TYP                 +*)
+(*+ Date/Modification: 03.04.97 P.W / Sup. Device.Snr QuartzMhz           +*)
+(*+ Date/Modification: 07.04.97 P.W / Sup. Device.Snr PortName            +*)
+(*+ Date/Modification: 22.04.97 P.W / Sup. Local.Ini Sound_Err .. [Meas.] +*)
+(*+ Date/Modification: 29.04.97 P.W / Sup. Load Find GlbDetRec            +*)
+(*+ Date/Modification: 28.05.97 P.W / CtMirrorHoriz: ErrorHalt used       +*)
+(*+ Date/Modification: 28.05.97 P.W / New Par: UseScanStep, UseEpr135     +*)
+(*+ Date/Modification: 02.06.97 P.W /   " : MaxVeloUseStep,TimeBaseStepSec+*)
+(*+ Date/Modification: 03.06.97 P.W / Function ErrHalt modified           +*)
+(*+ Date/Modification: 05.06.97 P.W / Func. FindDetRec\LoadDetRec\Save..  +*)
+(*+ Date/Modification: 05.06.97 P.W + from Unit FemBlock                  +*)
+(*+ Date/Modification: 09.06.97 P.W / Sup. MaxCountsStep (Device.Snr)     +*)
+(*+ Date/Modification: 10.06.97 P.W / Add Parameter for Init              +*)
+(*+ Date/Modification: 16.06.97 P.W / Add Par. PosPostSV _X\Y\Z (Sv & CT)  +*)
+(*+ Date/Modification: 17.06.97 P.W / Sup. MQCheckOn ...                  +*)
+(*+ Date/Modification: 17.06.97 P.W / Use UtIni (MyUtIni into UtIni)      +*)
+(*+ Date/Modification: 17.06.97 P.W + ! all parameters in files must exist+*)
+(*+ Date/Modification: 19.06.97 P.W / Sup. MeasQuality: New StoreMQ       +*)
+(*+ Date/Modification: 23.06.97 P.W / Sup. EdgeThr *.Typ                  +*)
+(*+ Date/Modification: 24.06.97 P.W / TubeCurrentMa -> sect. SelDevTyp    +*)
+(*+ Date/Modification: 26.06.97 P.W / New: WarnDeltaZmm, SlicePauseLim .. +*)
+(*+ Date/Modification: 26.06.97 P.W / New: ReadDiagDefRec                 +*)
+(*+ Date/Modification: 03.07.97 P.W / New: TimeTransAddSv\Ct              +*)
+(*+ Date/Modification: 16.07.97 P.W / New: ZposMin\Max                    +*)
+(*+ Date/Modification: 18.07.97 P.W / New: SlicePauseMinimum ..           +*)
+(*+ Date/Modification: 30.07.97 P.W / New: SvColorFactor                  +*)
+(*+ Date/Modification: 30.07.97 P.W / ReadThrDefRec  sup. full names      +*)
+(*+ Date/Modification: 06.08.97 P.W / Init Global                         +*)
+(*+ Date/Modification: 06.08.97 P.W / Use LocInitDirVar not LocInitDir    +*)
+(*+ Date/Modification: 06.08.97 P.W + (needed to be modified by WrtPar)   +*)
+(*+ Date/Modification: 01.09.97 P.W / Sup. ExitTool                       +*)
+(*+ Date/Modification: 15.09.97 P.W / Io of DetRec: set valid RecSize     +*)
+(*+ Date/Modification: 31.03.99 P.W / Device.SNR: Sup. SpikeLimitPerc     +*)
+(*+ Date/Modification: 15.04.99 P.W / Device.SNR: Sup. IdleTimeOut        +*)
+(*+ Date/Modification: 15.04.99 P.W / Device.SNR: Sup. SpeedLowPerc       +*)
+(*+ Date/Modification: 15.04.99 P.W / Device.SNR: Sup. AllowRampOut       +*)
+(*+ Date/Modification: 15.04.99 P.W / Device.SNR: Sup. AllowBackProj      +*)
+(*+ Date/Modification: 15.04.99 P.W / Device.SNR: Sup. MoveOptimization   +*)
+(*+ Date/Modification: 07.06.99 P.W / Sup ExitTool.AddExitProc            +*)
+(*+ Date/Modification: 22.06.99 P.W / Sup TotalRetryHvCtr in HvLog        +*)
+(*+ Date/Modification: 22.06.99 P.W / Sup EdgeReserveMm EdgeReserveIntv   +*)
+(*+ Date/Modification: 22.06.99 P.W / Sup SkipSvReserveMm                 +*)
+(*+ Date/Modification: 22.06.99 P.W / Device.SNR: Sup. AllowMeasSpool     +*)
+(*+ Date/Modification: 22.06.99 P.W / Device.SNR: Sup. AllowSpeedLow      +*)
+(*+ Date/Modification: 22.06.99 P.W / Device.SNR: Sup. AllowAutoZoom      +*)
+(*+ Date/Modification: 22.06.99 P.W / WriteZoomRoiRec ReadZoomRoiRec      +*)
+(*+ Date/Modification: 09.08.00 P.W / Added: ReadMeasQuality_Range        +*)
+(*+ Date/Modification: 01.10.00 P.W / Use ReadlnHalt                      +*)
+(*+ Date/Modification: 12.10.00 P.W / Defaults modified:                  +*)
+(*+ Date/Modification: 12.10.00 P.W +  SpikeLimitPerc_Def: 10.0  ->  6.0  +*)
+(*+ Date/Modification: 12.10.00 P.W +  MinCounts_V1_Def  : 10000 -> 20000 +*)
+(*+ Date/Modification: 10.11.00 P.W / Sup. DbHeaderPlus                   +*)
+(*+ Date/Modification: 01.10.01 P.W / Rename HvTimeOut -> HvTimeOutMax    +*)
+(*+ Date/Modification: 01.10.01 P.W +       excepted Device.Snr           +*)
+(*
+{19.07.02 P.W}
+   added: Function FirmWareNoFromVers
+   added: Function SaveEpromVersion
+{25.09.02 P.W}
+   added: Functions ReadDataMeasInfo4 & StoreDataChkSum & StoreDRChkSum
+   For all calls of StoreDetRecPartMeas & ReadDetRecPartMeas
+     support also the update of GlbDetRec
+{25.09.02 P.W}
+   By GlbLoadDetRec support PatInfoRec_^
+{18.10.02 P.W}
+   added UseAutoRts       (Device.Snr Section Measurement)
+{05.11.02 P.W}
+  added two constants:
+  YPosMin (=0.0) and YPosMax (=180.0)
+{04.12.02 P.W}
+  Support INTER\XBJOB.INI
+  Added  UseKeysPostMeas  (XBJOB.INI Section Measurement)
+  Added  RefPosMin/Max    (XBJOB.INI Section Measurement)
+{28.04.03 P.W}
+  Support XbJob.Txt: XbJobHeadRec
+{23.07.03 P.W: remove "V-"}
+13.05.05 P.W: support FemPeakSpikeLimit in Thr.Def
+25.05.05 P.W: Support XPosMin, XPosMax, SaveXPosMinMax
+31.05.05 P.W: added CalcMeasDiameterMax, GlbCalcMeasDiameterMax
+21.06.05 P.W: sup. MeasDiameterMin, MeasDiameterMax, MeasDiamieterDef
+   SaveXPosMinMax adapts also these parameters
+27.06.05 P.W: Readpar.pas moved from folder Meas\Pas to Common\Pas
+13.11.07 P.W: Support BackgroundHead_Print & BackgroundHead_Screen & WarnMode
+23.11.07 P.W: Support Device.snr EffDoseMySvPerMASec (optional) Defaults to 0.018333
+20.12.07 P.W: Support CtNumberGlb
+07.04.08 P.W: function ReadLocalIni accept UserData with only single Line
+08.10.08 P.W: TextOemToAnsi437 (PatId, PatName, PatFirstName)
+19.12.08 P.W: support Parameter BoardTemp
+05.03.09 P.W: Correct BoardTemp sets BoardTemp and not
+27.04.09 P.W: TEE_Param_DeviceOptions and GlbEE_Param_DeviceOptions record added
+27.08.09 P.W: CoolPosX/Y added
+12.11.09 P.W: TotalPos... added to HvLog
+*)
+(*+ Date/Modification  (end of list)                                      +*)
+(*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.*)
+Unit ReadPar;
+
+INTERFACE
+
+Uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  EE_Param,        // 27.04.09 P.W
+  WinTools,        // 08.10.08 P.W
+  TransX,          // 09.07.08 P.W
+  Classes,         // 09.07.08 P.W
+  SysUtils,        // 09.07.08 P.W
+  ComNames,        // 20.12.07 P.W
+  Graphics,        // 13.11.07 P.W
+  GraphGlb,        // 13.11.07 P.W
+  Dialogs, Math,   // 25.05.05 P.W
+  A_XctDir,   {10.11.00 P.W}
+  Crt,        {03.06.97 P.W}
+  Dos,
+  ExitTool,   {01.09.97 P.W}
+  FemGlb,
+  GlbDecs,    {01.10.00 P.W}
+  GlbFt,
+  GlbPath,
+  GlbType,
+  Objects,
+  ScanIo0,    {19.06.97 P.W}
+  StrTool,
+  UtIni,      {MyUtIni -> UtIni: 17.06.97 P.W}
+  XGlb;       {06.12.96 P.W}
+
+Type
+  tOffOnDef              = (C_ON, C_OFF, C_Def); {18.10.02 P.W}
+
+Const
+  MaxResChar             = 'F';
+  MaxShkFact             = 4;
+
+  HvLogFile              = 'LOG\HV.LOG';
+var
+  HvHours                : Double   = 0;
+const
+  MaxHvLastSeconds       = 5;
+  DefQuartzMhz           = 12.000000;     {from V24TUse: 03.04.97 P.W}
+  DefPortName            = 'COM1';        {from V24TUse: 07.04.97 P.W}
+  DefUseAutoRts          = C_Def;    {for UtComMem}      {18.10.02 P.W}
+
+
+  SpikeLimitPerc_Def     =   6.0;  {[%]}                 {31.03.99 P.W}
+                           {12.10.00 P.W : 10.0  -> 6.0 }
+
+
+  // here until 23.11.07 P.W ; moved to ReadPar.pas and renamed to *_Def
+  // from "EffDoseMySvPerSecMA" to "EffDoseMySvPerMASec_Def"
+  // v--- from J.Willnecker 16.07.04 P.W ---
+  // for 58 kV, 200µA, 60 sec CT, Effecive dose is 0.22 µSv
+     EffDoseMySvPerMASec_Def = 0.22 / (60 * 0.200);       // = 0.018333
+  // ^--- from J.Willnecker 16.07.04 P.W ---
+
+
+  IdleTimeOut_Def        =  10.0;  {[sec]}               {15.04.99 P.W}
+  SpeedLowPerc_Def       =  50.0;  {[%]}                 {15.04.99 P.W}
+
+  MinCounts_V1_Def       = 20000;  {[Counts / Interval]} {15.04.99 P.W}
+                           {12.10.00 P.W : 10000 -> 20000 }
+
+  MinEdgeReserveIntv_Def =    5;   {[mm]}                {22.06.99 P.W}
+  EdgeReserveMm_Def      =  0.5;   {[mm]}                {22.06.99 P.W}
+  SkipSvReserveMm_Def    =  5.0;   {[mm]}                {22.06.99 P.W}
+  ZoomRoiFile            = 'INTER\ZoomRoi.Ini';          {22.06.99 P.W}
+  {------------------------------------------------------------------}
+  YPosMin                =   0.0; {Deg} {05.11.02 P.W}
+  YPosMax                = 180.0; {Deg} {05.11.02 P.W}
+  {------------------------------------------------------------------}
+  // Errorcodes (stored in TempCelsius) above 1000 to ensure error is "high temp" and leads to pause!
+  Temperature_ErrCodeMin         = 1000; //                     // 09.07.08 P.W
+  Temperature_ADCAboveRange      = 1100; //                     // 09.07.08 P.W
+  Temperature_InvalidPar         = 1200; // Invalid Parameters  // 09.07.08 P.W
+
+  Temperature_SensorUnknownState = 1220; //                     // 27.04.09 P.W
+  Temperature_SensorDisabled     = 1250; //                     // 27.04.09 P.W
+
+  Temperature_NoSensor           = 1300; // ADC = $03FF         // 09.07.08 P.W
+  Temperature_NoBoard            = 1400; // ADC = $0000         // 09.07.08 P.W
+  Temperature_ADCBelowRange      = 1500; //                     // 09.07.08 P.W
+
+  // seconds since last read temp to mark result as old:
+  Temperature_ReadSecOld         =   15; // Mark as old value   // 09.07.08 P.W
+
+Var
+  HvLastSeconds    : Array[1..MaxHvLastSeconds] of Double;
+                     { HvLastSeconds[1] serves as a time counter
+                     { Time the Hv was switched on during a
+                     { single call of FemurPc, and serves
+                     { to support the check of "WatchHvTime"
+                     { (make sure the measurement may not exceed
+                     {  this time limit if not zero (unit FemCmd))
+                     { TFemCmd2.UpdHvHours is used to set HvLastSeconds[1]
+                     { each time Hv is switched off
+                     }
+
+  HvSecondsSinceStartOffs : Double;  // 23.11.07 P.W
+    // Sum of HvLastSeconds[1] since start of Measurement
+    // including SV Sv + Addedlines, CT + Added slices
+    // used for monitoring the X-ray load of a measurement
+    // XbJobDelphi resets this value to zero (by ClearHvLogFileHvSecondsSinceStart)
+    // during measurement the cummulated Hv time since start of measurement
+    // is given by HvSecondsSinceStartCurrent
+    // FemCmd2.pas TFemCmd2.HvOnMsg updates this value
+    // HvSecondsSinceStartOffs stays constant until program terminates!
+
+  HvSecondsSinceStartCurrent : Double; // 23.11.07 P.W
+    // initialized by ReadHvLogFile
+    // updated by TFemCmd2.HvOnMsg
+
+  LogMotDistMm     : MotDistMmType;             {26.04.99 P.W}
+
+function ClearHvLogFileHvSecondsSinceStart: Smallint;   // 23.11.07 P.W
+procedure ResetHvLog;                // 12.11.09 P.W
+Function  ReadHvLogFile:  Smallint;  // global for XctDirector: 26.11.09 P.W
+Function  WriteHvLogFile: Smallint;  // global for XctDirector: 12.11.09 P.W
+
+{--- from Device.Snr: ---}
+Type
+  tPosPost         = Array[AxisFirst..AxisLast] of Single;  {16.06.97 P.W}
+
+  pDevSnrRec       = ^tDevSnrRec;
+  tDevSnrRec       = Packed Record // "Record" to "Packed Record" Chg#1561 (02.03.04 P.W)
+    Chk_DebugName  : PathStr;   {06.08.97 P.W}
+    {[General]:}
+    ParamVers      : String40;
+    SerialNo       : String40;
+    EpromVersion   : String40;
+    EpromType      : String40;
+    SelectedDevType: String40;   {10.12.96 P.W}
+    DbHeaderPlus   : String40;   {10.11.00 P.W}
+    {[<SelectedDevType>]}
+    DeviceTyp      : String40;   {from [GENERAL] to here: 10.12.96 P.W}
+    MechPar        : String40;   {10.12.96 P.W}
+
+    TubeCurrentMA  : Single;
+    TubePotentialKV: Single;
+    EffDoseMySvPerMASec : Single; //optional! defaults to = 0.018333 23.11.07 P.W
+    SpikeLimitPerc : Single;     {Percent Of CpsAlarm as limit (for 12
+                                  Detectors) to detect a spike } {31.03.99 P.W}
+    // [XrayTemp]
+    TempEnabled    : Boolean;    // 09.07.08 P.W    // "Enable" -> "Enabled": 19.12.08 P.W
+    UseTempPause   : Boolean;    // 02.10.09 P.W Debug Temperature behaviour in no sensor mode when set to False // not Updated!
+    TempIni        : String40;   // 09.07.08 P.W
+    TempProt       : Boolean;    // 09.07.08 P.W
+    BoardTemp      : Boolean;    // 19.12.08 P.W
+    
+    {[Measurement]:}
+    HvTimeOutMax   : LongInt;    {21.01.97 P.W}
+                      {From HvTimeOut to HvTimeOutMax 01.10.01 P.W}
+                      {Reason limits Dynamical HvTimeOut (FemPrep.Pas)
+                       Inside Device.Snr the name is not changed!}
+    MotorTimeOut   : LongInt;    {21.01.97 P.W}
+    IdleTimeOut    : Single;     {15.04.99 P.W}
+                                 {[Sec] TimeOut when Eprom Idle, (for HV)
+                                  neg: do not send to EPROM}
+    SpeedLowPerc   : Single;     {15.04.99 P.W}
+                                 {Used for #WCL, Countrate depending Ct-speed
+                                  neg: do not send to EPROM
+                                  Par. AllowSpeedLow must be true!}
+    MinCounts_V1   : Single;     {15.04.99 P.W}
+                                 {Counts / Interval for estimation of X_V1}
+    MoveOptimization: Boolean;   {15.04.99 P.W}
+    AllowRampOut   : Boolean;    {15.04.99 P.W}
+    AllowBackProj  : Boolean;    {15.04.99 P.W}
+    AllowMeasSpool : Boolean;    {22.06.99 P.W} {in XBJOB: XbJob1}
+    AllowSpeedLow  : Boolean;    {22.06.99 P.W} {in FemurPc WCL}
+    AllowAutoZoom  : Boolean;    {22.06.99 P.W}
+    TimeTransAddSv : Single;     {03.07.97 P.W}
+    TimeTransAddCt : Single;     {03.07.97 P.W}
+    MinEdgeReserveIntv : Smallint;{22.06.99 P.W}
+    EdgeReserveMm      : Single; {22.06.99 P.W}
+    SkipSvReserveMm    : Single; {22.06.99 P.W}
+
+
+    {----------------------------------------------------------------}
+
+
+    UseEpr135      : Boolean;    {28.05.97 P.W}
+    UseScanStep    : Boolean;    {28.05.97 P.W}
+    MaxVeloUseStep : Single;     {02.06.97 P.W}
+    MaxCountsStep  : LongInt;    {09.06.97 P.W}
+    TimeBaseStepSec: Single;     {02.06.97 P.W}
+
+    {----------------------------------------------------------------}
+    {10.06.97 P.W}
+    LiDiffVal      : Array[AxisFirst..AxisLast] of LongInt;
+                     {'?' -> Find automatic       during init}
+                     {'-' -> Index pulse not used during init}
+    {----------------------------------------------------------------}
+    {16.07.97 P.W}
+    ZPosMin        : Single;
+    ZPosMax        : Single;
+    {----------------------------------------------------------------}
+    {16.06.97 P.W}
+    PosPostSV      : tPosPost;
+    PosPostCt      : tPosPost;
+    {----------------------------------------------------------------}
+
+    SvMeasContrastFlg: Boolean;
+    BaudRateLevel  : Word;
+    BaudRateLevelPowerOn: Word;  {19.07.02 P.W}
+    QuartzMhz      : Double;     {03.04.97 P.W}
+    PortName       : String;     {07.04.97 P.W}
+    UseAutoRts     : tOffOnDef;  {18.10.02 P.W}
+
+    (* {until 20.03.97 P.W}
+    {[BackProjection]:}
+    CtMirrorHoriz  : Boolean;
+    CtMirrorVert   : Boolean;
+    *)
+    //----------------------------------------------------------------
+
+    XPosMin        : Single;
+    XPosMax        : Single;
+    MeasDiameterMin: Double;  // 21.06.05 P.W
+    MeasDiameterMax: Double;  // 21.06.05 P.W
+    MeasDiameterDef: Double;  // 21.06.05 P.W
+    //----------------------------------------------------------------
+  end;
+
+{--- from XCTDIR\INIT\XBJOB.INI: ---}
+  pXbJobIniRec     = ^tXbJobIniRec; {04.12.02 P.W}
+  tXbJobIniRec     = Packed Record         {04.12.02 P.W} // "Record" to "Packed Record" Chg#1562 (02.03.04 P.W)
+    UseKeysPostCT  : Boolean;
+    RefPosMin      : Array[0..MaxRefLineNo] of Single;
+    RefPosMax      : Array[0..MaxRefLineNo] of Single;
+    PosPatXPosMm   : Single;
+    PosPatYPosDeg  : Single;
+    PosPatZPosMm   : Single;
+    ChangeHolderFlg: Boolean;
+  end;
+
+var // Const
+    {[Measurement]:}
+    UseProtV24     : Boolean = false;
+    UseProtV24Time : Boolean = false;
+
+{--- from INIT\TYP\<MechPar>: ---}
+Type
+  tAxisRec         = Packed Record // "Record" to "Packed Record" Chg#1563 (02.03.04 P.W)
+    AxisUnit       : String10;  {[mm], [deg], [mm]}
+    (* not used: {10.12.96 P.W} {partly -> tDetRec!}
+    ImpPerUnit     : Single;    {Impulse per Unit}
+    MinPos         : Single;    {Minimal position [<Unit>]}
+    MaxPos         : Single;    {Maximal position [<Unit>]}
+    IndexModVal    : Single;    {Modulus of Index pulse zero}
+    SetZeroDir     : Single;    {Direction to find zero }
+    SetZeroOffset  : Single;    {Offset of zero (from lightbar)  [<Unit>]}
+    *)
+    {----------------------------------------------------------------}
+    {12.12.96 P.W}
+    Contr_KP       : Longint;   {Motor Control Parameter: "Proportional"}
+    Contr_KI       : Longint;   {Motor Control Parameter: "Integrative"}
+    Contr_IL       : Longint;   {Motor Control Parameter: "Integr. Limit"}
+    Contr_KD       : Longint;   {Motor Control Parameter: "Derivative"}
+    Contr_DSR      : Longint;   {Motor Control Parameter: "Deriv. sampl. rate"}
+    {----------------------------------------------------------------}
+    PosTol         : Single;    {Position Tolerance       [<Unit>] }
+    PosErrChk      : Single;    {Position Error for Check [<Unit>] }
+    PosErrStop     : Single;    {Position Error for Stop  [<Unit>] }
+
+    (* not used: {10.12.96 P.W} {partly -> tDetRec!}
+    AddValue       : Single;    {Added to Measlength (2x) [<Unit>] }
+    Acc            : Single;    {Accelleration      [<Unit> / sec^2]} //OemToAnsi Chg#1572 (02.03.04 P.W)
+    VMeas0         : Single;    {VeloMeas min       [<Unit> / sec] }
+    VMeas1         : Single;    {VeloMeas max       [<Unit> / sec] }
+    VMeas2         : Single;    {VeloMeas move      [<Unit> / sec] }
+    VSearch        : Single;    {Velo Search        [<Unit> / sec] }
+    VMove          : Single;    {Velo Move          [<Unit> / sec] }
+    VMin           : Single;    {Velo     MAX       [<Unit> / sec] }
+    VMax           : Single;    {Velo     MIN       [<Unit> / sec] }
+    *)
+    {----------------------------------------------------------------}
+    {10.06.97 P.W}
+    InitDir        : LongInt;   {Direction to search Lightbar for init }
+    InitOffs       : Single;    {Offset added to found ref    [<Unit>] }
+    {sup. only for y: }
+    UseSoftRef     : Boolean;   {Use Index Pulse if true               }
+    HardStop1      : Single;    {                             [<Unit>] }
+    HardStop2      : Single;    {                             [<Unit>] }
+    SoftRefStart1  : Single;    {                             [<Unit>] }
+    SoftRefEnd1    : Single;    {                             [<Unit>] }
+    SoftRefStart2  : Single;    {                             [<Unit>] }
+    SoftRefEnd2    : Single;    {                             [<Unit>] }
+    SoftRefStart3  : Single;    {                             [<Unit>] }
+    SoftRefEnd3    : Single;    {                             [<Unit>] }
+    {-----------------}
+    {----------------------------------------------------------------}
+  end;
+
+  pDevMchRec       = ^tDevMchRec;
+  tDevMchRec       = Packed Record // "Record" to "Packed Record" Chg#1564 (02.03.04 P.W)
+    Chk_DebugName  : PathStr;   {06.08.97 P.W}
+    {[Detectors]}
+    DetCycleOn     : Word;       {Detector Cycle Time: On  [sec]}
+    DetCycleOff    : Word;       {Detector Cycle Time: Off [sec]}
+    {[AXIS_ALL]:}
+    {SampleTimeMySec (in DetRec!)}
+    {[AXIS_X..Z]:}
+    AxisArr        : Array[AxisFirst .. AxisLast] of tAxisRec;
+  end;
+
+  pTempIniRec = ^tTempIniRec;        // 09.07.08 P.W
+  tTempIniRec       = Packed Record  // 09.07.08 P.W
+    Chk_DebugName  : PathStr;
+    // [TempLimits]
+    TempMax      : Double;  // ºC
+    TempWarning  : Double;  // ºC
+    TempContinue : Double;  // ºC
+    TempMaxStart : Double;  // ºC   // 17.07.09 P.W
+    CoolPosX     : Double;  // mm   // 27.08.09 P.W
+    CoolPosY     : Double;  // deg  // 27.08.09 P.W
+    // [TempCalib] // Temp[ºC] =  0.1 * Summ(ai * ADC^i) for i := 0 .. 4;
+    ADCmin       : Integer;
+    ADCmax       : Integer;
+    aI : Array[0..4] of Double;
+    aC           : Double;  // checksum : = Summ(ai * 1000^(i-1)) for i := 0 .. 4;
+                            // Tolerance: +- 1e-5
+    Valid        : Boolean;
+  end;
+
+{--- from XCTDIR\INIT\Global.ini: ---}
+  pGlobalIniRec    = ^tGlobalIniRec;
+  tGlobalIniRec    = Packed Record   {06.03.97 P.W} {for old XCT3000} // "Record" to "Packed Record" Chg#1565 (02.03.04 P.W)
+    Chk_DebugName  : PathStr;   {06.08.97 P.W}
+    {[Update]:}
+    OldDeviceTyp_X : String12;
+  end;
+
+{--- from Local.Ini: ---}
+  {[Measurement]:}
+var // Const
+  ContCalcFlg      : Boolean  = True;
+  Sound_Err        : Boolean  = True;  {22.04.97 P.W}
+  Sound_Wait       : Boolean  = True;  {22.04.97 P.W}
+  Sound_Start      : Boolean  = True;  {22.04.97 P.W}
+  Sound_End        : Boolean  = True;  {22.04.97 P.W}
+
+
+{--- from DeviceTyp-file (init\typ\*.typ): ---}
+Type
+  pDevTypRec                 = ^tDevTypRec;
+  tDevTypRec                 = Packed Record // "Record" to "Packed Record" Chg#1566 (02.03.04 P.W)
+    Chk_DebugName  : PathStr;   {06.08.97 P.W}
+    DeviceName               : String40;
+    BackgroundHead_Print,                            // 13.11.07 P.W
+    BackgroundHead_Screen    : TColor;               // 13.11.07 P.W
+    WarnMode : Boolean;                              // 13.11.07 P.W
+    CpsAlarm                 : Single;     {[Counts / sec]}
+    CpsMinimum               : Single;     {[Counts / sec]}
+    LnChkMinAtt              : Single;     {[ - ]}
+    LnDeltaPercDet           : Single;     {[%]}
+    LnDeltaPercScan          : Single;     {[%]}
+    DeltaOffsetLimitQa       : Single;     {[mm]}
+    DeltaOffsetLimit         : Single;     {[mm]}
+    DeltaLimitAirLeftRight   : Single;     {[%]}
+    DeltaPercTime            : Single;     {[%]}
+    XSlope                   : Single;     {[mg/cm^2]} //OemToAnsi Chg#1571 (02.03.04 P.W)
+    XInter                   : Single;     {[mg/ccm]}
+    VoxSiz_ : Array['A'.. MaxResChar] of Single;  {[mm]}
+    {----------------------------------------------------------------}
+    {09.12.96 P.W Parameter for Hv-Check}
+    {[HvCheck]}
+    HvOffChkFlg      : Boolean;
+    HvOffChkSec_A    : Single ;
+    HvOffMaxKV_A     : Single ;
+    HvOffMaxMA_A     : Single ;
+
+    HvOffChkSec_B    : Single ;
+    HvOffMaxKV_B     : Single ;
+    HvOffMaxMA_B     : Single ;
+
+    HvOnChkFlg       : Boolean;
+    HvOnChkSec_A     : Single ;
+    HvOnMaxDeltaKV_A : Single ;
+    HvOnMaxDeltaMA_A : Single ;
+
+    HvOnChkSec_B     : Single ;
+    HvOnMaxDeltaKV_B : Single ;
+    HvOnMaxDeltaMA_B : Single ;
+    {----------------------------------------------------------------}
+    {17.06.97 P.W}
+    {Thresholds for MeasQuality_* values: }
+    {// QualityVar   =      TH-warning,TH-invalid,TH-abort}
+    {[Measurement]:}
+    MQCheckON       : Boolean;    { TRUE       }
+    MQLnChk         : tMqThr;     { 10,40,60   } {tMqThr in U.: UtIni}
+    MQOffsetChk     : tMqThr;     { 10,40,60   }
+    MQRangeChk      : tMqThr;     { 10,40,60   }
+    EdgeThr         : Single;     { Edge-Threshold (0.8) 23.06.97 P.W}
+    {----------------------------------------------------------------}
+    {26.06.97 P.W}
+    SlicePauseLimit : Single;  {[sec]}{Lim Minutes->Limit sec: 18.07.97 P.W}
+    SlicePauseMinimum : Single; {[sec]} {18.07.97 P.W}
+    SlicePauseDetOn : Single;   {[sec]} {18.07.97 P.W}
+    SlicePausePerc  : Single;  {[% of meastime]}
+    {----------------------------------------------------------------}
+    {since 20.03.97 P.W}
+    {[BackProjection]:}
+    CtMirrorHoriz  : Boolean;     {Mirror left to right side (x inverted)}
+    CtMirrorVert   : Boolean;     {Mirror top  to down       (y inverted)}
+    {----------------------------------------------------------------}
+    {----------------------------------------------------------------}
+    {since {03.06.97 P.W}
+    {[ScoutView]:}
+    SvMirrorHoriz  : Boolean;
+    SvMirrorVert   : Boolean;
+    SvColorFactor  : Single;       {30.07.97 P.W}
+    {----------------------------------------------------------------}
+  end;
+
+Const
+  MaxInstitut      = 3;
+  DetRecNamePart   = 'DETSV.REC';
+
+{--- for Threshold Default parameter file THR.DEF : ---}
+Type
+  pThrDefRec                 = ^tThrDefRec;     {30.01.97 P.W}
+  tThrDefRec                 = Packed Record           {30.01.97 P.W} // "Record" to "Packed Record" Chg#1567 (02.03.04 P.W)
+    Chk_DebugName  : PathStr;   {06.08.97 P.W}
+    {[General]}
+    SX_FemPeakSpikeLimit     : LongInt;  // 13.05.05 P.W
+    SX_StepMode              : Word;
+    {[0: Variant Threshold]} {StepMode=0 (Thr):}
+    S0_IA_mA                 : Double;
+    S0_HV_kV                 : Double;
+    S0_ThrStart              : Double;
+    S0_ThrEnd                : Double;
+    S0_ThrNumSteps           : Word;
+    S0_Stat1NumIntv          : Word;
+    S0_IntvTime_mSec         : Double;
+    S0_HvWaitTime            : Word;
+    {[1: Variant IA]}        {StepMode=1 (IA):}
+    S1_Thr                   : Double;
+    S1_HV_kV                 : Double;
+    S1_IaStart_mA            : Double;
+    S1_IaEnd_mA              : Double;
+    S1_IaNumSteps            : Word;
+    S1_Stat1NumIntv          : Word;
+    S1_IntvTime_mSec         : Double;
+    S1_HvWaitTime            : Word;
+    {[2: Variant HV]}        {StepMode=2 (HV):}
+    S2_Thr                   : Double;
+    S2_IA_mA                 : Double;
+    S2_HvStart_kV            : Double;
+    S2_HvEnd_kV              : Double;
+    S2_HvNumSteps            : Word;
+    S2_Stat1NumIntv          : Word;
+    S2_IntvTime_mSec         : Double;
+    S2_HvWaitTime            : Word;
+  end;                                          {30.01.97 P.W}
+
+{--- for Diagnose Default parameter file DIAG.INI : ---}
+  pDiagDefRec                = ^tDiagDefRec;    {26.06.97 P.W}
+  tDiagDefRec                = Packed Record           {26.06.97 P.W} // "Record" to "Packed Record" Chg#1568 (02.03.04 P.W)
+    Chk_DebugName  : PathStr;   {06.08.97 P.W}
+    {[SCAN]}
+    ScanTime       : Single;
+    ScanPause      : Single;
+    MoveFact_X0    : Single;
+    MoveFact_X1    : Single;
+    MoveSteps_X    : LongInt;
+    MoveDelaySec_X : LongInt;
+    MoveSteps_Y    : LongInt;
+    MoveDelaySec_Y : LongInt;
+  end;                                          {26.06.97 P.W}
+
+{--- for ZoomRoi by Measurement in ZoomRoiFile: ---}
+  tZoomRoiRec                = Packed Record           {22.06.99 P.W} // "Record" to "Packed Record" Chg#1569 (02.03.04 P.W)
+    ZR_X1, ZR_Y1   : LongInt;
+    ZR_X2, ZR_Y2   : LongInt;
+  end;
+
+{--- for Inter\XbJob.txt: ---}
+Type
+  pXbJobHeadRec    = ^tXbJobHeadRec;            {28.04.03 P.W}
+  tXbJobHeadRec    = Packed Record                     {28.04.03 P.W} // "Record" to "Packed Record" Chg#1570 (02.03.04 P.W)
+    JobMode        : String40;
+    SvRefFile      : PathStr;
+    CtRefFile      : PathStr;
+    SvFile         : PathStr;
+    CtFile         : PathStr;
+    IcFile         : PathStr;
+    PatNo          : String40;
+    PatId          : String40;
+    Name           : String40;
+    FirstName      : String40;
+    Birth          : String20;
+    Gender         : String40;
+    MeasMode       : String40;
+    MacroNo        : String40;
+    MeasDate       : String40;
+    MeasTime       : String40;
+    UserId         : String40;
+    AnaMacro       : String40;
+    Ethnic         : String40;
+    ChangeHolder   : String40;
+    A_PatComment   : String40;
+  end;
+
+Var
+  Institut         : Array[1..MaxInstitut] of String80;
+Var
+  GlbGlobalIniRec  : tGlobalIniRec;
+  GlbDevSnr        : tDevSnrRec;
+  GlbXbJobIniRec   : pXbJobIniRec;              {04.12.02 P.W}
+  GlbXbJobHeadRec  : pXbJobHeadRec;             {28.04.03 P.W}
+  GlbDevMch        : tDevMchRec;
+  GlbTempIni       : tTempIniRec;              // 09.07.08 P.W
+  GlbDevTypPtr     : pDevTypRec;
+  GlbDetRec        : tDetRec;
+  GlbZoomRoiRec    : tZoomRoiRec;
+  GlbEE_Param_DeviceOptions : TEE_Param_DeviceOptions; // 27.04.09 P.W
+
+var // const
+  GlbDetRec_Chk_DebugName : PathStr = '?';  {06.08.97 P.W}
+
+Function  FirmWareNoFromVers(VersStr: String): LongInt; {19.07.02 P.W}
+
+Function  LoadDetRec(Const Name: PathStr; Var DR: DetRecType): Smallint;
+Function  SaveDetRec(Const Name: PathStr; Var DR: DetRecType): Smallint;
+Function  ReadMeasQuality_Range (           {09.08.00 P.W}
+           Const Name: PathStr; Var Mq_Range: ShortInt): Smallint;
+Function  ReadDataMeasInfo4(Const Name: PathStr; Var MeasInfo4): Smallint;
+
+Function  StoreDetRec(Const Name: PathStr; Var DR: tDetRec): Smallint;
+
+Function  FindDetRec(Const Name: PathStr; Var DR: tDetRec   ): Smallint;
+Function  GetDevTypPtr (Var DevTypPtr: pDevTypRec; _Name: String12): Smallint;
+Function  SaveHVIA (HV_kV, IA_mA: Double; _Name: PathStr): Smallint;
+Function  SaveLiDiffVal (Axis: Char; _LiDiffVal: LongInt): Smallint;
+Function  SaveXPosMinMax (XPosMin, XPosMax: Double; MsgFlg:Boolean=True): Smallint; // 25.05.05 P.W
+Function  SaveEpromVersion (_EpromVersion: String): Smallint;
+
+function AdcToTempCelsius(ADC: Integer; PTIR: pTempIniRec=nil;ForceValid:Boolean=False): Single;    // 09.07.08 P.W
+function TempCelsius_Msg(const TempCelsius: Single; ReadSeconds:Single=0; PTIR: pTempIniRec=nil): AnsiString;
+procedure TestAdcToCelsius(PTIR: pTempIniRec=nil; TestName:AnsiString=''); // 09.07.08 P.W
+
+Function  ReadZoomRoiRec: Smallint;    {22.06.99 P.W}
+Function  WriteZoomRoiRec: Smallint;   {22.06.99 P.W}
+Function  ReadThrDefRec(Var DDD: tThrDefRec; _Name: PathStr): Smallint;
+Function  ReadDiagDefRec(Var DDD: tDiagDefRec; _Name: String12): Smallint;
+Procedure ChkSetReadParExitProc;
+Function  ChkLoadFindGlbDetCtRec(
+            Const Name: PathStr; FindFlg: Boolean): Smallint;
+Procedure Init; {Global: 06.08.97 P.W}
+function CalcMeasDiameterMax(XMin, XMax, DSC, Offs, ThDA, ThDB: Double): Double;
+function GlbCalcMeasDiameterMax: Double;
+
+function PrnHeadMsg: String;
+
+Implementation
+
+uses
+  TurboToDelphi;
+  const Unit_Name = 'ReadPar'; // 03.05.24 P.W
+
+Type
+  pDevTypEntry     = ^tDevTypEntry;
+  tDevTypEntry     = Object(TObject_TP7) // "TObject" to "TObject_TP7" Chg#1560 (02.03.04 P.W)
+    E_DevTyp       : String12;
+    E_DevTypPtr    : pDevTypRec;
+    Constructor Init(_Name: String12);
+    Destructor  Done;                                                virtual;
+  end;
+
+var // Const
+  GlbDevTypList    : pCollection = Nil;   {Collection of several pDevTypRec}
+
+(*.**************************************************************************)
+(** Procedure Name   : ErrHalt                                            **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 29.04.97                                           **)
+(** Description      : Halt post a simple error message (Errorlevel 1)    **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ?                                                  **)
+(** Input            : Res, Msg1, Msg2                                    **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : ?                                                  **)
+(**  - predefined    : ?                                                  **)
+(***************************************************************************)
+(** Last modified/By : 01.10.00 / P.Wueseke                               **)
+(** Date/Modification: 03.06.97 P.W / Instead of "readln": SetText        **)
+(** Date/Modification: 01.10.00 P.W / Use ReadlnHalt                      **)
+// 25.08.09 P.W:  when launching in Parameter Repairmode Graphic use for ClrScr may be not initialized
+//  so use Msg part of ReadlnHalt:
+(**************************************************************************.*)
+Procedure ErrHalt(Res: Smallint; Msg1, Msg2: String);
+begin
+  { until  25.08.09 P.W:
+  ClrScr;
+  Writeln('Error (',Res,'), ', Msg1);   
+  Writeln('  ', Msg2);
+  Writeln('   Please press enter to abort...');
+  // --- one of the exit-procedures seems to call ClrScr, so we set: ---
+  Window(1, 10, 80, 25);   // 03.06.97 P.W
+  Delay(500);      // Readln-> Delay: 03.06.97 P.W
+  ReadlnHalt(1);   // Halt -> ReadlnHalt: 01.10.00 P.W
+  }
+  // since 25.08.09 P.W:
+  ReadlnHalt(1, Format('Error (%d), %s'+sLineBreak+'  %s', [Res, Msg1, Msg2]));
+end;
+
+Function  FirmWareNoFromVers(VersStr: String): LongInt; {19.07.02 P.W}
+(*
+Returns valid VersNo in range of 0..9999
+   in case of error: returns -1
+Format of VF: "XCT_t nnnn" t=type; nnnn= version;
+          example: "XCT_H 1500"
+*)
+Var
+  VersNo : LongInt;
+  Err    : LongInt;
+begin
+  Val(Copy(VersStr,7,4), VersNo, Err);
+  If (VersNo <    0) then VersNo := 0
+  else
+  If (VersNo > 9999) then VersNo := 9999;
+  If (Err<>0) then VersNo := -1;
+  FirmWareNoFromVers := VersNo;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : LoadDetRec                                         **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 14.04.94                                           **)
+(** Description      : Load DetRec                                        **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : -                                                  **)
+(** Input            : Name (Name of file containing DetRec)              **)
+(** Output           : Ok:Ret=0; not Ok:Ret=ErrCode                       **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : 15.09.97 / P.Wueseke                               **)
+(** Date/Modification: 06.12.96 P.W / FillChar(DR)                        **)
+(** Date/Modification: 06.08.97 P.W / Sup. GlbDetRec_Chk_DebugName        **)
+(** Date/Modification: 15.09.97 P.W / Set Recsize valid                   **)
+(**************************************************************************.*)
+Function  LoadDetRec(Const Name: PathStr; Var DR: DetRecType): Smallint;
+Var
+  Res, ResH        : Smallint;
+  IO               : File of DetRecType;
+begin
+  Res:=0;
+  FillChar(DR, SizeOf(DR), #0);  {06.12.96 P.W}
+  {$I-}
+    If Addr(DR)=Addr(GlbDetRec) then   {06.08.97 P.W}
+      GlbDetRec_Chk_DebugName:=FExpand(Name);    {06.08.97 P.W}
+
+    Assign(IO, FExpand(Name)); // FExpand added (03.03.04 P.W)
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+    if Res=0 then Reset(IO);
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+    if Res=0 then Read(IO, DR);
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+    Close(IO);
+  {$I+}
+  DR.RecSize:=SizeOf(DR);   {15.09.97 P.W}
+  ResH:=IoResult; If (Res=0) then Res:=ResH;
+  LoadDetRec:=Res;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : SaveDetRec                                         **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 14.04.94                                           **)
+(** Description      : Save DetRec                                        **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : -                                                  **)
+(** Input            : Name (Name of file to save DetRec)                 **)
+(** Output           : Ok:Ret=0; not Ok:Ret=ErrCode                       **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : 15.09.97 / P.Wueseke                               **)
+(** Date/Modification: 15.09.97 P.W / Set Recsize valid                   **)
+(**************************************************************************.*)
+Function  SaveDetRec(Const Name: PathStr; Var DR: DetRecType): Smallint;
+Var
+  Res, ResH        : Smallint;
+  IO               : File of DetRecType;
+begin
+  Res:=0;
+  {$I-}
+    DR.RecSize:=SizeOf(DR);   {15.09.97 P.W}
+    Assign(IO, FExpand(Name)); // FExpand added (03.03.04 P.W)
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+    if Res=0 then Rewrite(IO);
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+    if Res=0 then Write(IO, DR);
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+    Close(IO);
+  {$I+}
+  ResH:=IoResult; If (Res=0) then Res:=ResH;
+  SaveDetRec:=Res;
+//ShowMessageFmt('Debug "%s" ReadPar.pas SaveDetRec: "%s"', [Param_Str(0), Name]);
+end;
+
+(*.**************************************************************************)
+(** Function Name    : StoreDetRecPartMeas                                **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 20.06.97                                           **)
+(** Description      : Writes a part of DetRec to Measurement file        **)
+(** Description      : assumes Headerstructure: HeadPart1RecType, tDetRec **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : FileOpen, FilePosWrite, FileClose                  **)
+(** Input            : Const, Name, Buf, Size, RelPos                     **)
+(** Output           : Buf, Size, RelPos                                  **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function  StoreDetRecPartMeas (
+           Const Name: PathStr; Var Buf; Size, RelPos: Word): Smallint;
+Var
+  Res, ResH        : Smallint;
+  Io               : File;
+  WritePos         : LongInt;
+begin  {Func. StoreDetRecPartMeas}
+  Res:=FileOpen(Io, Name);  {opens existing file!}
+  WritePos:=SizHeadPart1 + RelPos;
+  If (Res=0) then Res:=FilePosWrite(Io, WritePos, Buf, Size);
+  ResH:=FileClose(Io);         {Close ever!}
+  If (Res=0) then Res:=ResH;
+
+  StoreDetRecPartMeas:=Res;
+//ShowMessageFmt('Debug "%s" ReadPar.pas StoreDetRecPartMeas: "%s"; Size:%d; RelPos:%d ', [Param_Str(0), Name, Size, RelPos]);
+end;   {Func. StoreDetRecPartMeas}
+
+Function  ReadDetRecPartMeas (              {09.08.00 P.W}
+           Const Name: PathStr; Var Buf; Size, RelPos: Word): Smallint;
+Var
+  Res, ResH        : Smallint;
+  Io               : File;
+  ReadPos          : LongInt;
+begin  {Func. ReadDetRecPartMeas}
+  Res:=FileOpenReadOnly(Io, Name);
+  ReadPos:=SizHeadPart1 + RelPos;
+  If (Res=0) then Res:=FilePosRead (Io, ReadPos, Buf, Size);
+  ResH:=FileClose(Io);         {Close ever!}
+  If (Res=0) then Res:=ResH;
+
+  ReadDetRecPartMeas:=Res;
+end;   {Func. ReadDetRecPartMeas}
+
+(*.**************************************************************************)
+(** Function Name    : ReadMeasQuality_Range                              **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 20.06.97                                           **)
+(** Description      : Read MeasQuality_Range in Measurement Header       **)
+(** Description      : Measurement Header found in file OutNameGlb        **)
+(***************************************************************************)
+(** Called By        : any  (Backprojection parallel to measurement)      **)
+(** Calls            : StoreDetRecPartMeas                                **)
+(** Input            : Name,  Mq_Range                                    **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : OutNameGlb, GlbDetRec (only as reference not used) **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function  ReadMeasQuality_Range (           {09.08.00 P.W}
+           Const Name: PathStr; Var Mq_Range: ShortInt): Smallint;
+{Used for update of MeasQuality_Range by CTFemNND.Pas}
+Var
+  Res              : Smallint;
+  RelPosDetRec     : Word;
+  pDR              : pDetRec;
+begin  {Func. ReadMeasQuality_Range}
+  Res:=0;
+  If (Name<>'') and (Name<>'NUL') then
+  begin
+    If (SizeOf(Mq_Range) <> SizeOf(GlbDetRec.MeasQuality_Range)) then Res:=-1;
+    pDR:=@GlbDetRec; {to avoid Rt 216}  {@ allows use "Typed @ Operator"}
+    //RelPosDetRec:= Ofs(pDR^.MeasQuality_Range) - Ofs(pDR^);
+    RelPosDetRec := Word( LongInt(Addr(pDR^.MeasQuality_Range))
+                         -LongInt(Addr(pDR^)));
+// DONE -oPW -cCheck Changes : Check Address calculation see P_Test1 Test1
+    If (Res=0) then Res:=
+      ReadDetRecPartMeas(Name, Mq_Range, SizeOf(Mq_Range), RelPosDetRec);
+  end;
+  ReadMeasQuality_Range:=Res;
+end;   {Func. ReadMeasQuality_Range}
+
+Function  ReadDataMeasInfo4(Const Name: PathStr; Var MeasInfo4): Smallint;
+{25.09.02 P.W} {used for update of Measinfo4 by CtFemNnD.Pas (backproj.)}
+Var
+  Res              : Smallint;
+  RelPosDetRec     : Word;
+  pDR              : pDetRec;
+begin
+  Res:=0;
+  If (Name<>'') and (Name<>'NUL') then
+  begin
+    pDR:=@GlbDetRec; {to avoid Rt 216}  {@ allows use "Typed @ Operator"}
+    //RelPosDetRec:= Ofs(pDR^.MeasInfo[4]) - Ofs(pDR^);
+    RelPosDetRec := Word( LongInt(Addr(pDR^.MeasInfo[4]))
+                         -LongInt(Addr(pDR^)));
+// DONE -oPW -cCheck Changes : Check Address calculation see P_Test1 Test1
+
+    If (Res=0) then Res:=
+      ReadDetRecPartMeas (Name, MeasInfo4,
+                                SizeOf(pDR^.MeasInfo[4]),
+                                RelPosDetRec);
+    If (Res=0) then
+      GlbDetRec.MeasInfo[4]:=String(MeasInfo4);
+  end;
+  ReadDataMeasInfo4:=Res;
+end;
+
+Function  StoreDetRec(Const Name: PathStr; Var DR: tDetRec): Smallint;
+{25.09.02 P.W} {stores complete DR with ChkSumEntry inserted}
+Var
+  Res              : Smallint;
+begin  {Func. StoreDataChkSum}
+  Res:=0;
+  If (Name<>'') and (Name<>'NUL') then
+  begin
+    If (Res=0) then Res:=
+      StoreDetRecPartMeas(Name, DR, SizeOf(DR), 0);
+  end;
+  StoreDetRec:=Res;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : FindDetRec                                         **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 20.05.96                                           **)
+(** Description      : Reads DetSvRec from Position 16 of InpName file    **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : Assign, Reset, Seek, BlockRead, Close, IoResult    **)
+(** Input            : InpName                                            **)
+(** Output           : DR                                                 **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : 15.09.97 / P.Wueseke                               **)
+(** Date/Modification: 29.04.97 P.W / InpName                             **)
+(** Date/Modification: 06.08.97 P.W / Sup. GlbDetRec_Chk_DebugName        **)
+(** Date/Modification: 15.09.97 P.W / Corr. DR.RECSIZE                    **)
+(**************************************************************************.*)
+Function  FindDetRec(Const Name: PathStr; Var DR: tDetRec): Smallint;
+Var
+  Res, ResH      : Smallint;
+  Inp            : File;
+  Result_        : LongInt; //Word;
+begin
+  Res:=0;
+  If (Name<>'NUL') and (Name<>'') then
+  begin
+  {$I-}
+    If Addr(DR)=Addr(GlbDetRec) then   {06.08.97 P.W}
+      GlbDetRec_Chk_DebugName:=FExpand(Name);    {06.08.97 P.W}
+
+    Assign(Inp, FExpand(Name)); // FExpand added (03.03.04 P.W)
+    Reset (Inp, 1);
+      ResH:=IoResult; If (Res=0) then Res:=ResH;
+    If (Res=0) then
+    begin
+      Seek(Inp, SizHeadPart1);  {Offset of 16 Bytes}
+        ResH:=IoResult; If (Res=0) then Res:=ResH;
+      If (Res=0) then
+      begin
+        BlockRead(Inp, DR, SizeOf(DR), Result_);
+          ResH:=IoResult; If (Res=0) then Res:=ResH;
+        If (Res=0) and (Result_<>SizeOf(DR)) then Res:=Err_DiskRead;
+        DR.RecSize:=SizeOf(DR);   {15.09.97 P.W}
+      end;
+    end;
+    Close (Inp);
+      ResH:=IoResult; If (Res=0) then Res:=ResH;
+  {$I+}
+  end else
+  begin
+    Res:=Err_DiskRead;
+  end;
+  FindDetRec:=Res;
+end;
+{--------------------------------------------------------------------}
+{--------------------------------------------------------------------}
+
+(*.**************************************************************************)
+(** Function Name    : ReadDevTypRec                                      **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 27.11.96                                           **)
+(** Description      : Read DevTypRec, Halts if error!                    **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : TSetupIni, EHGetD                                  **)
+(** Input            :      _Name                                         **)
+(** Output           : DDD                                                **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Date/Modification: 09.12.96 P.W / Add Parameter vor Hv-Check          **)
+(** Date/Modification: 28.05.97 P.W / CtMirrorHoriz\Vert: ErrorHalt used  **)
+(** Date/Modification: 17.06.97 P.W / Sup. MQCheckOn ...                  **)
+(** Date/Modification: 26.06.97 P.W / WarnDeltaZmm, SlicePauseLim ..      **)
+(** Date/Modification: 18.07.97 P.W / SlicePauseMinimum ..                **)
+{23.07.03 P.W: remove "V-"}
+(**************************************************************************.*)
+Function  ReadDevTypRec(Var DDD: tDevTypRec; _Name: String12): Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : TSetupIni;
+  ValStr           : String;       {23.07.03 P.W: remove "V-"}
+begin
+  Res:=0;
+  FillChar(DDD, SizeOf(DDD), #0);
+  SetupIni.Init(LocInitDirVar + 'TYP\'+_Name);
+  DDD.Chk_DebugName:= FExpand(SetupIni.Name);   {06.08.97 P.W}
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;  {17.06.97 P.W}
+    {----------------------------------------------------------------}
+    My_Section:='[DEVICETYPE ' + _Name + ']';
+    { $ V - }  {23.07.03 P.W: remove "V-"}
+      If Search(My_Section, 'DEVICENAME',  ValStr) >= 0 Then
+         DDD.DeviceName := ValStr; {23.07.03 P.W: remove "V-"}
+    {$V+}
+
+    // v--- 13.11.07 P.W
+    ErrorHaltFlg:=False;  // Optional parameter!
+      DDD.BackgroundHead_Print   := GetL  ('BackgroundHead_Print',  BackGrnd_Head_Print_Def);
+      DDD.BackgroundHead_Screen  := GetL  ('BackgroundHead_Screen', BackGrnd_Head_Screen_Def);
+      DDD.WarnMode               := GetBoo('WarnMode');
+
+      BackGrnd_Head_Print        := DDD.BackgroundHead_Print;
+      BackGrnd_Head_Screen       := DDD.BackgroundHead_Screen;
+      WarnMode                   := DDD.WarnMode;
+    ErrorHaltFlg:=True;
+    // ^--- 13.11.07 P.W
+
+
+      DDD.CpsAlarm               := GetD  ('CpsAlarm');
+      DDD.CpsMinimum             := GetD  ('CpsMinimum');
+      DDD.LnChkMinAtt            := GetD  ('LnChkMinAtt');
+      DDD.LnDeltaPercDet         := GetD  ('LnDeltaPercDet');
+      DDD.LnDeltaPercScan        := GetD  ('LnDeltaPercScan');
+      DDD.DeltaOffsetLimitQa     := GetD  ('DeltaOffsetLimitQa');
+      DDD.DeltaOffsetLimit       := GetD  ('DeltaOffsetLimit');
+      DDD.DeltaLimitAirLeftRight := GetD  ('DeltaLimitAirLeftRight');
+      DDD.DeltaPercTime          := GetD  ('DeltaPercTime');
+      DDD.XSlope                 := GetD  ('XSlope');
+      DDD.XInter                 := GetD  ('XInter');
+      DDD.VoxSiz_['A']           := GetD  ('VoxelSize_A');
+      DDD.VoxSiz_['B']           := GetD  ('VoxelSize_B');
+    {----------------------------------------------------------------}
+    {09.12.96 P.W}
+    My_Section:='[HvCheck]';
+      DDD.HvOffChkFlg            := GetBoo('HvOffChkFlg');
+      DDD.HvOffChkSec_A          := GetD  ('HvOffChkSec_A');
+      DDD.HvOffMaxKV_A           := GetD  ('HvOffMaxKV_A');
+      DDD.HvOffMaxMA_A           := GetD  ('HvOffMaxMA_A');
+      DDD.HvOffChkSec_B          := GetD  ('HvOffChkSec_B');
+      DDD.HvOffMaxKV_B           := GetD  ('HvOffMaxKV_B');
+      DDD.HvOffMaxMA_B           := GetD  ('HvOffMaxMA_B');
+      DDD.HvOnChkFlg             := GetBoo('HvOnChkFlg');
+      DDD.HvOnChkSec_A           := GetD  ('HvOnChkSec_A');
+      DDD.HvOnMaxDeltaKV_A       := GetD  ('HvOnMaxDeltaKV_A');
+      DDD.HvOnMaxDeltaMA_A       := GetD  ('HvOnMaxDeltaMA_A');
+      DDD.HvOnChkSec_B           := GetD  ('HvOnChkSec_B');
+      DDD.HvOnMaxDeltaKV_B       := GetD  ('HvOnMaxDeltaKV_B');
+      DDD.HvOnMaxDeltaMA_B       := GetD  ('HvOnMaxDeltaMA_B');
+    {----------------------------------------------------------------}
+    {17.06.97 P.W}
+    My_Section:='[Measurement]';
+      DDD.MQCheckON              := GetBoo('MQCheckON'    );
+      GetMqThr(DDD.MQLnChk      , 'MQLnChk'               );
+      GetMqThr(DDD.MQOffsetChk  , 'MQOffsetChk'           );
+      GetMqThr(DDD.MQRangeChk   , 'MQRangeChk'            );
+      DDD.EdgeThr                := GetD  ('EdgeThr'      ); {23.06.97 P.W}
+      {--------------------------------------------------------------}
+      {26.06.97 P.W}
+      WarnDeltaZmm         := GetD('WarnDeltaZmm'   );
+      DDD.SlicePauseLimit  := GetD('SlicePauseLimit');{Lim->Limit:18.07.97 P.W}
+      DDD.SlicePauseMinimum:= GetD('SlicePauseMinimum'); {18.07.97 P.W}
+      DDD.SlicePauseDetOn  := GetD('SlicePauseDetOn');   {18.07.97 P.W}
+      DDD.SlicePausePerc   := GetD('SlicePausePerc' );
+    {--------------------------------------------------------------}
+    {since 20.03.97 P.W}
+    My_Section:='[BackProjection]';
+      DDD.CtMirrorHoriz    := GetBoo('CtMirrorHoriz'); {EH: {28.05.97 P.W}
+      DDD.CtMirrorVert     := GetBoo('CtMirrorVert');  {EH: {28.05.97 P.W}
+    {----------------------------------------------------------------}
+    {since 03.06.97 P.W}
+    My_Section:='[ScoutView]';
+      DDD.SvMirrorHoriz    := GetBoo('SvMirrorHoriz');
+      DDD.SvMirrorVert     := GetBoo('SvMirrorVert');
+      DDD.SvColorFactor    := GetD  ('SvColorFactor' );     {30.07.97 P.W}
+      If DDD.SvColorFactor<=0 then DDD.SvColorFactor:=1;    {30.07.97 P.W}
+    {----------------------------------------------------------------}
+  end;
+  SetupIni.Done;
+  If (Res>0) then Res:=0; {!}
+  ReadDevTypRec:=Res;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : ReadGlobalIniRec                                   **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 06.03.97                                           **)
+(** Description      : Read GlbIniRec  ignore errors!                     **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : TSetupIni, EHGetD                                  **)
+(** Input            : -                                                  **)
+(** Output           : DDD                                                **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Date/Modification: -                                                  **)
+{23.07.03 P.W: remove "V-"}
+(**************************************************************************.*)
+Function  ReadGlobalIniRec(Var DDD: tGlobalIniRec): Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : TSetupIni;
+  ValStr           : String;       {23.07.03 P.W: remove "V-"}
+begin  {Func. ReadGlobalIniRec}
+  Res:=0;
+  FillChar(DDD, SizeOf(DDD), #0);
+  SetupIni.Init(GlbIniFile);
+  DDD.Chk_DebugName:= FExpand(SetupIni.Name);   {06.08.97 P.W}
+
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;  {17.06.97 P.W}
+    {----------------------------------------------------------------}
+    My_Section:='[UPDATE]';
+    { $ V - }  {23.07.03 P.W: remove "V-"}
+      If Search(My_Section, 'OldDeviceTyp_X',  ValStr) >= 0 Then
+         DDD.OldDeviceTyp_X := ValStr; {23.07.03 P.W: remove "V-"}
+
+    {$V+}
+    {----------------------------------------------------------------}
+  end;
+  SetupIni.Done;
+  If (Res>0) then Res:=0; {!}
+  ReadGlobalIniRec:=Res;
+end;   {Func. ReadGlobalIniRec}
+
+(*.**************************************************************************)
+(** Constr.  Name    : Init                                               **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 02.12.96                                           **)
+(** Description      : Constructor of tDevTypEntry                        **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : New, ReadDevTypRec                                 **)
+(** Input            : _Name                                              **)
+(** Output           : E_DevTypPtr<>Nil if ok else Nil                    **)
+(** Global Variables                                                      **)
+(**  - affected      : Heap                                               **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Constructor tDevTypEntry.Init (_Name: String12);
+Var
+  Res              : Smallint;
+begin  {Func. Init}
+  Inherited Init;
+  {------------------------------------------------------------------}
+
+  Res:=0;
+  New(E_DevTypPtr);      {E_DevTypPtr: pDevTypRec;}
+  E_DevTyp := _Name;
+  If (Res=0) then Res:=ReadDevTypRec(E_DevTypPtr^, E_DevTyp);
+  If (Res<>0) then
+  begin
+    DisPose(E_DevTypPtr);
+    E_DevTypPtr:=Nil;
+    E_DevTyp:='';
+  end;
+end;   {Func. Init}
+
+(*.**************************************************************************)
+(** Destructor Name  : Done                                               **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 02.12.96                                           **)
+(** Description      : Destructor of tDevTypEntry                         **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : inherited Done, Dispose                            **)
+(** Input            : -                                                  **)
+(** Output           : -                                                  **)
+(** Global Variables                                                      **)
+(**  - affected      : Heap                                               **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Destructor  tDevTypEntry.Done;
+begin  {Destr. Init}
+  If Assigned(E_DevTypPtr) then
+  begin
+    DisPose(E_DevTypPtr);
+    E_DevTypPtr:=Nil;
+  end;
+
+  {------------------------------------------------------------------}
+  Inherited Done;
+end;   {Destr. Init}
+
+(*.**************************************************************************)
+(** Function Name    : GetDevTypPtr                                       **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 02.12.96                                           **)
+(** Description      : Checks if the desired DevTypRec is loaded.         **)
+(** Description      : If not: Load the DevTypRec to memory, register it  **)
+(** Description      : Ever: Set the DevTypPtr to the DevTypRec in memory **)
+(** Description      : Attention! DevTypPtr does not possess the data!    **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : pDevTypEntry.Init                                  **)
+(** Input            : DevTypPtr, _Name                                   **)
+(** Output           : DevTypPtr                                          **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : GlbDevTypList                                      **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : 06.03.97 / P.Wueseke                               **)
+(** Date/Modification: 06.03.97 P.W / if _name is empty use:              **)
+(** Date/Modification: 06.03.97 P.W + GlbGlobalIniRec.OldDeviceTyp_X      **)
+(**************************************************************************.*)
+Function  GetDevTypPtr (Var DevTypPtr: pDevTypRec; _Name: String12): Smallint;
+Var
+  Res              : Smallint;
+  Ctr              : Smallint;
+  Found            : Boolean;
+begin  {Func. GetDevTypPtr}
+  Res:=0;
+  If _Name='' then _Name:=GlbGlobalIniRec.OldDeviceTyp_X; {06.03.97 P.W}
+  DevTypPtr:=Nil;
+  With GlbDevTypList^ do
+  begin
+    Found:=False;
+    Ctr:=0;
+    While (Ctr<Count) and (not Found) do
+    begin
+      Found := (pDevTypEntry(At(Ctr))^.E_DevTyp=_Name);
+      if not Found then Inc(Ctr);
+      {!! use ctr 10.02.97 P.W}
+    end;
+    If (not Found) then
+    begin
+      Insert(New(pDevTypEntry, Init(_Name)));
+//      Found:=True;
+      {!! use ptr direct!!10.02.97 P.W} {sorted list will not work!}
+    end;
+    DevTypPtr:=pDevTypEntry(At(Ctr))^.E_DevTypPtr;
+  end;
+  If (Res=0) and (DevTypPtr=Nil) then Res:=-1;
+  GetDevTypPtr:=Res;
+end;   {Func. GetDevTypPtr}
+
+{--------------------------------------------------------------------}
+{--------------------------------------------------------------------}
+
+(*.**************************************************************************)
+(** Function Name    : ReadLocalIni                                       **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 27.11.96                                           **)
+(** Description      : Reads LocIniFile (init\local.ini)                  **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : TSetUpIni.:Init, Search, Searchnext, Done;         **)
+(** Input            : -                                                  **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : Institut, CountryCodeGlb, ContCalcFlg              **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Date/Modification: -                                                  **)
+{23.07.03 P.W: remove "V-"}
+// 07.04.08 P.W: accept UserData with only single Line
+(**************************************************************************.*)
+Function  ReadLocalIni: Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : TSetupIni;
+  Ctr              : Smallint;
+  ValStr           : String;       {23.07.03 P.W: remove "V-"}
+begin
+  Res:=0;
+  SetupIni.Init(LocIniFile);
+{  DDD.Chk_DebugName:= FExpand(SetupIni.Name);   {06.08.97 P.W}
+  FillChar(Institut, SizeOf(Institut), #0);      {23.07.03 P.W: remove "V-"}
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;  {17.06.97 P.W}
+    {----------------------------------------------------------------}
+    { all Screen-Header-Lines are read }
+    DoValUpCase:=FALSE;
+    { $ V - }  {23.07.03 P.W: remove "V-"}
+    If Search('[UserData]', 'Text', ValStr) >= 0 Then
+       Institut[1] := ValStr; {23.07.03 P.W: remove "V-"}
+
+    ErrorHaltFlg:=False;  // 07.04.08 P.W
+    For Ctr:=2 to MaxInstitut do
+      If SearchNext('Text', ValStr) >= 0 Then
+         Institut[Ctr] := ValStr; {23.07.03 P.W: remove "V-"}
+    ErrorHaltFlg:=True;   // 07.04.08 P.W
+
+    {$V+}
+    DoValUpCase:=TRUE;
+    {----------------------------------------------------------------}
+    My_Section:='[General]';
+      CountryCodeGlb:=Round(GetD('CountryCodeGlb'));
+      if CountryCodeGlb=0 then CountryCodeGlb:=1;
+
+    {----------------------------------------------------------------}
+    My_Section:='[Measurement]';
+      ContCalcFlg := GetBoo('ContCalcFlg');
+      Sound_Err   := GetBoo('Sound_Err');     {22.04.97 P.W}
+      Sound_Wait  := GetBoo('Sound_Wait');    {22.04.97 P.W}
+      Sound_Start := GetBoo('Sound_Start');   {22.04.97 P.W}
+      Sound_End   := GetBoo('Sound_End');     {22.04.97 P.W}
+    {----------------------------------------------------------------}
+  end;
+  SetupIni.Done;
+  ReadLocalIni:=Res;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : ReadOptionsIni                                     **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 27.11.96                                           **)
+(** Description      : Reads LocOptFile (init\options.ini)                **)
+(** Description      : - not used -                                       **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : TSetUpIni.:Init, Search, Done;                     **)
+(** Input            : -                                                  **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function  ReadOptionsIni: Smallint;
+Var
+  Res            : Smallint;
+  SetupIni       : TSetupIni;
+begin
+  Res:=0;
+  SetupIni.Init(LocOptFile);
+{  DDD.Chk_DebugName:= FExpand(SetupIni.Name);   {06.08.97 P.W}
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;  {17.06.97 P.W}
+  end;
+  SetupIni.Done;
+  ReadOptionsIni:=Res;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : ReadDevSnrRec                                      **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 27.11.96                                           **)
+(** Description      : Reads Device.Snr files    (comp. SaveHvIA)         **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : TSetUpIni.:Init, Search, Done;                     **)
+(** Input            : _Name                                              **)
+(** Output           : DDD: tDevSnrRec                                    **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : LocDevSnrFile                                      **)
+(***************************************************************************)
+(** Date/Modification: 10.12.96 P.W / Support SelectedDevType, MechPar    **)
+(** Date/Modification: 21.01.97 P.W / Add "HvTimeOut", "MotorTimeOut"     **)
+(** Date/Modification: 28.05.97 P.W / New: UseScanStep, UseEpr135         **)
+(** Date/Modification: 10.06.97 P.W / Sup. LiDiffVal_X\Y\Z                **)
+(** Date/Modification: 16.06.97 P.W / Sup. PosPostSV\CT                   **)
+(** Date/Modification: 24.06.97 P.W / TubeCurrentMa -> sect. SelDevTyp    **)
+(** Date/Modification: 01.10.01 P.W / HvTimeOut -> HvTimeOutMax           **)
+//05.03.09 P.W: Corrected: "BoardTemp" sets BoardTemp and no longer TempProt.
+{23.07.03 P.W: remove "V-"}
+(**************************************************************************.*)
+Function  ReadGlbDevSnrRec: Smallint;  {18.07.97 P.W to enclose ReadDevSnrRec}
+  Function  ReadDevSnrRec(Var DDD: tDevSnrRec; _Name: PathStr): Smallint;
+  Var
+    Res, ResH      : Smallint;
+    SetupIni       : TSetupIni;
+    ValStr         : String;
+//  IDStr          : String;
+//  Ctr            : Word;
+    Err            : LongInt;
+    Axis           : Char;      {10.06.97 P.W}
+    H_LiDiffVal    : LongInt;   {10.06.97 P.W}
+    H_PosPost      : Single;    {16.06.97 P.W}
+    H_Bool         : Boolean;   {18.10.02 P.W}
+  begin {Func. ReadDevSnrRec}
+    Res:=0;
+    FillChar(DDD, SizeOf(DDD), #0);
+    SetupIni.Init(_Name);
+    DDD.Chk_DebugName:= FExpand(SetupIni.Name);   {06.08.97 P.W}
+    With SetupIni Do
+    begin
+      ErrorHaltFlg:=True;  {17.06.97 P.W}
+      { $ V - }  {23.07.03 P.W: remove "V-"}
+      {----------------------------------------------------------------}
+      {..\..\..\Inst\Dev\XCT2002.A\Device.Snr}
+      My_Section:='[General]';
+        If Search  (My_Section, 'ParamVers'    ,  ValStr) >= 0 Then
+           DDD.ParamVers       := ValStr; {23.07.03 P.W: remove "V-"}
+
+        If Search  (My_Section, 'SerialNo'     ,  ValStr) >= 0 Then
+           DDD.SerialNo        := ValStr; {23.07.03 P.W: remove "V-"}
+
+        If Search  (My_Section, 'EpromVersion' ,  ValStr) >= 0 Then
+          DDD.EpromVersion     := ValStr; {23.07.03 P.W: remove "V-"}
+
+        {v--- 19.07.02 P.W}
+        FirmWareVers := DDD.EpromVersion;
+        VF_VersNo := FirmWareNoFromVers(DDD.EpromVersion);
+          {^-- to allow correct calculation of BaudRate when FirmWare
+               version has not been read during connect to device}
+
+
+        {^--- 19.07.02 P.W}
+        If Search  (My_Section, 'EpromType'    ,  ValStr) >= 0 Then
+           DDD.EpromType       := ValStr; {23.07.03 P.W: remove "V-"}
+
+        If Search  (My_Section, 'SelectedDevType',ValStr) >= 0 Then {10.12.96 P.W}
+           DDD.SelectedDevType := ValStr; {23.07.03 P.W: remove "V-"}
+
+      {---------------------------------------}
+      {--- 10.11.00 P.W ---}
+      ErrorHaltFlg:=False;
+        If Search  (My_Section, 'DbHeaderPlus' ,  ValStr) >= 0 Then
+           DDD.DbHeaderPlus    := ValStr; {23.07.03 P.W: remove "V-"}
+      ErrorHaltFlg:=True;
+      {--------------------}
+      {----------------------------------------------------------------}
+      // 09.07.08 P.W
+      ErrorHaltFlg:=False;
+
+      My_Section:='[XrayTemp]';
+
+           DDD.TempEnabled  := GetBoo('Enabled');   // "Enable" -> "Enabled": 19.12.08 P.W
+
+           DDD.UseTempPause := GetBoo('UseTempPause', DDD.TempEnabled); // 02.10.09 P.W
+      ErrorHaltFlg := DDD.TempEnabled;
+
+           DDD.TempProt     := GetBoo('Prot');
+
+        If Search  (My_Section, 'Type'    ,  ValStr) >= 0 Then
+           DDD.TempIni      := ValStr;
+
+           DDD.BoardTemp    := GetBoo('BoardTemp'); // 19.12.08 P.W
+                   // 05.03.09 P.W: Set BoardTemp and no longer TempProt
+
+      ErrorHaltFlg:=True;
+      {----------------------------------------------------------------}
+      {10.12.96 P.W:}
+      My_Section:='[' + DDD.SelectedDevType + ']';
+        If Search  (My_Section, 'DeviceTyp'    ,  ValStr) >= 0 Then
+           DDD.DeviceTyp       := ValStr; {23.07.03 P.W: remove "V-"}
+
+        If Search  (My_Section, 'MechPar'      ,  ValStr) >= 0 Then
+           DDD.MechPar         := ValStr; {23.07.03 P.W: remove "V-"}
+
+        {--------------------------------------------------------------}
+      {$V+}
+        {24.06.97 P.W} {from section [Measurement]}
+        DDD.TubeCurrentMA    := GetD  ('TubeCurrentMA'      );
+        DDD.TubePotentialKV  := GetD  ('TubePotentialKV'    );
+        {--------------------------------------------------------------}
+        {31.03.99 P.W}
+        ErrorHaltFlg:=False;
+          ResH:=Search(My_Section, 'SpikeLimitPerc',  ValStr);
+            If ResH>=0 then
+            begin
+              Val(ValStr, DDD.SpikeLimitPerc, Err);
+              If (Err <> 0)
+                then DDD.SpikeLimitPerc:=SpikeLimitPerc_Def;
+            end else DDD.SpikeLimitPerc:=SpikeLimitPerc_Def;
+        ErrorHaltFlg:=True;
+        {--------------------------------------------------------------}
+        {--------------------------------------------------------------}
+        {23.11.07 P.W}
+        ErrorHaltFlg:=False;
+          ResH:=Search(My_Section, 'EffDoseMySvPerMASec',  ValStr);
+            If ResH>=0 then
+            begin
+              Val(ValStr, DDD.EffDoseMySvPerMASec, Err);
+              If (Err <> 0)
+                then DDD.EffDoseMySvPerMASec:=EffDoseMySvPerMASec_Def;
+            end else DDD.EffDoseMySvPerMASec:=EffDoseMySvPerMASec_Def;
+        ErrorHaltFlg:=True;
+        {--------------------------------------------------------------}
+      {----------------------------------------------------------------}
+      My_Section:='[Measurement]';
+        DDD.HvTimeOutMax     := GetL  ('HvTimeOut'          ); {21.01.97 P.W}
+                                       {^- Name inside Device.snr not changed!}
+        DDD.MotorTimeOut     := GetL  ('MotorTimeOut'       ); {21.01.97 P.W}
+        {--------------------------------------------------------------}
+        {15.04.99 P.W}
+        ErrorHaltFlg:=False;
+
+          ResH:=Search(My_Section, 'IdleTimeOut',  ValStr);
+            If ResH>=0 then
+            begin
+              Val(ValStr, DDD.IdleTimeOut, Err);
+              If (Err <> 0)
+                then DDD.IdleTimeOut:=IdleTimeOut_Def;
+            end else DDD.IdleTimeOut:=IdleTimeOut_Def;
+
+          ResH:=Search(My_Section, 'SpeedLowPerc',  ValStr);
+            If ResH>=0 then
+            begin
+              Val(ValStr, DDD.SpeedLowPerc, Err);
+              If (Err <> 0)
+                then DDD.SpeedLowPerc:=SpeedLowPerc_Def;
+            end else DDD.SpeedLowPerc:=SpeedLowPerc_Def;
+
+          ResH:=Search(My_Section, 'MinCounts_V1',  ValStr);
+            If ResH>=0 then
+            begin
+              Val(ValStr, DDD.MinCounts_V1, Err);
+              If (Err <> 0)
+                then DDD.MinCounts_V1:=MinCounts_V1_Def;
+            end else DDD.MinCounts_V1:=MinCounts_V1_Def;
+
+          {22.06.99 P.W}
+          ResH:=Search(My_Section, 'MinEdgeReserveIntv',  ValStr);
+            If ResH>=0 then
+            begin
+              Val(ValStr, DDD.MinEdgeReserveIntv, Err);
+              If (Err <> 0)
+                then DDD.MinEdgeReserveIntv:=MinEdgeReserveIntv_Def;
+            end else DDD.MinEdgeReserveIntv:=MinEdgeReserveIntv_Def;
+
+          {22.06.99 P.W}
+          ResH:=Search(My_Section, 'EdgeReserveMm',  ValStr);
+            If ResH>=0 then
+            begin
+              Val(ValStr, DDD.EdgeReserveMm, Err);
+              If (Err <> 0)
+                then DDD.EdgeReserveMm:=EdgeReserveMm_Def;
+            end else DDD.EdgeReserveMm:=EdgeReserveMm_Def;
+
+          {22.06.99 P.W}
+          ResH:=Search(My_Section, 'SkipSvReserveMm',  ValStr);
+            If ResH>=0 then
+            begin
+              Val(ValStr, DDD.SkipSvReserveMm, Err);
+              If (Err <> 0)
+                then DDD.SkipSvReserveMm:=SkipSvReserveMm_Def;
+            end else DDD.SkipSvReserveMm:=SkipSvReserveMm_Def;
+
+          DDD.MoveOptimization := GetBoo('MoveOptimization'   );
+          DDD.AllowRampOut     := GetBoo('AllowRampOut'       );
+          DDD.AllowBackProj    := GetBoo('AllowBackProj'      );
+          DDD.AllowMeasSpool   := GetBoo('AllowMeasSpool'     ); {22.06.99 P.W}
+          DDD.AllowSpeedLow    := GetBoo('AllowSpeedLow'      ); {22.06.99 P.W}
+          DDD.AllowAutoZoom    := GetBoo('AllowAutoZoom'      ); {22.06.99 P.W}
+
+        ErrorHaltFlg:=True;
+        {--------------------------------------------------------------}
+        DDD.TimeTransAddSv   := GetD  ('TimeTransAddSv'     ); {03.07.97 P.W}
+        DDD.TimeTransAddCt   := GetD  ('TimeTransAddCt'     ); {03.07.97 P.W}
+        {--------------------------------------------------------------}
+        DDD.UseEpr135        := GetBoo('UseEpr135'          ); {28.05.97 P.W}
+        DDD.UseScanStep      := GetBoo('UseScanStep'        ); {28.05.97 P.W}
+        DDD.MaxVeloUseStep   := GetD  ('MaxVeloUseStep'     ); {02.06.97 P.W}
+        DDD.MaxCountsStep    := GetL  ('MaxCountsStep'      ); {09.06.97 P.W}
+        DDD.TimeBaseStepSec  := GetD  ('TimeBaseStepSec'    ); {02.06.97 P.W}
+        DDD.SvMeasContrastFlg:= GetBoo('SvMeasContrastFlg'  );
+        {--------------------------------------------------------------}
+        {10.06.97 P.W}
+        For Axis:=AxisFirst to AxisLast do
+        begin
+          ResH:=Search(My_Section, 'LiDiffVal_'+Axis,  ValStr);
+          H_LiDiffVal := MotPosParNotUsed;
+
+          If ResH>=0 then
+          begin
+            If (Pos('?', ValStr) > 0) then H_LiDiffVal := MotPosUnknown
+            else
+            If ('-' = ValStr)         then H_LiDiffVal := MotPosParNotUsed
+            else
+            begin
+              Val(ValStr, H_LiDiffVal, Err);
+              If (Err<>0) then H_LiDiffVal := MotPosUnknown;
+            end;
+          end;
+
+          DDD.LiDiffVal[Axis]:=H_LiDiffVal;
+        end;
+        {--------------------------------------------------------------}
+        {16.07.97 P.W}
+        DDD.ZPosMin          := GetD  ('ZPosMin'            );
+        DDD.ZPosMax          := GetD  ('ZPosMax'            );
+        {--------------------------------------------------------------}
+        {16.06.97 P.W}
+        For Axis:=AxisFirst to AxisLast do
+        begin
+          ResH:=Search(My_Section, 'PosPostSV_'+Axis,  ValStr);
+          H_PosPost   := MotPosParNotUsed;
+
+          If ResH>=0 then
+          begin
+            If ('-' = ValStr) then H_PosPost   := MotPosParNotUsed
+            else
+            begin
+              Val(ValStr, H_PosPost  , Err);
+              If (Err<>0) then H_PosPost   := MotPosParNotUsed;
+            end;
+          end;
+
+          DDD.PosPostSV[Axis]:=H_PosPost;
+        end;
+        For Axis:=AxisFirst to AxisLast do
+        begin
+          ResH:=Search(My_Section, 'PosPostCT_'+Axis,  ValStr);
+          H_PosPost   := MotPosParNotUsed;
+
+          If ResH>=0 then
+          begin
+            If ('-' = ValStr) then H_PosPost   := MotPosParNotUsed
+            else
+            begin
+              Val(ValStr, H_PosPost  , Err);
+              If (Err<>0) then H_PosPost   := MotPosParNotUsed;
+            end;
+          end;
+
+          DDD.PosPostCT[Axis]:=H_PosPost;
+        end;
+        {--------------------------------------------------------------}
+
+        ResH:=Search(My_Section, 'BaudRateLevel',  ValStr);
+          If ResH>=0 then
+          begin
+            Val(ValStr, DDD.BaudRateLevel, Err);
+            If (Err <> 0) or (DDD.BaudRateLevel > MaxBaudRateLevel)
+              then DDD.BaudRateLevel:=GlbDevSnr.BaudRateLevelPowerOn;
+          end else DDD.BaudRateLevel:=GlbDevSnr.BaudRateLevelPowerOn; {else: 03.04.97 P.W}
+
+        ErrorHaltFlg:=False;
+        ResH:=Search(My_Section, 'BaudRateLevelPowerOn',  ValStr); {19.07.02 P.W}
+          If ResH>=0 then
+          begin
+            Val(ValStr, DDD.BaudRateLevelPowerOn, Err);
+            If (Err <> 0) or (DDD.BaudRateLevelPowerOn > MaxBaudRateLevelPowerOn)
+              then DDD.BaudRateLevelPowerOn:=BaudRateLevelPowerOn_Def;
+          end else DDD.BaudRateLevelPowerOn:=BaudRateLevelPowerOn_Def;
+        ErrorHaltFlg:=True;
+
+        ResH:=Search(My_Section, 'QuartzMhz',  ValStr); {03.04.97 P.W}
+          If ResH>=0 then
+          begin
+            Val(ValStr, DDD.QuartzMhz, Err);
+            If (Err <> 0)
+              then DDD.QuartzMhz:=DefQuartzMhz;
+          end else DDD.QuartzMhz:=DefQuartzMhz;
+
+        ResH:=Search(My_Section, 'PortName',  DDD.PortName); {07.04.97 P.W}
+          If ResH<0 then DDD.PortName:=DefPortName;
+        {--------------------------------------------------------------}
+        {18.10.02 P.W}
+        ErrorHaltFlg:=False;
+        ResH:=Search(My_Section, 'UseAutoRts',  ValStr);
+          If ResH<0 then
+          begin
+            DDD.UseAutoRts:=DefUseAutoRts;
+          end else
+          begin
+            H_Bool:=GetBoo('UseAutoRts');
+            If H_Bool then DDD.UseAutoRts:=C_On
+                      else DDD.UseAutoRts:=C_Off;
+          end;
+
+          DDD.XPosMin          := GetD  ('XPosMin', 0.0);  // 25.05.05 P.W
+          DDD.XPosMax          := GetD  ('XPosMax', 0.0);  // 25.05.05 P.W
+          DDD.MeasDiameterMin  := GetD  ('MeasDiameterMin', 0.0);  // 21.06.05 P.W
+          DDD.MeasDiameterMax  := GetD  ('MeasDiameterMax', 0.0);  // 21.06.05 P.W
+          DDD.MeasDiameterDef  := GetD  ('MeasDiameterDef', 0.0);  // 21.06.05 P.W
+        ErrorHaltFlg:=True;
+        {--------------------------------------------------------------}
+
+        UseProtV24     :=GetBoo('UseProtV24');
+        UseProtV24Time :=GetBoo('UseProtV24Time');
+      {----------------------------------------------------------------}
+      (* {until 20.03.97 P.W}
+      My_Section:='[BackProjection]';
+        DDD.CtMirrorHoriz    := GetBoo('CtMirrorHoriz');
+        DDD.CtMirrorVert     := GetBoo('CtMirrorVert');
+      *)
+      {----------------------------------------------------------------}
+    end;
+    SetupIni.Done;
+    ReadDevSnrRec:=Res;
+  end;  {Func. ReadDevSnrRec}
+begin {Func. ReadGlbDevSnrRec}
+  ReadGlbDevSnrRec:=ReadDevSnrRec(GlbDevSnr, LocDevSnrFile);
+end;  {Func. ReadGlbDevSnrRec}
+
+Function ReadXbJobIniRec(
+           Var DDD: tXbJobIniRec;
+           _Name  : PathStr
+           ): Smallint;
+(*
+ {04.12.02 P.W}
+*)
+// Modifications:
+// 15.06.09 P.W: Default for RefPosMin/Max no longer zero but GlbDevSnr.ZPosMin/Max
+Var
+  Res              : Smallint;
+  SetupIni         : TSetupIni;
+  DefZMin, DefZMax : Single;     // 15.06.09 P.W
+begin {Func. ReadGlbXbJobIniRec}
+  Res := 0;
+  DefZMin := GlbDevSnr.ZPosMin;   // 15.06.09 P.W
+  DefZMax := GlbDevSnr.ZPosMax;   // 15.06.09 P.W
+  FillChar(DDD, SizeOf(DDD), #0);
+  SetupIni.Init(_Name);
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=False;
+    My_Section:='[Measurement]';
+    DDD.UseKeysPostCt   := GetBoo('UseKeysPostCt'  );
+    DDD.ChangeHolderFlg := GetBoo('ChangeHolderFlg');
+
+    DDD.RefPosMin[0]    := GetD  ('RefPosMin_All', DefZMin );
+    DDD.RefPosMax[0]    := GetD  ('RefPosMax_All', DefZMax );
+
+    DDD.RefPosMin[1]    := GetD  ('RefPosMin_A',   DefZMin );
+    DDD.RefPosMax[1]    := GetD  ('RefPosMax_A',   DefZMax );
+
+    DDD.RefPosMin[2]    := GetD  ('RefPosMin_B',   DefZMin );
+    DDD.RefPosMax[2]    := GetD  ('RefPosMax_B',   DefZMax );
+
+    DDD.RefPosMin[3]    := GetD  ('RefPosMin_C',   DefZMin );
+    DDD.RefPosMax[3]    := GetD  ('RefPosMax_C',   DefZMax );
+
+    DDD.RefPosMin[4]    := GetD  ('RefPosMin_D',   DefZMin );
+    DDD.RefPosMax[4]    := GetD  ('RefPosMax_D',   DefZMax );
+
+    DDD.RefPosMin[5]    := GetD  ('RefPosMin_E',   DefZMin );
+    DDD.RefPosMax[5]    := GetD  ('RefPosMax_E',   DefZMax );
+
+    DDD.PosPatXPosMm    := GetD  ('PosPatXPosMm'    );
+    DDD.PosPatYPosDeg   := GetD  ('PosPatYPosDeg'   );
+    DDD.PosPatZPosMm    := GetD  ('PosPatZPosMm',  DefZMin );
+  end;
+  SetupIni.Done;
+  ReadXbJobIniRec := Res;
+end;  {Func. ReadGlbXbJobIniRec}
+
+(*.**************************************************************************)
+(** Function Name    : SaveHVIA                                           **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 30.01.97                                           **)
+(** Description      : Store Hv and Ia into the file (comp. ReadDevSnrRec)**)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ReadDevSnrRec                                      **)
+(** Input            : HV_kV, IA_mA, _Name                                **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : GlbDevSnr                                          **)
+(**  - predefined    : LocDevSnrFile                                      **)
+(***************************************************************************)
+(** Date/Modification: 24.06.97 P.W / TubeCurrentMa -> sect. SelDevTyp    **)
+{23.07.03 P.W: remove "V-"}
+(**************************************************************************.*)
+Function  SaveHVIA (HV_kV, IA_mA: Double; _Name: PathStr): Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : tSetupIni;
+  SelectedDevType  : String40;     {24.06.97 P.W}
+  ValStr           : String;       {23.07.03 P.W: remove "V-"}
+begin  {Func. SaveHVIA}
+  Res:=0;
+  SetupIni.Init(_Name);
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;  {17.06.97 P.W}
+
+    {----------------------------------------------------------------}
+    {24.06.97 P.W}
+    My_Section:='[General]';
+    { $ V - }  {23.07.03 P.W: remove "V-"}
+      SelectedDevType := '';
+      If Search  (My_Section, 'SelectedDevType', ValStr) >= 0 Then
+         SelectedDevType := ValStr; {23.07.03 P.W: remove "V-"}
+
+    {$V+}
+    My_Section:='[' + SelectedDevType + ']';
+    {----------------------------------------------------------------}
+    If (Res=0) then Res:=
+      Modify(My_Section, 'TubePotentialKV', InvValD(HV_kV,15, 4));
+    If (Res>0) then Res:=0;
+
+    If (Res=0) then Res:=
+      Modify(My_Section, 'TubeCurrentMA',   InvValD(IA_mA,15, 4));
+    If (Res>0) then Res:=0;
+
+    If (Res=0) then Res:=
+      Write;
+  end;
+
+  SetupIni.Done;
+  ReadGlbDevSnrRec;
+  SaveHVIA:=Res;
+end;   {Func. SaveHVIA}
+
+(*.**************************************************************************)
+(** Function Name    : SaveLiDiffVal                                      **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 10.06.97                                           **)
+(** Description      : Store LiDiffVal into the file (comp. ReadDevSnrRec)**)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ReadGlbDevSnrRec                                   **)
+(** Input            : Axis, _LiDiffVal                                   **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : GlbDevSnr                                          **)
+(**  - predefined    : LocDevSnrFile                                      **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function  SaveLiDiffVal (Axis: Char; _LiDiffVal: LongInt): Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : tSetupIni;
+begin  {Func. SaveLiDiffVal}
+  Res:=0;
+  SetupIni.Init(LocDevSnrFile);
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;  {17.06.97 P.W}
+
+    If (Res=0) then Res:=
+      Modify('[Measurement]', 'LiDiffVal_'+Axis, InvVal(_LiDiffVal,10));
+    If (Res>0) then Res:=0;
+
+    If (Res=0) then Res:=
+      Write;
+  end;
+  SetupIni.Done;
+  ReadGlbDevSnrRec;
+  SaveLiDiffVal:=Res;
+end;   {Func. SaveLiDiffVal}
+
+Function  SaveXPosMinMax (XPosMin, XPosMax: Double; MsgFlg:Boolean=True): Smallint;
+// 25.05.05 P.W
+// Caller should support adaption of Measurement masks by call of DefSnr_Masks.exe
+// See UfrmTools.pas Edit Device.snr
+// Modifications:
+// 21.06.05 P.W: Support MeasDiameterMin/Max/Def and GlbCalcMeasDiameterMax
+Var
+  Res              : Smallint;
+  SetupIni         : tSetupIni;
+begin  {Func. SaveXPosMinMax}
+  Res:=0;
+
+  // v--- adapt MeasDiameter* s. 21.06.05 P.W
+  // Calculations:
+  GlbDevSnr.XPosMin := XPosMin;  // needed by GlbCalcMeasDiameterMax
+  GlbDevSnr.XPosMax := XPosMax;  // needed by GlbCalcMeasDiameterMax
+  GlbDevSnr.MeasDiameterMax := GlbCalcMeasDiameterMax;
+
+  GlbDevSnr.MeasDiameterMin :=  // min not above max
+    Min(GlbDevSnr.MeasDiameterMin, GlbDevSnr.MeasDiameterMax);
+  GlbDevSnr.MeasDiameterDef :=  // def not above max
+    Min(GlbDevSnr.MeasDiameterDef, GlbDevSnr.MeasDiameterMax);
+  GlbDevSnr.MeasDiameterDef :=  // def not below min
+    Max(GlbDevSnr.MeasDiameterDef, GlbDevSnr.MeasDiameterMin);
+  // ^--- adapt MeasDiameter* s. 21.06.05 P.W
+
+  SetupIni.Init(LocDevSnrFile);
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=False;
+
+    If (Res=0) then Res:=
+      Modify('[Measurement]', 'XPosMin', InvValD(XPosMin,10, 3));
+    If (Res>0) then Res:=0;
+
+    If (Res=0) then Res:=
+      Modify('[Measurement]', 'XPosMax', InvValD(XPosMax,10, 3));
+    If (Res>0) then Res:=0;
+
+  // v--- adapt MeasDiameter* s. 21.06.05 P.W
+    If (Res=0) then Res:=
+      Modify('[Measurement]', 'MeasDiameterMin', InvValD(GlbDevSnr.MeasDiameterMin,10, 3));
+    If (Res>0) then Res:=0;
+
+    If (Res=0) then Res:=
+      Modify('[Measurement]', 'MeasDiameterMax', InvValD(GlbDevSnr.MeasDiameterMax,10, 3));
+    If (Res>0) then Res:=0;
+
+    If (Res=0) then Res:=
+      Modify('[Measurement]', 'MeasDiameterDef', InvValD(GlbDevSnr.MeasDiameterDef,10, 3));
+    If (Res>0) then Res:=0;
+  // ^--- adapt MeasDiameter* s. 21.06.05 P.W
+
+    If (Res=0) then Res:=
+      Write;
+  end;
+  SetupIni.Done;
+//ReadGlbDevSnrRec; no longer neccessary // 21.06.05 P.W
+  Result := Res;
+  if MsgFlg then
+  ShowMessageFmt(
+    'XPosMin: %6.2f and XPosMax: %6.2f saved in "Device.snr".'+sLineBreak+
+    'MeasDiameterMax is %6.2f [mm]'+sLineBreak+
+    sLineBreak+
+    'MeasDiameterMax depends on OffsetCenterMm and must be adapted again'+sLineBreak+
+    'when OffsetCenterMm has been changed!',
+    [XPosMin,
+     XPosMax,
+     GlbDevSnr.MeasDiameterMax
+    ]);
+end;   {Func. SaveXPosMinMax}
+
+(*.**************************************************************************)
+(** Function Name    : SaveEpromVersion                                   **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 19.07.02 as copy of SaveLiDiffVal                  **)
+(** Description      : Store EpromVersion into file (comp. ReadDevSnrRec) **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ReadGlbDevSnrRec                                   **)
+(** Input            : _EpromVersion                                      **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : GlbDevSnr                                          **)
+(**  - predefined    : LocDevSnrFile                                      **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function  SaveEpromVersion (_EpromVersion: String): Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : tSetupIni;
+begin  {Func. SaveEpromVersion}
+  Res:=0;
+  SetupIni.Init(LocDevSnrFile);
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;  {17.06.97 P.W}
+
+    If (Res=0) then Res:=
+      Modify('[General]', 'EpromVersion', _EpromVersion);
+    If (Res>0) then Res:=0;
+
+    If (Res=0) then Res:=
+      Write;
+  end;
+  SetupIni.Done;
+  ReadGlbDevSnrRec;
+  SaveEpromVersion:=Res;
+end;   {Func. SaveEpromVersion}
+
+(*.**************************************************************************)
+(** Function Name    : ReadDevMchRec                                      **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 10.12.96                                           **)
+(** Description      : Reads *.MCH (mechanical parameter) files           **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : TSetUpIni.:Init, Search, Done; FillChar            **)
+(** Input            : _Name                                              **)
+(** Output           : DDD: tDevMchRec                                    **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : LocDevSnrFile                                      **)
+(***************************************************************************)
+(** Date/Modification: 12.12.96 P.W / Support DetCycle      parameter     **)
+(** Date/Modification: 12.12.96 P.W / Support Motor control parameter     **)
+(** Date/Modification: 10.06.97 P.W / Sup. Init Axis Parameter            **)
+{23.07.03 P.W: remove "V-"}
+(**************************************************************************.*)
+Function  ReadDevMchRec(Var DDD: tDevMchRec; _Name: String12): Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : TSetupIni;
+  ValStr           : String;
+//IDStr            : String;
+//Ctr              : Word;
+//Err              : Smallint;
+  Axis             : Char;
+begin {Func. ReadDevMchRec}
+  Res:=0;
+  FillChar(DDD, SizeOf(DDD), #0);
+  SetupIni.Init(GlbDevTypDir+_Name);
+  DDD.Chk_DebugName:= FExpand(SetupIni.Name);   {06.08.97 P.W}
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;  {17.06.97 P.W}
+    {$V+}
+    {----------------------------------------------------------------}
+    My_Section:='[Detectors]';
+      With DDD do
+      begin
+        DetCycleOn        := GetL('DetCycleOn'             );
+        DetCycleOff       := GetL('DetCycleOff'            );
+      end;
+    {----------------------------------------------------------------}
+    My_Section:='[Axis_All]';
+    {----------------------------------------------------------------}
+    For Axis:=AxisFirst to AxisLast do
+    begin
+      My_Section:='[AXIS_' + Axis + ']';
+      With DDD.AxisArr[Axis] do
+      begin
+      { $ V - }  {23.07.03 P.W: remove "V-"}
+        If Search  (My_Section, 'AxisUnit'    , ValStr) >= 0 Then
+           AxisUnit := ValStr; {23.07.03 P.W: remove "V-"}
+
+      {$V+}
+        Contr_KP          := GetL('Contr_KP'               );
+        Contr_KI          := GetL('Contr_KI'               );
+        Contr_IL          := GetL('Contr_IL'               );
+        Contr_KD          := GetL('Contr_KD'               );
+        Contr_DSR         := GetL('Contr_DSR'              );
+        PosTol            := GetD('PosTol'                 );
+        PosErrChk         := GetD('PosErrChk'              );
+        PosErrStop        := GetD('PosErrStop'             );
+        {--------------------------------------------------------------}
+        {10.06.97 P.W}
+        InitDir           := GetL  ('InitDir'              );
+        InitOffs          := GetD  ('InitOffs'             );
+        if (Axis = 'Y') then
+        begin
+          UseSoftRef      := GetBoo('UseSoftRef'           );
+          HardStop1       := GetD  ('HardStop1'            );
+          HardStop2       := GetD  ('HardStop2'            );
+          SoftRefStart1   := GetD  ('SoftRefStart1'        );
+          SoftRefEnd1     := GetD  ('SoftRefEnd1'          );
+          SoftRefStart2   := GetD  ('SoftRefStart2'        );
+          SoftRefEnd2     := GetD  ('SoftRefEnd2'          );
+          SoftRefStart3   := GetD  ('SoftRefStart3'        );
+          SoftRefEnd3     := GetD  ('SoftRefEnd3'          );
+        end;
+        {--------------------------------------------------------------}
+      end;
+    end;
+    {----------------------------------------------------------------}
+  end;
+  SetupIni.Done;
+  ReadDevMchRec:=Res;
+end;  {Func. ReadDevMchRec}
+
+function AdcToTempCelsius(ADC: Integer; PTIR: pTempIniRec=nil;ForceValid:Boolean=False): Single;
+// 09.07.08 P.W
+// Modifications:
+// 27.04.09 P.W:
+//  a) when Device Entry does not support XRayThermometer then return Temperature_SensorDisabled
+//  b) New Parameter ForceValid for use by calculations where no device is connected
+//
+var
+  I : Integer;
+  Pot : Double;
+begin
+  if PTIR = nil then PTIR := @GlbTempIni;
+
+  if (not ForceValid) and (not GlbEE_Param_DeviceOptions.XRayThermometer) then  // 27.04.09 P.W
+  begin
+    if GlbEE_Param_DeviceOptions.Valid then
+    begin
+      Result := Temperature_SensorDisabled;
+    end else
+    begin
+      Result := Temperature_SensorUnknownState;
+    end;
+    EXIT;
+  end;
+
+  // Special values:
+  if ADC = $0000 then
+  begin
+    Result := Temperature_NoBoard;
+    EXIT;
+  end else
+  if ADC = $03FF then
+  begin
+    Result := Temperature_NoSensor;
+    EXIT;
+  end else
+  if ADC < PTIR.ADCmin then
+  begin
+    Result := Temperature_ADCBelowRange;
+    EXIT;
+  end else
+  if ADC > PTIR.ADCmax then
+  begin
+    Result := Temperature_ADCAboveRange;
+    EXIT;
+  end;
+
+  if PTIR.Valid then
+  begin
+    ADC := EnsureRange(ADC, PTIR.ADCmin, PTIR.ADCmax);
+    Result := 0;
+    Pot := 0.1;
+    for I := Low(PTIR.aI) to High(PTIR.aI) do
+    begin
+      Result := Result +  PTIR.aI[I] * Pot;
+      Pot    := Pot * ADC;
+    end;
+  end else
+  begin
+    Result := Temperature_InvalidPar;
+  end;
+end;
+
+function TempCelsius_Msg(const TempCelsius: Single; ReadSeconds:Single=0; PTIR: pTempIniRec=nil): AnsiString;
+// 09.07.08 P.W
+  function TempMsgFstPart: AnsiString;
+  // 02.10.09 P.W   mark the option that temperature is protocolled but not used for pause
+  begin
+    if GlbDevSnr.UseTempPause then
+      Result := 'T.:'
+    else
+      Result := '<t>';
+  end;
+begin
+  If (Round(TempCelsius) >= Temperature_ErrCodeMin) then
+  begin
+    case Round(TempCelsius) of
+      Temperature_ADCBelowRange:      Result := 'Temp. ADC below min!';
+      Temperature_InvalidPar:         Result := 'Temp. parameter invalid!';
+
+      Temperature_SensorUnknownState: Result := 'Temp. status unknown!';   // 27.04.09 P.W
+      Temperature_SensorDisabled:     Result := 'Temp. sensor disabled!';  // 27.04.09 P.W
+
+      Temperature_NoSensor:           Result := 'Temp. sensor missing!';
+      Temperature_NoBoard:            Result := 'Temp. board missing!';
+      Temperature_ADCAboveRange:      Result := 'Temp. ADC above max!'
+      else                            Result := 'Temp. sensor error!'
+    end;
+  end else
+  begin
+    if PTIR = nil then PTIR := @GlbTempIni;
+
+    if (Abs(ReadSeconds) >= 10 * Temperature_ReadSecOld) then
+    begin
+      Result := Format('%s(--.-)ºC',  [TempMsgFstPart, TempCelsius]);
+      EXIT;
+    end else
+    if (Abs(ReadSeconds) >= Temperature_ReadSecOld) then
+      Result := Format('%s(%4.1f)ºC', [TempMsgFstPart, TempCelsius])
+    else
+      Result := Format('%s %4.1f ºC', [TempMsgFstPart, TempCelsius]);
+
+    if TempCelsius >= PTIR.TempMax     then Result := Result + ' '+Tras('above max.!') else
+    if TempCelsius >= PTIR.TempWarning then Result := Result + ' '+Tras('high!') ;
+  end;
+
+end;
+
+procedure TestAdcToCelsius(PTIR: pTempIniRec=nil; TestName:AnsiString='');
+// 09.07.08 P.W
+var
+  SL : TStringList;
+  ADC : Integer;
+  Len, I, DLen : Integer;
+begin
+  if PTIR = nil then PTIR := @GlbTempIni;
+  if TestName = '' then TestName := LocInterDir+'TestAdcToCelsius.txt';
+  SL := TStringList.Create;
+
+  SL.Append(Format('ADCmin = %5d', [PTIR.ADCmin]));
+  SL.Append(Format('ADCmax = %5d', [PTIR.ADCmax]));
+  SL.Append('');
+
+  for I := Low(PTIR.aI) to High(PTIR.aI) do
+    SL.Append(Format('a%d = %1.8g', [I, PTIR.aI[I]]));
+
+  SL.Append('');
+
+  SL.Append('ADC'#9'Temp (ºC)');
+  Len :=  PTIR.ADCmax - PTIR.ADCmin +1;
+  DLen := Len div 20;
+//  for ADC := 0 to $3FFF do
+  for ADC := PTIR.ADCmin-DLen to PTIR.ADCmax+DLen do
+  begin
+    SL.Append(Format('%5d'#9'%7.2f', [ADC, AdcToTempCelsius(ADC, PTIR, True)]));
+  end;
+  SL.SaveToFile(TestName);
+  SL.Free;
+end;
+
+function IsTempIniRecValid(const TIR: tTempIniRec): Boolean;
+// 09.07.08 P.W
+  function ChkSum: Double;
+  var
+    I : Integer;
+  begin
+    Result := 0;
+    for I := Low(TIR.aI) to High(TIR.aI) do
+      Result := Result + Power(1000, I-1) * TIR.aI[I];
+  end;
+begin
+  Result := (TIR.Chk_DebugName <> '');
+  if Result then
+  begin
+    Result := (abs(TIR.aC - ChkSum) < 1e-5);
+    if not Result then
+    begin
+      if ServiceFlg then
+      begin
+        ReadlnHalt(1, Format('Value of aC in %s is not valid! Expected: %8.6f', [TIR.Chk_DebugName, ChkSum]));
+      end else
+      begin
+        ReadlnHalt(1, Format('Value of aC in %s is not valid!', [TIR.Chk_DebugName]));
+      end;
+    end;
+  end;
+end;
+
+function ReadTempIniRec(Var DDD: tTempIniRec; const _Name: String40; const Enabled: Boolean ): Smallint;
+// 09.07.08 P.W
+Var
+  Res              : Smallint;
+  SetupIni         : TSetupIni;
+begin
+  Res:=0;
+  Result := 0;   // 08.01.09 P.W
+  FillChar(DDD, SizeOf(DDD), #0);
+  if (_Name = '') and (not Enabled) then EXIT;
+
+  SetupIni.Init(GlbDevTypDir+_Name);
+  DDD.Chk_DebugName:= FExpand(SetupIni.Name);   {06.08.97 P.W}
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;
+    {----------------------------------------------------------------}
+    My_Section:='[TempLimits]';
+      With DDD do
+      begin
+        TempMax      := GetD('TempMax'     );
+        TempWarning  := GetD('TempWarning' );
+        TempContinue := GetD('TempContinue');
+        TempMaxStart := GetD('TempMaxStart');  // 17.07.09 P.W
+    ErrorHaltFlg:=False;
+        CoolPosX     := GetD('CoolPosX', -1);  // 27.08.09 P.W
+        CoolPosY     := GetD('CoolPosY', -1);  // 27.08.09 P.W
+    ErrorHaltFlg:=True;
+      end;
+    {----------------------------------------------------------------}
+    My_Section:='[TempCalib]';
+      With DDD do
+      begin
+        ADCmin       := GetL('ADCmin');
+        ADCmax       := GetL('ADCmax');
+        aI[0]        := GetD('a0');
+        aI[1]        := GetD('a1');
+        aI[2]        := GetD('a2');
+        aI[3]        := GetD('a3');
+        aI[4]        := GetD('a4');
+        ac           := GetD('ac');
+      end;
+    {----------------------------------------------------------------}
+    DDD.Valid := IsTempIniRecValid(DDD);
+  end;
+  SetupIni.Done;
+  Result := Res;
+end;
+
+
+(*.**************************************************************************)
+(** Function Name    : ReadHvLogFile                                      **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 15.11.96                                           **)
+(** Description      :                                                    **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : Assign, Reset, Read, Close                         **)
+(** Input            : -                                                  **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : HvHours, HvLastSeconds, LogMotDistMm               **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : 14.06.99 / P.Wueseke                               **)
+(** Date/Modification: 29.11.96 P.W / Support HvLastSeconds               **)
+(** Date/Modification: 14.06.99 P.W / Support LogMotDistMm                **)
+// 23.11.07 P.W: sup. HvSecondsSinceStart(Offs/Current)
+(**************************************************************************.*)
+Function  ReadHvLogFile: Smallint;
+Var
+  Res            : Smallint;
+  SetupIni       : TSetupIni;
+  Ctr            : Smallint;
+  Axis             : Char;
+begin  {Func. ReadHvLogFile}
+  Res:=0;
+  SetupIni.Init(HvLogFile);
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=False;  {17.06.97 P.W} {allow missing HvLogFile}
+
+    My_Section:='[HV]';
+    HvHours := GetD('HvHours');
+    FillChar(HvLastSeconds, SizeOf(HvLastSeconds), #0);
+    {Shift by loading: HvLastSeconds[2]:=HvLastSeconds_1}
+    For Ctr:=2 to MaxHvLastSeconds do
+      HvLastSeconds[Ctr]:= GetD('HvLastSeconds_'+InvVal(Ctr-1, 1) );
+    TotalRetryHvCtr     := GetL('TotalRetryHvCtr');
+    TotalRetryHvFailCtr := GetL('TotalRetryHvFailCtr');          // 12.11.09 P.W
+    TotalSliceCtr       := GetL('TotalSliceCtr');                // 12.11.09 P.W
+
+
+
+    HvSecondsSinceStartOffs    := GetD('HvSecondsSinceStart');   // 23.11.07 P.W
+    HvSecondsSinceStartCurrent := HvSecondsSinceStartOffs;       // 23.11.07 P.W
+
+    My_Section:='[DISTANCES]';
+    FillChar(LogMotDistMm, SizeOf(LogMotDistMm), #0);
+    For Axis:=AxisFirst to AxisLast do
+      LogMotDistMm[Axis]:= GetD('LogMotDistMm_'+Axis );
+
+    My_Section:='[CHECK]';    // 12.11.09 P.W
+    TotalCheckEncoderCtrX     := GetL('TotalCheckEncoderCtrX');
+
+    My_Section:='[RETRY]';    // 12.11.09 P.W
+    TotalPosReInitCtr         := GetL('TotalPosReInitCtr');
+    TotalPosRecoverCtrX       := GetL('TotalPosRecoverCtrX');
+    TotalPosRecoverCtrY       := GetL('TotalPosRecoverCtrY');
+    TotalPosRecoverCtrZ       := GetL('TotalPosRecoverCtrZ');
+
+    My_Section:='[FAIL]';    // 12.11.09 P.W
+    TotalCheckEncoderFailCtrX := GetL('TotalCheckEncoderFailCtrX');
+    TotalPosReInitFailCtr     := GetL('TotalPosReInitFailCtr');
+    TotalPosRecoverFailCtrX   := GetL('TotalPosRecoverFailCtrX');
+    TotalPosRecoverFailCtrY   := GetL('TotalPosRecoverFailCtrY');
+    TotalPosRecoverFailCtrZ   := GetL('TotalPosRecoverFailCtrZ');
+
+    TotalLightbarFailCtrX     := GetL('TotalLightbarFailCtrX');
+    TotalLightbarFailCtrY     := GetL('TotalLightbarFailCtrY');
+    TotalLightbarFailCtrZ     := GetL('TotalLightbarFailCtrZ');
+
+  end;
+  SetupIni.Done;
+  If (Res>0) then Res:=0;
+  ReadHvLogFile:=Res;
+end;   {Func. ReadHvLogFile}
+
+function ClearHvLogFileHvSecondsSinceStart: Smallint;
+// 23.11.07 P.W
+// for use by XbJobDelphi
+Var
+  SetupIni       : TSetupIni;
+begin
+  Result := 0;
+  SetupIni.Init(HvLogFile);
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=False;   {allow missing HvLogFile}
+    Modify('[HV]', 'HvSecondsSinceStart', '0.0'); 
+  end;
+  SetupIni.Write;
+  SetupIni.Done;
+end;
+
+procedure ResetHvLog;
+// 12.11.09 P.W
+// resets all but leave unchanged:
+//   TotalSliceCtr, HvHours, LogMotDistMm_X, LogMotDistMm_Y, LogMotDistMm_Z
+begin
+
+  FillChar(HvLastSeconds, SizeOf(HvLastSeconds), #0);
+  HvSecondsSinceStartOffs   := 0;
+  HvSecondsSinceStartCurrent:= 0;
+
+  TotalRetryHvCtr           := 0;
+  TotalRetryHvFailCtr       := 0;
+
+  TotalCheckEncoderCtrX     := 0;
+
+  TotalPosReInitCtr         := 0;
+  TotalPosRecoverCtrX       := 0;
+  TotalPosRecoverCtrY       := 0;
+  TotalPosRecoverCtrZ       := 0;
+
+  TotalCheckEncoderFailCtrX := 0;
+  TotalPosReInitFailCtr     := 0;
+  TotalPosRecoverFailCtrX   := 0;
+  TotalPosRecoverFailCtrY   := 0;
+  TotalPosRecoverFailCtrZ   := 0;
+
+  TotalLightbarFailCtrX     := 0;
+  TotalLightbarFailCtrY     := 0;
+  TotalLightbarFailCtrZ     := 0;
+  WriteHvLogFile;
+end;
+
+
+(*.**************************************************************************)
+(** Function Name    : WriteHvLogFile                                      **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 15.11.96                                           **)
+(** Description      :                                                    **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : tSetUpInit: Init, Modify, Write, Done              **)
+(** Input            : -                                                  **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : HvHours                                            **)
+(***************************************************************************)
+(** Last modified/By : 14.06.99 / P.Wueseke                               **)
+(** Date/Modification: 29.11.96 P.W / Support HvLastSeconds               **)
+(** Date/Modification: 14.06.99 P.W / Support LogMotDistMm                **)
+// 23.11.07 P.W: Supp. HvSecondsSinceStart
+(**************************************************************************.*)
+Function  WriteHvLogFile: Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : tSetupIni;
+//ValStr           : String;
+  Ctr              : Smallint;
+  Axis             : Char;
+//Err              : Smallint;
+begin  {Func. WriteHvLogFile}
+  Res:=0;
+  SetupIni.Init(HvLogFile);
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;  {17.06.97 P.W}
+    Modify('[HV]', 'HvHours', InvValD(HvHours,15, 4));
+    For Ctr:=1 to MaxHvLastSeconds do
+    begin
+      Modify( '[HV]',
+              'HvLastSeconds_'+InvVal(Ctr, 1),
+               InvValD(HvLastSeconds[Ctr],15, 2));
+    end;
+    Modify('[HV]', 'TotalRetryHvCtr',     InvVal (TotalRetryHvCtr,         10));
+    Modify('[HV]', 'TotalRetryHvFailCtr', InvVal (TotalRetryHvFailCtr,     10)); // 12.11.09 P.W
+    Modify('[HV]', 'TotalSliceCtr',       InvVal (TotalSliceCtr,           10)); // 12.11.09 P.W
+
+    Modify('[HV]', 'HvSecondsSinceStart', InvValD(HvSecondsSinceStartCurrent, 15, 2)); // 23.11.07 P.W
+
+
+    For Axis:=AxisFirst to AxisLast do
+    begin
+      Modify('[DISTANCES]',
+             'LogMotDistMm_'+Axis,
+             InvValD(LogMotDistMm[Axis] ,12, 0));
+    end;
+
+    // v--- 12.11.09 P.W
+    Modify('[CHECK]', 'TotalCheckEncoderCtrX',     InvVal (TotalCheckEncoderCtrX,     10));
+
+    Modify('[RETRY]', 'TotalPosReInitCtr',         InvVal (TotalPosReInitCtr,         10));
+    Modify('[RETRY]', 'TotalPosRecoverCtrX',       InvVal (TotalPosRecoverCtrX,       10));
+    Modify('[RETRY]', 'TotalPosRecoverCtrY',       InvVal (TotalPosRecoverCtrY,       10));
+    Modify('[RETRY]', 'TotalPosRecoverCtrZ',       InvVal (TotalPosRecoverCtrZ,       10));
+
+    Modify('[FAIL]',  'TotalCheckEncoderFailCtrX', InvVal (TotalCheckEncoderFailCtrX, 10));
+    Modify('[FAIL]',  'TotalPosReInitFailCtr',     InvVal (TotalPosReInitFailCtr,     10));
+    Modify('[FAIL]',  'TotalPosRecoverFailCtrX',   InvVal (TotalPosRecoverFailCtrX,   10));
+    Modify('[FAIL]',  'TotalPosRecoverFailCtrY',   InvVal (TotalPosRecoverFailCtrY,   10));
+    Modify('[FAIL]',  'TotalPosRecoverFailCtrZ',   InvVal (TotalPosRecoverFailCtrZ,   10));
+
+    Modify('[FAIL]',  'TotalLightbarFailCtrX',     InvVal (TotalLightbarFailCtrX,     10));
+    Modify('[FAIL]',  'TotalLightbarFailCtrY',     InvVal (TotalLightbarFailCtrY,     10));
+    Modify('[FAIL]',  'TotalLightbarFailCtrZ',     InvVal (TotalLightbarFailCtrZ,     10));
+    // ^--- 12.11.09 P.W
+
+
+  end;
+  SetupIni.Write;
+  SetupIni.Done;
+  If (Res>0) then Res:=0;
+  WriteHvLogFile:=Res;
+end;   {Func. WriteHvLogFile}
+
+(*.**************************************************************************)
+(** Function Name    : ReadZoomRoiRec                                     **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 22.06.99                                           **)
+(** Description      : Reads GlbZoomRoiRec (for FemEdge AutoZoomRoi)      **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : Assign, Reset, Read, Close                         **)
+(** Input            : -                                                  **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : GlbZoomRoiRec                                      **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : --.--.-- / P.Wueseke                               **)
+(** Date/Modification: --.--.-- P.W /                                     **)
+(**************************************************************************.*)
+Function  ReadZoomRoiRec: Smallint;
+Var
+  Res            : Smallint;
+  SetupIni       : TSetupIni;
+begin  {Func. ReadZoomRoiRec}
+  Res:=0;
+  SetupIni.Init(ZoomRoiFile);
+  With SetupIni do
+  With GlbZoomRoiRec do
+  begin
+    ErrorHaltFlg:=False;  {allow missing ZoomRoiFile}
+
+    My_Section:='[ZoomRoi Info]';
+    ZR_X1 := GetL('X1');
+    ZR_Y1 := GetL('Y1');
+    ZR_X2 := GetL('X2');
+    ZR_Y2 := GetL('Y2');
+  end;
+  SetupIni.Done;
+  If (Res>0) then Res:=0;
+  ReadZoomRoiRec:=Res;
+end;   {Func. ReadZoomRoiRec}
+
+(*.**************************************************************************)
+(** Function Name    : WriteZoomRoiRec                                    **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 22.06.99                                           **)
+(** Description      : Writes GlbZoomRoiRec (for FemEdge AutoZoomRoi)     **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : tSetUpInit: Init, Modify, Write, Done              **)
+(** Input            : -                                                  **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : GlbZoomRoiRec                                      **)
+(***************************************************************************)
+(** Last modified/By : --.--.-- / P.Wueseke                               **)
+(** Date/Modification: --.--.-- P.W /                                     **)
+(**************************************************************************.*)
+Function  WriteZoomRoiRec: Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : tSetupIni;
+//ValStr           : String;
+//Err              : Smallint;
+begin  {Func. WriteZoomRoiRec}
+  Res:=0;
+  SetupIni.Init(ZoomRoiFile);
+  With SetupIni do
+  With GlbZoomRoiRec do
+  begin
+    ErrorHaltFlg:=True;
+    Modify('[ZoomRoi Info]', 'Y2', InvVal(ZR_Y2,10));
+    Modify('[ZoomRoi Info]', 'X2', InvVal(ZR_X2,10));
+    Modify('[ZoomRoi Info]', 'Y1', InvVal(ZR_Y1,10));
+    Modify('[ZoomRoi Info]', 'X1', InvVal(ZR_X1,10));
+  end;
+  SetupIni.Write;
+  SetupIni.Done;
+  If (Res>0) then Res:=0;
+  WriteZoomRoiRec:=Res;
+end;   {Func. WriteZoomRoiRec}
+
+(*.**************************************************************************)
+(** Function Name    : ReadThrDefRec                                      **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 30.01.97                                           **)
+(** Description      : Reads Threshold default parameter files            **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : TSetUpIni.:Init, Search, Done; FillChar            **)
+(** Input            : _Name                                              **)
+(** Output           : DDD: tThrDefRec                                    **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : XCTDEV                                             **)
+(***************************************************************************)
+(** Date/Modification: 30.07.97 P.W / _Name: String12->PathStr            **)
+(** Date/Modification: 30.07.97 P.W / Sup. %XCTDEV% in _name              **)
+(**************************************************************************.*)
+Function  ReadThrDefRec(Var DDD: tThrDefRec; _Name: PathStr): Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : TSetupIni;
+  DStr             : DirStr;       {30.07.97 P.W}
+  NStr             : NameStr;      {30.07.97 P.W}
+  EStr             : ExtStr;       {30.07.97 P.W}
+begin {Func. ReadThrDefRec}
+  Res:=0;
+  FillChar(DDD, SizeOf(DDD), #0);
+  {------------------------------------------------------------------}
+  {30.07.97 P.W}
+  If (Pos('%', _Name) > 0) then _Name:=ExpandEnvVar(_Name);
+  FSplit(_Name, DStr, NStr, EStr);
+  If DStr='' then _Name:= XCTDEV+_Name;
+  {------------------------------------------------------------------}
+  SetupIni.Init(_Name);  {XCTDEV+_Name -> _Name : 30.07.97 P.W}
+  DDD.Chk_DebugName:= FExpand(SetupIni.Name);   {06.08.97 P.W}
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;  {17.06.97 P.W}
+    {----------------------------------------------------------------}
+    My_Section:='[General]';
+      With DDD do
+      begin
+        SX_StepMode          := GetL('StepMode'         );
+    ErrorHaltFlg:=False; // 13.05.05 P.W
+        SX_FemPeakSpikeLimit := GetL('FemPeakSpikeLimit', 10000); // 13.05.05 P.W
+    ErrorHaltFlg:=True;  // 13.05.05 P.W
+      end;
+    {----------------------------------------------------------------}
+    My_Section:='[0: Variant Threshold]';
+      With DDD do
+      begin
+        S0_IA_mA          := GetD('IA_mA'               );
+        S0_HV_kV          := GetD('HV_kV'               );
+        S0_ThrStart       := GetD('ThrStart'            );
+        S0_ThrEnd         := GetD('ThrEnd'              );
+        S0_ThrNumSteps    := GetL('ThrNumSteps'         );
+        S0_Stat1NumIntv   := GetL('Stat1NumIntv'        );
+        S0_IntvTime_mSec  := GetD('IntvTime_mSec'       );
+        S0_HvWaitTime     := GetL('HvWaitTime'          );
+      end;
+    {----------------------------------------------------------------}
+    My_Section:='[1: Variant IA]';
+      With DDD do
+      begin
+        S1_Thr            := GetD('Thr'                 );
+        S1_HV_kV          := GetD('HV_kV'               );
+        S1_IaStart_mA     := GetD('IaStart_mA'          );
+        S1_IaEnd_mA       := GetD('IaEnd_mA'            );
+        S1_IaNumSteps     := GetL('IaNumSteps'          );
+        S1_Stat1NumIntv   := GetL('Stat1NumIntv'        );
+        S1_IntvTime_mSec  := GetD('IntvTime_mSec'       );
+        S1_HvWaitTime     := GetL('HvWaitTime'          );
+      end;
+    {----------------------------------------------------------------}
+    My_Section:='[2: Variant HV]';
+      With DDD do
+      begin
+         S2_Thr            := GetD('Thr'                 );
+         S2_IA_mA          := GetD('IA_mA'               );
+         S2_HvStart_kV     := GetD('HvStart_kV'          );
+         S2_HvEnd_kV       := GetD('HvEnd_kV'            );
+         S2_HvNumSteps     := GetL('HvNumSteps'          );
+         S2_Stat1NumIntv   := GetL('Stat1NumIntv'        );
+         S2_IntvTime_mSec  := GetD('IntvTime_mSec'       );
+         S2_HvWaitTime     := GetL('HvWaitTime'          );
+      end;
+    {----------------------------------------------------------------}
+  end;
+  SetupIni.Done;
+  ReadThrDefRec:=Res;
+end;  {Func. ReadThrDefRec}
+
+(*.**************************************************************************)
+(** Function Name    : ReadDiagDefRec                                     **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 26.06.97                                           **)
+(** Description      : Reads Diagnose default parameter file              **)
+(***************************************************************************)
+(** Called By        : Scans.TestStand (Diagnose)                         **)
+(** Calls            : TSetUpIni.:Init, Search, Done; FillChar            **)
+(** Input            : _Name                                              **)
+(** Output           : DDD: tDiagDefRec                                   **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function  ReadDiagDefRec(Var DDD: tDiagDefRec; _Name: String12): Smallint;
+Var
+  Res              : Smallint;
+  SetupIni         : TSetupIni;
+begin {Func. ReadDiagDefRec}
+  Res:=0;
+  FillChar(DDD, SizeOf(DDD), #0);
+  SetupIni.Init(LocInitDirVar + _Name);
+  DDD.Chk_DebugName:= FExpand(SetupIni.Name);   {06.08.97 P.W}
+  With SetupIni Do
+  begin
+    ErrorHaltFlg:=True;
+    {----------------------------------------------------------------}
+    My_Section:='[SCAN]';
+      With DDD do
+      begin
+        ScanTime          := GetD('ScanTime');
+        ScanPause         := GetD('ScanPause');
+        MoveFact_X0       := GetD('MoveFact_X0');
+        MoveFact_X1       := GetD('MoveFact_X1');
+        MoveSteps_X       := GetL('MoveSteps_X');
+        MoveDelaySec_X    := GetL('MoveDelaySec_X');
+        MoveSteps_Y       := GetL('MoveSteps_Y');
+        MoveDelaySec_Y    := GetL('MoveDelaySec_Y');
+      end;
+    {----------------------------------------------------------------}
+  end;
+  SetupIni.Done;
+  ReadDiagDefRec:=Res;
+end;  {Func. ReadDiagDefRec}
+
+var // Const
+  OldExitProc      : Pointer = Nil;
+  MyExitProcSetFlg : Boolean = False;
+
+{$F+}
+Procedure MyExitProc;
+begin
+  ExitProc:=OldExitProc; {Must be first line to avoid looping if further err.}
+  {The code what this exitproc was desinged for to execute:}
+  ChkSaveExitCode('ReadPar');     {01.09.97 P.W}
+  WriteHvLogFile;                    {needs a lot of stack}
+end;
+
+Procedure ChkSetReadParExitProc;
+begin
+  if not MyExitProcSetFlg then
+  begin
+    MyExitProcSetFlg:=True;
+    { u.: 07.06.99 P.W
+    OldExitProc:=ExitProc;
+    ExitProc:=@MyExitProc;
+    }
+    OldExitProc:=AddExitProc(MyExitProc, 'ReadPar');  {07.06.99 P.W}
+  end;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : ChkLoadFindGlbDetCtRec                             **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 29.04.97                                           **)
+(** Description      : Aim: GlbDetRec contains most up-to-date version    **)
+(** Description      : during SV and CT scan                              **)
+(** Description      : FindFlg = true : Read from byte pos 16             **)
+(** Description      : FindFlg = false: Read from byte pos  0             **)
+(** Description      : !Must be post called post ReadGlbDevSnrRec!        **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ?                                                  **)
+(** Input            : Name, FindFlg                                      **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : GlbDetRec, GlbDetRecName, GlbDetRec_Chk_DebugName  **)
+(**  - predefined    : GlbDevSnr.DeviceTyp                                **)
+(***************************************************************************)
+(*
+Modification:
+{25.09.02 P.W}
+  if FindFlg is true then read PatInfoRec
+*)
+(**************************************************************************.*)
+Function  ChkLoadFindGlbDetCtRec(
+           Const Name: PathStr; FindFlg: Boolean): Smallint;
+Var
+  Res              : Smallint;
+begin  {Func. ChkLoadFindGlbDetCtRec}
+  Res:=0;
+  If (Name<>'') and (Name<>'NUL') then
+  begin
+    If FindFlg then
+    begin
+      Res:=FindDetRec(Name, GlbDetRec);  {reads from byte pos. 16}
+      {expect PatInfoRec behind DetRec:}
+      If (Res=0) then Res:=
+        ReadDetRecPartMeas(Name,
+                           PatInfoRec_^,
+                           SizeOf(PatInfoRec_^),
+                           SizeOf(GlbDetRec));  {Position behind DetRec}
+    end else
+    begin
+      Res:=LoadDetRec(Name, GlbDetRec);  {reads from byte pos.  0}
+    end;
+    If (Res<>0) then
+      ErrHalt(Res, 'reading file:', '"'+ FExpand(Name) + '"');
+
+    If UpStr(GlbDetRec.DeviceTyp)<>UpStr(GlbDevSnr.DeviceTyp) then {06.03.97 P.W}
+    begin
+      ErrHalt(-1, 'DeviceTyp is not equal in "'+ Name + '"',
+                  'and "' + LocDevSnrFile + '"');
+    end;
+  end;
+  ChkLoadFindGlbDetCtRec:=Res;
+end;   {Func. ChkLoadFindGlbDetCtRec}
+
+Procedure ReadGlbXbJobHeadRec; {28.04.03 P.W}
+(*
+Created      : {28.04.03 P.W}
+Modifications:
+23.07.03 P.W: remove "V-"
+08.10.08 P.W: TextOemToAnsi437 for PatId PatName PatFirstName
+*)
+Var
+//Res, ResH        : Smallint;
+  SetupIni         : TNoSecSetupIni;
+
+  Function MySearch(IdStr: String): String;{23.07.03 P.W: remove "V-"}
+  (*
+  Created: {23.07.03 P.W}
+  Aim    : Remove "V-"
+  Modifications:
+  *)
+  Var
+    ValStr         : String;       {23.07.03 P.W: remove "V-"}
+  begin
+    With SetupIni do
+    If Search(My_Section, IdStr, ValStr) >= 0
+      Then MySearch := ValStr
+      else MySearch := '';
+  end;
+
+begin
+// ShowMessageFmt_('Debug ReadPar.pas ReadGlbXbJobHeadRec Program: "%s"', [Param_Str(0)]); // 01.09.08 P.W for debugging
+  SetupIni.Init(XbJobTxtName);
+
+  FillChar(GlbXbJobHeadRec^, SizeOf(GlbXbJobHeadRec^), #0); {23.07.03 P.W}
+
+  With SetupIni, GlbXbJobHeadRec^ do
+  begin
+    My_Section:='[NoSection]';
+    { $ V - }  {23.07.03 P.W: remove "V-"}
+
+    {23.07.03 P.W: remove "V-"; Each search replaced like:
+    { Search(My_Section, 'JobMode'     , JobMode     );
+    { -->
+    { JobMode := MySearch('JobMode');
+    }
+    (*
+    Search(My_Section, 'JobMode'     , JobMode     );
+    Search(My_Section, 'SvRefFile'   , SvRefFile   );
+    Search(My_Section, 'CtRefFile'   , CtRefFile   );
+    Search(My_Section, 'SvFile'      , SvFile      );
+    Search(My_Section, 'CtFile'      , CtFile      );
+    Search(My_Section, 'IcFile'      , IcFile      );
+    Search(My_Section, 'PatNo'       , PatNo       );
+    Search(My_Section, 'PatId'       , PatId       );
+    Search(My_Section, 'Name'        , Name        );
+    Search(My_Section, 'FirstName'   , FirstName   );
+    Search(My_Section, 'Birth'       , Birth       );
+    Search(My_Section, 'Gender'      , Gender      );
+    Search(My_Section, 'MeasMode'    , MeasMode    );
+    Search(My_Section, 'MacroNo'     , MacroNo     );
+    Search(My_Section, 'MeasDate'    , MeasDate    );
+    Search(My_Section, 'MeasTime'    , MeasTime    );
+    Search(My_Section, 'UserId'      , UserId      );
+    Search(My_Section, 'AnaMacro'    , AnaMacro    );
+    Search(My_Section, 'Ethnic'      , Ethnic      );
+    Search(My_Section, 'ChangeHolder', ChangeHolder);
+    Search(My_Section, 'A_PatComment', A_PatComment);
+        {^-- did lead to RunTime Error 216 in "test"-path!}
+    *)
+
+    JobMode       := MySearch('JobMode'     );
+    SvRefFile     := MySearch('SvRefFile'   );
+    CtRefFile     := MySearch('CtRefFile'   );
+    SvFile        := MySearch('SvFile'      );
+    CtFile        := MySearch('CtFile'      );
+    IcFile        := MySearch('IcFile'      );
+    PatNo         := MySearch('PatNo'       );
+    PatId         := TextOemToAnsi437(MySearch('PatId'       ));  // TextOemToAnsi437: 08.10.08 P.W
+    Name          := TextOemToAnsi437(MySearch('Name'        ));  // TextOemToAnsi437: 08.10.08 P.W
+    FirstName     := TextOemToAnsi437(MySearch('FirstName'   ));  // TextOemToAnsi437: 08.10.08 P.W
+    Birth         := MySearch('Birth'       );
+    Gender        := MySearch('Gender'      );
+    MeasMode      := MySearch('MeasMode'    );
+    MacroNo       := MySearch('MacroNo'     );
+    MeasDate      := MySearch('MeasDate'    );
+    MeasTime      := MySearch('MeasTime'    );
+    UserId        := MySearch('UserId'      );
+    AnaMacro      := MySearch('AnaMacro'    );
+    Ethnic        := MySearch('Ethnic'      );
+    ChangeHolder  := MySearch('ChangeHolder');
+    A_PatComment  := MySearch('A_PatComment');
+
+    CtNumberGlb := SliceNameToCtNr(CtFile);      // 20.12.07 P.W
+    {$V+}
+  end;
+end;
+
+function CalcMeasDiameterMax(XMin, XMax, DSC, Offs, ThDA, ThDB: Double): Double;
+// 31.05.05 P.W
+var
+//AddV,    // AddValue: used to accellerate added at start and end
+           // of motion
+//XMin,    // Minimal X Position + AddV
+//XMax,    // Maximal X Position - AddV
+//DSC,     // Distance XRaySpot to Center of Rotation (CoR)
+//Offs,    // perpendicular projection of Center of Rotation to X Axis
+           // "OffsetCenter"
+//ThDA,    // Angle between perpendicular of X Axis of forward looking Detector
+//ThDB,    // as ThetaD1 for backward looking detector
+           // ThetaD1 is checked agains XMin and ThetaD2 again XMax
+  //----------------------------------------------------
+  PhiA,    // ThDA + PhiA = 90 deg
+  PhiB,    // ThDB + PhiB = 90 deg
+  RadA,    // Distance CoR to Ray to Detector DA from XMin
+  RadB,    // Distance CoR to Ray to Detector DB from XMax
+
+//XA,      // Projection of CoR to X under ThDA
+//XB,      // Projection of CoR to X under ThDB
+  XRadA,   // XA - XMin: Projection of RadA to X
+  XAO,     // Offs - XA
+  XRadB,   // XMax - XB:  Projection of RadB to X
+  XBO      // XB - Offs
+    : Double;
+  //           |             /.
+  //           |           /      .  CoR
+  //           |         /     RadA  .+
+  //           |       /            / |
+  //           |ThDA /            /   | DSR
+  //           |   /            /     |
+  //           | / PhiA       /       |
+  //        ---+------------+---------+-----------------------+---> X
+  //          XMin         XA        Offs                    XMax
+  //           |            |         |
+  //           |   XRadA    |  XAO    |
+  //
+  //  Result is MeasdiameterMax the maximal possible measdiameter
+  //    if found as 2.0 * Minimum(RadA, RadB);
+  //  Geometrical rules:
+  //  1)   DSC  / XA0   = Tan(PhiA)  = Sin(PhiA) / Cos(PhiA)
+  //  2)   RadA / XRadA = Sin (PhiA);
+  //  Look out PhiA may be 90 deg (but never zero)!
+begin
+  PhiA   := DegToRad(90) - ThDA;
+  PhiB   := DegToRad(90) - ThDB;
+  XAO    := DSC * Cos(PhiA) / Sin(PhiA);  // valid for 90 deg! {DSC / Tan(Phi) is not valid!}
+  XBO    := DSC * Cos(PhiB) / Sin(PhiB);  // valid for 90 deg! {DSC / Tan(Phi) is not valid!}
+  XRadA  := Offs - XMin - XAO;
+  XRadB  := XMax - Offs - XBO;
+  RadA   := XRadA * Sin(PhiA);
+  RadB   := XRadB * Sin(PhiB);
+  // ---------------------------------------
+  Result := 2.0 * Math.Min(RadA, RadB);
+  Result := Result - 0.5;  // take into account that MeasDiameter is
+                           // only accurate +- 0.5*voxelsize!
+end;
+
+function GlbCalcMeasDiameterMax: Double;
+// 31.05.05 P.W
+var
+  AddV,    // AddValue: used to accellerate; added at start and end
+           // of motion
+  XMin,    // Minimal X Position + AddV
+  XMax,    // Maximal X Position - AddV
+  DSC,     // Distance XRaySpot to Center of Rotation (CoR)
+  Offs,    // perpendicular projection of Center of Rotation to X Axis
+           // "OffsetCenter"
+  ThDA,    // Angle between perpendicular of X Axis of forward looking Detector
+  ThDB     // as ThetaD1 for backward looking detector
+   :Double;// ThetaD1 is checked agains XMin and ThetaD2 again XMax
+begin
+
+  AddV   := GlbDetRec.AddValueMm;
+  XMin   := GlbDevSnr.XPosMin + AddV;
+  XMax   := GlbDevSnr.XPosMax - AddV;
+  DSC    := GlbDetRec.DistSourceCenter;
+  Offs   := GlbDetRec.OffSetCenterMm;
+  ThDA   := DegToRad(GlbDetRec.Theta_Det1);
+  ThDB   := DegToRad(GlbDetRec.Theta_Det1 +
+                       (GlbDetRec.NumDet -1) *
+                       GlbDetRec.Delta_Theta *
+                       GlbDetRec.DetDir);
+
+  // ignore possible slight asymmetrie and do not worry
+  // which detector looks forward, which backward:
+  ThDA := Math.Max(Abs(ThDA), Abs(ThDB));
+  ThDB := THDA;
+
+  Result := CalcMeasDiameterMax(XMin, XMax, DSC, Offs, ThDA, ThDB);
+end;
+
+function PrnHeadMsg: String;
+// 18.05.05 P.W
+begin
+  Result :=  'S/N:'   + GlbDevSnr.SerialNo +
+           FixSem+' Typ:' + GlbDevSnr.DeviceTyp
+end;
+
+Procedure Init;  {as proc. from InitPart: 06.08.97 P.W}
+begin
+  if Assigned(GlbDevTypList) then Dispose(GlbDevTypList, Done); {06.08.97 P.W}
+
+  New(GlbDevTypList, Init(2, 2));
+
+  ReadGlobalIniRec(GlbGlobalIniRec);
+  ReadLocalIni;
+  ReadOptionsIni;
+  ReadGlbDevSnrRec;
+  ReadXbJobIniRec(GlbXbJobIniRec^, XbJobIniName);              {04.12.02 P.W}
+  ReadDevMchRec(GlbDevMch, GlbDevSnr.MechPar);
+  ReadTempIniRec(GlbTempIni, GlbDevSnr.TempIni, GlbDevSnr.TempEnabled);  // 09.07.08 P.W
+  GetDevTypPtr(GlbDevTypPtr, GlbDevSnr.DeviceTyp);
+  If (ReadHvLogFile<>0) then WriteHvLogFile;
+
+  ChkLoadFindGlbDetCtRec(XCTDevAbs + DetRecNamePart, False); {29.04.97 P.W}
+       {must be post! ReadGlbDevSnrRec}
+  ReadZoomRoiRec;                                              {22.06.99 P.W}
+  ReadGlbXbJobHeadRec;                                         {28.04.03 P.W}
+end;
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  ContCalcFlg      := True;
+  Sound_Err        := True;
+  Sound_Wait       := True;
+  Sound_Start      := True;
+  Sound_End        := True;
+  FillChar(GlbGlobalIniRec, SizeOf(GlbGlobalIniRec), #0);
+  FillChar(GlbDevSnr, SizeOf(GlbDevSnr), #0);
+  FillChar(GlbXbJobIniRec, SizeOf(GlbXbJobIniRec), #0);
+  FillChar(GlbXbJobHeadRec, SizeOf(GlbXbJobHeadRec), #0);
+  FillChar(GlbDevMch, SizeOf(GlbDevMch), #0);
+  FillChar(GlbTempIni, SizeOf(GlbTempIni), #0);
+  FillChar(GlbDevTypPtr, SizeOf(GlbDevTypPtr), #0);
+  FillChar(GlbDetRec, SizeOf(GlbDetRec), #0);
+  FillChar(GlbZoomRoiRec, SizeOf(GlbZoomRoiRec), #0);
+  FillChar(GlbEE_Param_DeviceOptions, SizeOf(GlbEE_Param_DeviceOptions), #0);
+  GlbDetRec_Chk_DebugName := '?';
+  FillChar(Institut, SizeOf(Institut), #0);
+  GlbDevTypList    := Nil;
+  HvHours                := 0;
+  FillChar(HvLastSeconds, SizeOf(HvLastSeconds), #0);
+  HvSecondsSinceStartCurrent :=0;
+  HvSecondsSinceStartOffs :=0;
+  FillChar(LogMotDistMm, SizeOf(LogMotDistMm), #0);
+  MyExitProcSetFlg := False;
+  OldExitProc      := Nil;
+  UseProtV24     := false;
+  UseProtV24Time := false;
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Init  part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+  New     (GlbXbJobIniRec);                                    {04.12.02 P.W}
+  FillChar(GlbXbJobIniRec^,  SizeOf(GlbXbJobIniRec^), #0);     {04.12.02 P.W}
+  New     (GlbXbJobHeadRec);                                   {28.04.03 P.W}
+  FillChar(GlbXbJobHeadRec^, SizeOf(GlbXbJobHeadRec^), #0);    {28.04.03 P.W}
+  if not AcceptInvalidXctDir then Init;
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+  New     (GlbXbJobIniRec);                                    {04.12.02 P.W}
+  FillChar(GlbXbJobIniRec^,  SizeOf(GlbXbJobIniRec^), #0);     {04.12.02 P.W}
+  New     (GlbXbJobHeadRec);                                   {28.04.03 P.W}
+  FillChar(GlbXbJobHeadRec^, SizeOf(GlbXbJobHeadRec^), #0);    {28.04.03 P.W}
+  if not AcceptInvalidXctDir then Init;
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.
+

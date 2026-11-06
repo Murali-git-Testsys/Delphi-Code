@@ -1,0 +1,456 @@
+unit PrintForm;
+// 04.10.04 P.W: around Open & savePictureDialog keep CurrentDir
+// Modifications:
+// 18.12.06 P.W:
+//   procedure TfrmPrint.cbxStretchClick(Sender: TObject):
+//     for imgPrint.Align := alClient set Autosize to false before to avoid disappearing scrollbars
+// 10.03.08 P.W
+//   Support MouseWheel (Ctrl zoom) else Scroll Vertical
+//   Support Mouse Move Left Down - Moves Image
+interface
+
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  WinTools,      // 18.11.09 P.W
+  UMsgDelay,     // 27.10.08 P.W
+  TransX,        // 08.04.05 P.W
+  TypesUse,      // 10.03.08 P.W
+  DialogsSecure, // 19.10.05 P.W
+  GlbType,
+  RectGlb,       // 22.03.05 P.W
+  GraphGlb,      // 15.06.04 P.W
+  PrinterGlb,    // 22.03.05 P.W
+  Draw,
+  PrintersFpu,   // Printers -> PrintersFpu : 06.10.04 P.W
+
+  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  Dialogs, StdCtrls, ExtCtrls, ToolWin, ComCtrls, ExtDlgs, jpeg, ImgList,
+  Spin;
+
+type
+  TfrmPrint = class(TForm)
+    Panel1: TPanel;
+    StatusBar1: TStatusBar;
+    ScrollBox1: TScrollBox;
+    imgPrint: TImage;
+    OpenPictureDialog1: TOpenPictureDialog;
+    SavePictureDialog1: TSavePictureDialog;
+    ImageList1: TImageList;
+    ToolBar1: TToolBar;
+    ToolButton1: TToolButton;
+    ToolButton2: TToolButton;
+    ToolButton3: TToolButton;
+    ToolButton4: TToolButton;
+    ToolButton5: TToolButton;
+    ToolButton6: TToolButton;
+    cbxStretch: TCheckBox;
+    ToolButton9: TToolButton;
+    btnEscape: TButton;
+    btnPrint: TButton;
+    btnAbortReport: TButton;
+    btnTestImg: TButton;
+    btnUsedArea: TButton;
+    btnBmp8Bit: TButton;
+    PrintDialog1: TPrintDialog;
+    spedtPrintCopies: TSpinEdit;
+    procedure cbxStretchClick(Sender: TObject);
+    procedure ToolButton1Click(Sender: TObject);
+    procedure ToolButton2Click(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure ToolButton4Click(Sender: TObject);
+    procedure ToolButton5Click(Sender: TObject);
+    procedure btnEscapeClick(Sender: TObject);
+    procedure btnPrintClick(Sender: TObject);
+    procedure btnTestImgClick(Sender: TObject);
+    procedure btnUsedAreaClick(Sender: TObject);
+    procedure btnBmp8BitClick(Sender: TObject);
+    procedure spedtPrintCopiesChange(Sender: TObject);
+    procedure FormMouseWheel(Sender: TObject; Shift: TShiftState;
+      WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+    procedure imgPrintMouseDown(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+    procedure imgPrintMouseMove(Sender: TObject; Shift: TShiftState; X,
+      Y: Integer);
+    procedure imgPrintMouseUp(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: Integer);
+    procedure FormActivate(Sender: TObject);
+  private
+    imgPrintMouseButtons: set of TMouseButton;
+    imgPrintMouseDwnPos : TPoint;
+    imgPrintMouseDwnScrollPos : TPoint;
+    procedure TestScaledImg(dx: Integer = 2; dy: Integer = 2);
+    procedure CheckEnable;
+  public
+    function ChkSaveBitMapMsg: Boolean;
+    function SaveBitMap(fName: AnsiString): Integer;
+  end;
+
+function frmPrint : TfrmPrint;
+
+var
+  frmPrint_: TfrmPrint = nil;
+
+Implementation
+
+uses Math;
+  const Unit_Name = 'PrintForm'; // 03.05.24 P.W
+
+{$R *.dfm}
+
+procedure TfrmPrint.FormCreate(Sender: TObject);
+begin
+  TraXC(Self);
+  cbxStretchClick(Sender);
+  CheckEnable; // 06.10.08 P.W
+  if PrinterInstalled then   // 27.10.08 P.W
+    spedtPrintCopies.Value := PrinterFpu.Copies;
+end;
+
+procedure TfrmPrint.cbxStretchClick(Sender: TObject);
+// 18.12.06 P.W:
+// for imgPrint.Align := alClient set Autosize to false before to avoid disappearing scrollbars
+begin
+  imgPrint.AutoSize     := True;
+  if cbxStretch.Checked then
+  begin
+    imgPrint.AutoSize     := False;   // false cures from disappearing scrollbars! 18.12.06 P.W
+                                      // and preview is quicker!
+    imgPrint.Align        := alClient;
+    imgPrint.Proportional := True;
+    imgPrint.Stretch      := True;
+  end else
+  begin
+    imgPrint.Align        := alNone;
+    imgPrint.Proportional := False;
+    imgPrint.Stretch      := False;
+  end;
+end;
+
+procedure TfrmPrint.ToolButton1Click(Sender: TObject);
+var
+  Pic : TPicture;
+begin
+  if CommonDialog_Execute(OpenPictureDialog1) then
+  begin
+//  imgPrint.Picture.LoadFromFile(OpenPictureDialog1.FileName);  // destroys Graph0_DrawBmp!
+
+    Pic := TPicture.Create;
+    Pic.LoadFromFile(OpenPictureDialog1.FileName);
+    BmpClear(Graph0_DrawBmp);
+    Graph0_DrawCanvas.StretchDraw(
+      PropRect(RectFromGraphic(Pic.Graphic) , RectFromGraphic(Graph0_DrawBmp)), Pic.Graphic);
+    Pic.Free;
+
+  end;
+end;
+
+
+function TfrmPrint.ChkSaveBitMapMsg: Boolean;
+begin
+  Result := imgPrint.Picture.Graphic is TBitmap;
+  if not Result then
+    ShowMessage(TraS('Save Image is only supported for Bitmaps!'));
+end;
+
+
+function TfrmPrint.SaveBitMap(fName: AnsiString): Integer;
+var
+  Bmp : TBitmap;
+begin
+  if not ChkSaveBitMapMsg then
+  begin
+    Result := -1;
+    EXIT;
+  end;
+
+  Result := 0; // no error
+
+  Bmp := BmpCopyCutFrame(imgPrint.Picture.Bitmap);
+  if ExpImgInvBW then
+    InvertBlackWhite(Bmp);  // 01.04.05 P.W
+  SaveBitMapAsAny(Bmp, fName);
+  Bmp.Free;
+end;
+
+procedure TfrmPrint.ToolButton2Click(Sender: TObject);
+begin
+  if not ChkSaveBitMapMsg then
+    EXIT;
+
+  if CommonDialog_Execute(SavePictureDialog1) then
+    SaveBitMap(SavePictureDialog1.FileName)
+end;
+
+procedure ResizeImg(Img : TImage; ScaleFactor: Double);
+begin
+  Img.Align        := alNone;
+  Img.AutoSize     := False;
+  Img.Proportional := True;
+  Img.Stretch      := True;
+
+  Img.Width  := Round(ScaleFactor * Img.Width );
+  Img.Height := Round(ScaleFactor * Img.Height);
+end;
+
+procedure TfrmPrint.ToolButton4Click(Sender: TObject);
+begin
+  ResizeImg(imgPrint, 1/sqrt(2));
+end;
+
+procedure TfrmPrint.ToolButton5Click(Sender: TObject);
+begin
+  ResizeImg(imgPrint, sqrt(2));
+end;
+
+function frmPrint: tFrmPrint;
+begin
+  if not assigned(frmPrint_) then
+    frmPrint_ := TfrmPrint.Create(Application);
+  Result := frmPrint_;
+end;
+
+procedure TfrmPrint.CheckEnable;
+// 06.10.08 P.W
+begin
+  spedtPrintCopies.Enabled := (PrinterFpu.MultiDocNr = 0);
+end;
+
+procedure TfrmPrint.btnEscapeClick(Sender: TObject);
+begin
+  ModalResult := mrCancel;
+end;
+
+procedure TfrmPrint.btnPrintClick(Sender: TObject);
+// assumes Bitmap is adapted to previous printer settings!
+// Changes Bmp (cuts whiteFrames)
+begin
+  PrintBmpOptimized(imgPrint.Picture.Bitmap);
+
+  if PrinterFpu.MultiDocMode and (Sender<>nil) then                                 // 27.10.08 P.W
+    ShowMessageFmtMs(
+      TraS('Page added to print job; (%d pages)'),
+      [PrinterFpu.PageNumberMultiDoc], 2000);
+
+  CheckEnable; // 06.10.08 P.W
+end;
+
+procedure TfrmPrint.TestScaledImg(dx: Integer = 2; dy: Integer = 2);
+// scale down by using the interpolated result of neighbours:
+// thin lines are not lost, but color changes
+  procedure AddRgb(const C: Integer; var R, G, B: Integer);
+  var
+    Rc, Gc, Bc: Integer;
+  begin
+    // pf16bit :
+    begin
+      Rc := (C and $F800) shr 8;
+      Gc := (C and $07E0) shr 3;
+      Bc := (C and $001F) shl 3;
+  //    Result :=   ((R shr 3) shl 11)       // result bits: rrrr rggg gggb bbbb
+  //              + ((G shr 2) shl  5)
+  //              + ((B shr 3) shl  0);
+    end;
+    Inc(R, Rc);
+    Inc(G, Gc);
+    Inc(B, Bc);
+  end;
+
+  function  ColRgb(const R, G, B: Integer): Integer;
+  begin
+    // pf16bit :
+    result :=   ((R and $F8) shl 8)
+              + ((G and $FA) shl 3)
+              + ((B and $F8) shr 3);
+  end;
+
+var
+  Ws, Hs,
+  Wd, Hd,
+  xd, yd : Integer;
+  xs, ys : Integer;
+  ix, iy : Integer;
+  SLs : Array [0..8000] of  PBmpArr;
+  SLd : Array [0..8000] of  PBmpArr;
+  BmpD: TBitMap;
+  R, G, B, C : Integer;
+  dxdy : Integer;
+begin
+//  dy := 1; dx := 1;
+  Ws := imgPrint.Picture.Width;
+  Hs := imgPrint.Picture.Height;
+
+  Wd := (Ws-1) div dx;
+  Hd := (Hs-1) div dy;
+
+  BmpD := TBitMap.Create;
+  BmpD.PixelFormat:= BmpPixFmt;
+  BmpD.Width  := Wd;
+  BmpD.Height := Hd;
+
+  dxdy := dx * dy;
+
+  for ys := 0 to Hs -1 do
+    SLs[ys] := imgPrint.Picture.Bitmap.ScanLine[ys];
+
+  for yd := 0 to Hd -1 do
+    SLd[yd] := BmpD.ScanLine[yd];
+
+  for yd := 0 to Hd -1 do
+  begin
+    ys := yd * dy;
+    for xd := 0 to Wd -1 do
+    begin
+      xs := xd * dx;
+      R := 0; G := 0; B := 0;
+      for iy := 0 to dy -1 do
+        for ix := 0 to dx -1 do
+          begin
+            C := SLs[ys + iy, xs + ix];
+            AddRgb(C, R, G, B);
+
+          end;
+      //SLd[yd,xd]:= random($FFFF);
+      //SLd[yd,xd] := SLs[ys, xs];
+
+      R := R div dxdy;
+      G := G div dxdy;
+      B := B div dxdy;
+      C := ColRGB(R, G, B);
+      SLd[yd,xd] := C;
+    end;
+  end;
+  imgPrint.Picture.Bitmap.Assign(BmpD);
+  FreeAndNil(BmpD);
+  imgPrint.Repaint;
+end;
+
+procedure TfrmPrint.btnTestImgClick(Sender: TObject);
+begin
+//  TestImage(ImgPrint.Picture.Bitmap);
+  TestScaledImg;
+end;
+
+procedure TfrmPrint.btnUsedAreaClick(Sender: TObject);
+begin
+  BmpFindUsedRect(imgPrint.Picture.Bitmap, True{ShowInfo});
+end;
+
+procedure TfrmPrint.btnBmp8BitClick(Sender: TObject);
+begin
+//  ShowMessage('frmPrint.btnBmp8BitClick');
+end;
+
+procedure TfrmPrint.spedtPrintCopiesChange(Sender: TObject);
+var
+  value, err : Integer;
+begin
+  if not spedtPrintCopies.Enabled then EXIT;  // 27.10.08 P.W
+
+  try
+    val(spedtPrintCopies.Text, value, err);
+    if (Value = 0) then {donothing}; // force use of value
+    if (err = 0) then
+    begin
+      value := spedtPrintCopies.Value; //may raise EConvertError
+
+      If  value < 1 then
+        spedtPrintCopies.Value := 1;
+      If value > 99 then
+        spedtPrintCopies.Value := 99;
+      PrinterFpu.Copies := spedtPrintCopies.Value;
+    end;
+  except
+    on EConvertError do ShowMessage('a EConvertError?');// never reached!
+  end;
+end;
+
+procedure TfrmPrint.FormMouseWheel(Sender: TObject; Shift: TShiftState;
+  WheelDelta: Integer; MousePos: TPoint; var Handled: Boolean);
+// 10.03.08 P.W
+const
+  SF = 1.1;
+var
+  NumDelta, dP : Integer;
+  ScaleFact : Double;
+begin
+  NumDelta := WheelDelta div WHEEL_DELTA;
+  Handled := True;
+  if (ssCtrl in Shift) then
+  begin
+    ScaleFact := Power(SF, NumDelta);
+    ResizeImg(imgPrint, ScaleFact);
+    cbxStretch.Checked := False;
+  end else
+  begin
+    dP := - Round(0.1 * NumDelta * ScrollBox1.VertScrollBar.Range);
+    ScrollBox1.VertScrollBar.Position := ScrollBox1.VertScrollBar.Position + dP;
+  end;
+end;
+
+procedure TfrmPrint.imgPrintMouseDown(Sender: TObject;
+  Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+// 10.03.08 P.W
+begin
+  Include(imgPrintMouseButtons, Button);
+  imgPrintMouseDwnPos       := Mouse_CursorPos;// Point(X, Y);   // Use ScreenCoordinates!
+  imgPrintMouseDwnScrollPos := Point(ScrollBox1.HorzScrollBar.Position,
+                                     ScrollBox1.VertScrollBar.Position);
+end;
+
+procedure TfrmPrint.imgPrintMouseMove(Sender: TObject; Shift: TShiftState;
+  X, Y: Integer);
+// 10.03.08 P.W
+var
+  PS, PM : TPoint;
+begin
+  if (mbLeft in imgPrintMouseButtons) then
+  begin
+    PM := Mouse_CursorPos; // Point(X, Y);   // Use ScreenCoordinates! (X, Y depend on ScrollBar.Position!)
+    PS := PointsAdd(imgPrintMouseDwnScrollPos, PointsSub(imgPrintMouseDwnPos, pM));
+    ScrollBox1.HorzScrollBar.Position := PS.X;
+    ScrollBox1.VertScrollBar.Position := PS.Y;
+  end;
+end;
+
+procedure TfrmPrint.imgPrintMouseUp(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: Integer);
+// 10.03.08 P.W
+begin
+  Exclude(imgPrintMouseButtons, Button);
+end;
+
+procedure TfrmPrint.FormActivate(Sender: TObject);
+begin
+  CheckEnable; // 06.10.08 P.W
+  if PrinterInstalled then   // 27.10.08 P.W
+  begin
+    spedtPrintCopies.Value := PrinterFpu.Copies;
+    if printerFpu.MultiDocMode then
+      btnPrint.Caption := TraS('Print: add to job')
+    else
+      btnPrint.Caption := TraS('Print');
+
+  end;
+end;
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  frmPrint_ := nil;
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Initialization part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init); // 03.05.24 P.W
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.

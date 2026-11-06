@@ -1,0 +1,1313 @@
+unit SelectForm;
+// created: 08.01.07 P.W
+// aim    : replace THaloWin.pas PMCListBox
+// Modifications:
+// 08.04.08 P.W: No longer warn when Selected and Marked items differ
+// 19.06.09 P.W: Support MouseWheel by TDelphiEasyListBox
+interface
+
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  HaltUnit,
+  ViewXctImages,
+  ThreadView,
+  KeyCodes, ComNames, BmpUse, FemGlb,
+  TransX,
+  Objects, // defines PBufStream
+  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  Dialogs, Menus, StdCtrls, CheckLst, ComCtrls, ExtCtrls;
+
+type
+  TSelChange = (SC_AllUncheck,  SC_AllCheck,    SC_AllInvert,
+                SC_SelUncheck,  SC_SelCheck,    SC_SelInvert,
+                SC_SelNext,     SC_SelRepeat,   SC_SelCheckOthersUncheck,
+                SC_MarkAll,     SC_MarkChecked, SC_MarkNone);
+
+  TSetValue  = (SV_Columns, SV_ItemHeight);
+
+type
+  TfrmSelectList = class(TForm)
+    chklbx: TCheckListBox;
+    popChkLbx: TPopupMenu;
+    CheckSelected1: TMenuItem;
+    UncheckSelected1: TMenuItem;
+    InvertSelected1: TMenuItem;
+    N1: TMenuItem;
+    CheckAll1: TMenuItem;
+    UnchceckAll1: TMenuItem;
+    InvertAll1: TMenuItem;
+    StatusBar1: TStatusBar;
+    pnlButtons: TPanel;
+    btnOK: TButton;
+    BtnCancel: TButton;
+    RepeatSelection1: TMenuItem;
+    N2: TMenuItem;
+    MarkChecked1: TMenuItem;
+    N3: TMenuItem;
+    ShowImages1: TMenuItem;
+    pnlDisclaimer: TPanel;
+    lblDisclaimer: TLabel;
+    N4: TMenuItem;
+    CheckSelecteduncheckothers1: TMenuItem;
+    MarkNone1: TMenuItem;
+    MarkAll1: TMenuItem;
+    MarkCheckNext1: TMenuItem;
+    N5: TMenuItem;
+    procedure CheckSelected1Click(Sender: TObject);
+    procedure UncheckSelected1Click(Sender: TObject);
+    procedure InvertSelected1Click(Sender: TObject);
+    procedure CheckAll1Click(Sender: TObject);
+    procedure UnchceckAll1Click(Sender: TObject);
+    procedure InvertAll1Click(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure chklbxClick(Sender: TObject);
+    procedure RepeatSelection1Click(Sender: TObject);
+    procedure MarkChecked1Click(Sender: TObject);
+    procedure chklbxClickCheck(Sender: TObject);
+    procedure FormKeyDown(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
+    procedure FormKeyUp(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
+    procedure chklbxMeasureItem(Control: TWinControl; Index: Integer;
+      var Height: Integer);
+    procedure chklbxDrawItem(Control: TWinControl; Index: Integer;
+      aRect: TRect; State: TOwnerDrawState);
+    procedure FormResize(Sender: TObject);
+    procedure ShowImages1Click(Sender: TObject);
+    procedure CheckSelecteduncheckothers1Click(Sender: TObject);
+    procedure FormShow(Sender: TObject);
+    procedure btnOKClick(Sender: TObject);
+    procedure MarkNone1Click(Sender: TObject);
+    procedure MarkAll1Click(Sender: TObject);
+    procedure MarkCheckNext1Click(Sender: TObject);
+    procedure StatusBar1Click(Sender: TObject);
+  private
+    SpaceDown : Boolean;
+    ShiftState: TShiftState;
+    FileMask: AnsiString;
+    FormShowUseStampState : Boolean;
+    DosStreamUsed : Boolean;
+    procedure UpdateStatusBar;
+    procedure SelectionChange(ChangeMode: TSelChange);
+    function AreAllChecked: Boolean;
+    function HighestUnchecked: Integer;
+    function IdxOk(const Idx: Integer): Boolean;
+    procedure ShowHelp;
+    procedure SetValueKeepSelection(SV: TSetValue; Value: Integer);
+    procedure MyMouseWheel(Sender: TObject;
+      Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint;
+      var Handled: Boolean);
+  public
+    constructor Create(AOwner: TComponent; AParent: TWinControl;
+      ACount: Integer; ATitle, AFileMask: String); reintroduce; overload;
+    constructor Create(
+      ACount: Integer; ATitle, AFileMask: String); reintroduce; overload;
+    destructor Destroy; override;  // not virtual!;
+    procedure PopulateListSlices(NumSlices: Integer);
+    function CheckedToDosKeyStrokeStream(const MacroStream: PBufStream): AnsiString;
+    procedure CheckedFromDosKeyStrokeStream(const MacroStream: PBufStream; PageHeight:Integer);
+    procedure NextTag(var IndexBased1: SmallInt);
+    function NextChecked(const Idx: Integer): Integer;
+    function AddItem(S: String; AChecked: Boolean): Integer;
+    function CheckCount: Integer;
+  end;
+
+//var
+//  frmSelectList: TfrmSelectList;
+
+Implementation
+
+uses Math, StrUtils, Types;
+  const Unit_Name = 'SelectForm'; // 03.05.24 P.W
+
+{$R *.dfm}
+
+function TfrmSelectList.CheckCount: Integer;
+var
+  I : Integer;
+begin
+  Result := 0;
+  for I := 0 to chklbx.Count -1 do
+    if chklbx.Checked[I] then Inc(Result);
+end;
+
+procedure TfrmSelectList.UpdateStatusBar;
+begin
+  StatusBar1.SimpleText :=
+     Format('Checked for use: %d / %d; Marked:%d',
+            [CheckCount, chklbx.Count, Max(0, chklbx.SelCount)]);
+end;
+
+procedure TfrmSelectList.chklbxClick(Sender: TObject);
+begin
+  UpdateStatusBar;
+end;
+
+procedure TfrmSelectList.SelectionChange(ChangeMode: TSelChange);
+label
+  To_Exit;
+var
+  I, SelFirst, SelLast, SelMod, ISel : Integer;
+begin
+  SelFirst := -1;
+  SelLast  := -1;
+  SelMod   :=  1;
+  Case ChangeMode of
+    SC_SelNext,
+    SC_SelRepeat:
+      begin
+        // find first and last selected
+        for I := 0 to chklbx.Items.Count -1 do
+        begin
+          if chklbx.Selected[I] then
+          begin
+            if (SelFirst < 0)
+              then SelFirst := I;
+            SelLast := I;
+          end;
+        end;
+        SelMod := (SelLast - SelFirst) + 1;
+        if (SelLast < 0)
+          then Goto To_Exit;
+
+        // selection without holes:
+        for I := SelFirst to SelLast do
+          chklbx.Selected[I] := True;
+      end;
+    else
+      begin
+      end
+  end;
+
+  for I := 0 to chklbx.Items.Count -1 do
+  begin
+    Case ChangeMode of
+      SC_AllUncheck : chklbx.Checked[I] := False;
+      SC_AllCheck   : chklbx.Checked[I] := True;
+      SC_AllInvert  : chklbx.Checked[I] := not chklbx.Checked[I];
+      SC_SelUncheck : if chklbx.Selected[I] then chklbx.Checked[I] := False;
+      SC_SelCheck   : if chklbx.Selected[I] then chklbx.Checked[I] := True;
+      SC_SelInvert  : if chklbx.Selected[I] then chklbx.Checked[I] := not chklbx.Checked[I];
+      SC_SelCheckOthersUncheck:
+                      chklbx.Checked[I] := chklbx.Selected[I];
+      SC_SelNext:
+        begin
+          // clear before mark:
+          if (I < SelFirst) then chklbx.Checked[I] := False;
+
+          // move mark and selection one block down
+          if (I > SelLast) and (I <= SelLast + SelMod) then
+          begin
+            ISel := ((I - SelFirst) mod SelMod) + SelFirst;
+            if chklbx.Selected[ISel] then
+            begin
+              chklbx.Checked[I] := chklbx.Checked[ISel];
+            end;
+            chklbx.Checked[ISel] := False;
+
+            // Mark move down:
+            chklbx.Selected[ISel] := False;
+            chklbx.Selected[I   ] := True;
+          end;
+          // clear behind new mark:
+          if (I > SelLast + SelMod) then chklbx.Checked[I] := False;
+        end;
+      SC_SelRepeat  :
+        begin
+          if (I > SelLast) then
+          begin
+            ISel := ((I - SelFirst) mod SelMod) + SelFirst;
+            if chklbx.Selected[ISel]
+              then chklbx.Checked[I] := chklbx.Checked[ISel];
+          end;
+        end;
+      SC_MarkAll:     chklbx.Selected[I] := True;
+      SC_MarkChecked: chklbx.Selected[I] := chklbx.Checked[I];
+      SC_MarkNone:    chklbx.Selected[I] := False;
+    end;
+  end;
+
+ To_Exit:
+  UpdateStatusBar;
+end;
+
+procedure TfrmSelectList.CheckSelecteduncheckothers1Click(Sender: TObject);
+begin
+  SelectionChange(SC_SelCheckOthersUncheck);
+end;
+
+procedure TfrmSelectList.CheckSelected1Click(Sender: TObject);
+begin
+  SelectionChange(SC_SelCheck);
+end;
+
+procedure TfrmSelectList.UncheckSelected1Click(Sender: TObject);
+begin
+  SelectionChange(SC_SelUncheck);
+end;
+
+procedure TfrmSelectList.InvertSelected1Click(Sender: TObject);
+begin
+  SelectionChange(SC_SelInvert);
+end;
+
+procedure TfrmSelectList.MarkCheckNext1Click(Sender: TObject);
+begin
+  SelectionChange(SC_SelNext);
+end;
+
+procedure TfrmSelectList.RepeatSelection1Click(Sender: TObject);
+begin
+  SelectionChange(SC_SelRepeat);
+end;
+
+procedure TfrmSelectList.MarkAll1Click(Sender: TObject);
+begin
+  SelectionChange(SC_MarkAll);
+end;
+
+procedure TfrmSelectList.MarkChecked1Click(Sender: TObject);
+begin
+  SelectionChange(SC_MarkChecked);
+end;
+
+procedure TfrmSelectList.MarkNone1Click(Sender: TObject);
+begin
+  SelectionChange(SC_MarkNone);
+end;
+
+procedure TfrmSelectList.CheckAll1Click(Sender: TObject);
+begin
+  SelectionChange(SC_AllCheck);
+end;
+
+procedure TfrmSelectList.UnchceckAll1Click(Sender: TObject);
+begin
+  SelectionChange(SC_AllUncheck);
+end;
+
+procedure TfrmSelectList.InvertAll1Click(Sender: TObject);
+begin
+  SelectionChange(SC_AllInvert);
+end;
+
+function TfrmSelectList.AddItem(S: String; AChecked: Boolean): Integer;
+begin
+  Result := chklbx.Items.Add(S);
+  chklbx.Checked[Result] := AChecked;
+end;
+
+procedure TfrmSelectList.PopulateListSlices(NumSlices: Integer);
+  function NumDec(NumMax: Integer): Integer;
+  begin
+    Result := 0;
+    if NumMax < 0 then
+      Inc(Result);
+    NumMax := Abs(NumMax);
+    While NumMax >= 1 do
+    begin
+      NumMax := NumMax div 10;
+      Inc(Result);
+    end;
+  end;
+var
+  I : Integer;
+begin
+  chklbx.Clear;
+  for I := 1 to NumSlices do
+    chklbx.Items.Append(Format('#%d', [I]));
+//  chklbx.Items.Append(Format('#%'+IntToStr(NumDec(NumSlices))+'d', [I]));
+  SelectionChange(SC_AllCheck);
+end;
+
+function TfrmSelectList.AreAllChecked: Boolean;
+begin
+  Result := chklbx.Count = CheckCount;
+end;
+
+function TfrmSelectList.HighestUnchecked: Integer;
+// return highest index of not checked elements
+// returns -1 if all are checked or List is empty
+var
+  I : Integer;
+begin
+  Result := -1;
+  for I := chklbx.Count -1 downto 0 do
+    if not chklbx.Checked[I] then
+    begin
+      Result := I;
+      Exit;
+    end;
+end;
+
+procedure TfrmSelectList.FormCreate(Sender: TObject);
+begin
+  chklbx.MultiSelect := True;
+  KeyPreview         := True;
+  ModalResult        := mrOk;
+  TraXP(popChkLbx);
+  TraXC(Self);
+  OnMouseWheel       := MyMouseWheel;    // 19.06.09 P.W
+end;
+
+const
+
+  KCP__Error   = $0000;                // not used in macro stream!
+
+  MS_Separator = ';';                  // used in macro stream Header
+  MS_HeadEnd   = '|';
+  MS_Equal     = '=';
+
+  KCP__HeadEnd = Ord(MS_HeadEnd)*256;  // used in macro stream
+
+  MacroChkLbxHeaderStart = 'CheckListBox';
+
+function TfrmSelectList.CheckedToDosKeyStrokeStream(
+  const MacroStream: PBufStream): AnsiString;
+//  08.01.07 P.W:
+//  Compatible to THaloWin.pas PMCListBox.
+//    assumes start all checked, stores down-key and space-key to uncheck items
+//    if not all items are checked.
+//    Carriage Return is end of macro content for frmSelectList.
+//  New:
+//   Improvement: Support an ascii formated header without spaces:
+//   Header is ignored by previous versions (as long as without spaces CR or #00).
+//   Header supports information about Version and ItemCount and CheckCount
+//  funtion returns string for MacroContent Logfile
+//  Comment
+//   Further improvement might be store the indexes of unchecked items instead of keystrokes,
+//   but this will break backward compatibility.
+  procedure MacroStreamWriteKeyCode(KeyCode: TKeyCP);
+  var
+    By : Byte;
+  begin
+    By := KeyCode shr 8;
+    MacroStream.Write(By, SizeOf(By));
+    if By = 0 then
+    begin
+      By := KeyCode and $FF;
+      MacroStream.Write(By, SizeOf(By));
+    end;
+  end;
+
+  procedure MacroStreamWriteString(S: AnsiString);
+  var
+    I : Integer;
+  begin
+    for I := 1 to Length(S) do
+      MacroStreamWriteKeyCode(Ord(S[I])*256);
+  end;
+
+  procedure MSWSFmt(const aFormat: string; const Args: array of const);
+  begin
+    MacroStreamWriteString(Format(aFormat, Args));
+  end;
+
+  procedure WriteHeader;
+  const
+    HeaderVersion = 1;
+  begin  // no spaces are allowed for backward compatibility!
+    MSWSFmt('%s'                        + MS_Separator+
+            'Version'     + MS_Equal + '%d' + MS_Separator+
+            'ItemCount'   + MS_Equal + '%d' + MS_Separator+
+            'CheckCount'  + MS_Equal + '%d' + MS_HeadEnd,
+            [MacroChkLbxHeaderStart,
+             HeaderVersion,
+             chklbx.Count,
+             CheckCount]);
+  end;
+
+var
+  I : Integer;
+begin
+
+  WriteHeader;
+
+  if (not (ModalResult in [mrNone, mrOk])) then
+  begin
+    MacroStreamWriteKeyCode(KCP_Esc);
+    Result := 'Aborted';
+    Exit;
+  end;
+
+  // assum all are checked when macro is read later
+  // so record only the not checked items:
+  for I := 0 to HighestUnchecked do
+  begin
+    if chklbx.Checked[I] then
+    begin
+      MacroStreamWriteKeyCode(KCP_Dwn);    // go down
+    end else
+    begin
+      MacroStreamWriteKeyCode(KCP_Space);  // inverts check and goes down
+    end;
+  end;
+
+  MacroStreamWriteKeyCode(KCP_CR);
+  if chklbx.Count = 0 then
+  begin
+    Result := 'List is empty!'
+  end else
+  if (CheckCount = chklbx.Count) then
+  begin
+    Result := 'Checked: all';
+  end else
+  if chklbx.Checked[chklbx.Count -1] then
+  begin
+    Result := Format('Checked %d of %d; Additional items will be checked', [CheckCount, chklbx.Count]);
+  end else
+  begin
+    Result := Format('Checked %d of %d; Additional items will NOT be checked', [CheckCount, chklbx.Count]);
+  end;
+
+end;
+
+procedure TfrmSelectList.CheckedFromDosKeyStrokeStream(
+  const MacroStream: PBufStream; PageHeight:Integer);
+//  08.01.07 P.W
+//  ----------------------------------------------
+//  Start with all checked.
+//  Read KeyStrokes from stream.
+//  Use keys to move and change checked.
+//  Compatible to THaloWin.pas PMCListBox.
+//  ----------------------------------------------
+//  possible problems (already in PMCListBox):
+//    When list during recording macro is longer than list
+//    during play macro then the last element of the shorter list
+//    may be checked or unchecked depending on odd or even number
+//    of unchecked items following the last element in the shorter list
+//    compared to the longer list during recording
+//    if during recording all are selected no problems should occure
+//    excepted the situation that during recording check and uncheck have been
+//    recorded for the same element several times.
+//  if List during play is longer then all additional items are checked!
+//    Examples:  (notation: <Slice Number><+:Checked, -:Unchecked>
+//    A)
+//       Recorded 10 Slices: 1+ 2- 3- 4- 5- 6- 7- 8- 9- 10-
+//       Play      9 Slices: 1+ 2- 3- 4- 5- 6- 7- 8- 9+      // 9 checked again from uncheck element 10
+//    B)
+//       Recorded 10 Slices: 1+ 2- 3+ 4+ 5+ 6+ 7+ 8+ 9+ 10+
+//       Play      9 Slices: 1+ 2- 3+ 4+ 5+ 6+ 7+ 8+ 9+
+//    C)
+//       Recorded  5 Slices: 1+ 2- 3- 4- 5-
+//       Play      9 Slices: 1+ 2- 3- 4- 5- 6+ 7+ 8+ 9+     // no uncheck recorded for elements above 5
+//  New: Improvement check for Header "CheckListBox" and make use of ItemCount and CheckCount to
+//    avoid the problems listed above.
+//  Comment: using keystrokes does not support information about list length
+//    Improved versions might write instead of keystrokes the list length and
+//    the unchecked items separately. This could be achieved together with an
+//    increased macro version number: for old read keystrokes for new the list
+//  Procedure TMKNApp.CreateMSReport seems to be the only one that uses SetKeyStrokMacroMode  
+//  ----------------------------------------------
+//  supported keys:
+//  CR            Carriage Return = Ready
+//  ESCAPE        Abort
+//  POS1=HOME     Goto first entry
+//  END           Goto last  entry
+//  UP            goto previous entry
+//  DWN           goto next     entry
+//  PgUp          goto entry -10
+//  PgDwn         goto entry +10
+//  F2            invert checked, goto next entry
+//  Space         invert checked, goto next entry
+//  ----------------------------------------------
+//  entry index limited to 0 .. Max(0, Counts-1)
+//  ----------------------------------------------
+
+  function MacroStreamReadKeyCode: TKeyCP;
+  // read 1st HighByte
+  // only if HighByte is zero then read LowByte
+  // KCP_CR = $0D00       // in Stream: $0D          (one byte)
+  // KCP_F2 = $003C       // in Stream: $00 $3C      (two bytes)
+  var
+    By : Byte;
+  begin
+    Result := KCP__Error;
+    if MacroStream.Status <> 0 then EXIT;
+
+    MacroStream.Read(By, SizeOf(By));
+    Result := 256 * Integer(By);
+    if (By = 0) then
+    begin
+      MacroStream.Read(By, SizeOf(By));
+      Result := By;
+    end;
+  end;
+
+  procedure ChkIdxStep(var Idx: Integer; KeyCode: TKeyCP; MS_ItemCount: Integer);
+  // MS_ItemCount = Number of Items while macro was recorded, -1: undefined;
+  begin
+    Case KeyCode of
+      KCP_PgUp:  Inc(Idx, - PageHeight);
+      KCP_Up:    Inc(Idx, - 1);
+
+      KCP_Space,
+      KCP_F2,
+      KCP_Dwn:   Inc(Idx, + 1);
+
+      KCP_PgDwn: Inc(Idx, + PageHeight);
+
+      KCP_End:   Idx := chklbx.Count -1;
+      KCP_Pos1:  Idx := 0;                 // "Home"
+    end;
+    // If MS_ItemCount is defined then allow Idx to be Count to avoid
+    // that when MS_ItemCount is higher than chklbx.count the
+    // last element is checked or unchecked unwantedly:
+    if (MS_ItemCount < 0)
+      then Idx := EnsureRange(Idx, 0, Max(0, chklbx.Count-1))  // old behaviour check of last item undefined
+      else Idx := EnsureRange(Idx, 0, Max(0, chklbx.Count  ))  // new
+  end;
+
+  function HasHeader:Boolean;
+    procedure ResetError(Pos: Integer);
+    begin
+      MacroStream.Seek(Pos);
+      MacroStream.Status := 0;
+      Result := False;
+    end;
+  var
+    Len, I : Integer;
+    MSPos : Integer;
+
+  begin
+    Result := False;
+    if (MacroStream.Status <> 0) then EXIT;
+
+    MSPos := MacroStream.GetPos;
+    try
+      Len := Length(MacroChkLbxHeaderStart);
+      for I := 1 to Len do
+      begin
+        if (256 * Ord(MacroChkLbxHeaderStart[I]) <> MacroStreamReadKeyCode) then
+        begin
+          ResetError(MSPos);
+          EXIT;
+        end;
+      end;
+      Result := True;
+    except
+      ResetError(MSPos);
+    end;
+  end;
+
+
+  function GetHeaderString: AnsiString;
+  var
+    Ready : Boolean;
+    KCP : TKeyCP;
+  begin
+    Result := MacroChkLbxHeaderStart;
+    Ready := False;
+    Repeat
+      KCP := MacroStreamReadKeyCode;
+      Case KCP of
+        KCP__Error:
+          Ready := True;
+        KCP__HeadEnd:
+          Ready := True;
+        else
+          Result := Result + Char(KCP div 256);
+      end;
+    Until Ready;
+  end;
+
+var
+  HeaderString: AnsiString;
+
+  function GetHeaderEntry_IntDef(Key: String; Default: Integer): Integer;
+  var
+    P, Len : Integer;
+    ValS : String;
+    Ch : Char;
+  begin
+    ValS := '';
+    Len := Length(HeaderString);
+    P := Pos(Key, HeaderString);
+    If P > 0 then
+      P := PosEx('=', HeaderString, P);
+    If P > 0 then
+      While (P <= Len) and (HeaderString[P] <> MS_Separator) do
+      begin
+        Ch := HeaderString[P];
+        if (Ch in ['0'..'9', '+', '-', '$']) then
+          ValS := ValS + Ch;
+        Inc(P);
+      end;
+    Result := StrToIntDef(ValS, Default)
+  end;
+
+var
+  MS_HeaderVersion  : Integer;
+  MS_ItemCount      : Integer;
+  MS_CheckCount     : Integer;
+  Idx : Integer;
+  KeyCode : TKeyCP;
+  Ready : Boolean;
+begin
+  DosStreamUsed := True;
+  ModalResult := mrCancel;
+  SelectionChange(SC_AllCheck);  // start with all are checked!
+
+  if HasHeader then
+  begin
+    HeaderString := GetHeaderString;
+
+    MS_HeaderVersion := GetHeaderEntry_IntDef('Version',    -1);
+    MS_ItemCount     := GetHeaderEntry_IntDef('ItemCount',  -1);
+    MS_CheckCount    := GetHeaderEntry_IntDef('CheckCount', -1);
+
+    if False then
+      ShowMessageFmt(
+        'Has Header: "%s"'  + sLineBreak +
+        'Version:%d'        + sLineBreak +
+        'ItemCount:%d'      + sLineBreak +
+        'CheckCount:%d',
+        [HeaderString,
+         MS_HeaderVersion,
+         MS_ItemCount,
+         MS_CheckCount]);
+  end else
+  begin
+    HeaderString     := '';
+    MS_HeaderVersion := -1;
+    MS_ItemCount     := -1;
+    MS_CheckCount    := -1;
+  end;
+
+  Idx := 0;
+  Ready := False;
+  Repeat
+    KeyCode := MacroStreamReadKeyCode;
+    Case KeyCode of
+      KCP_ESC,
+      KCP__Error:
+        begin
+          Ready := True;
+        end;
+      KCP_CR:
+        begin
+          ModalResult := mrOk;
+          Ready := True;
+        end;
+      KCP_Space, KCP_F2:    // invert check
+        if (Idx < chklbx.Count) then chklbx.Checked[Idx] := not chklbx.Checked[Idx];
+    end;
+    ChkIdxStep(Idx, KeyCode, MS_ItemCount);
+
+  until Ready;
+
+  // if List during record macro was shorter than current list
+  // the additional elements are all checked by default (old behaviour)
+  // but now
+  // If MS_ItemCount is defined (>=0) and is less than chklbx.Count
+  // then the check of additinal items follows the new rule:
+  // check them all when all recorded items had been checked (MS_ItemCount = MS_CheckCount)
+  // if not all recorded have been checked then:
+  // check all additional ones when highest recorded was checked
+  // otherwise uncheck all additional ones:
+  if (MS_ItemCount     >= 0             ) and
+     (MS_ItemCount     <> MS_CheckCount ) and
+     (MS_ItemCount     <  chklbx.Count  ) and
+     (not chklbx.Checked[MS_ItemCount-1]) then
+    for Idx := MS_ItemCount to chklbx.Count -1 do    // only uncheck is necessary
+      chklbx.Checked[Idx] := false;
+
+  // new: if no item is selected then select the first one:
+  if (CheckCount = 0) and (chklbx.Count > 0) then
+    chklbx.Checked[0] := True;
+
+end;
+
+function  TfrmSelectList.NextChecked(const Idx: Integer): Integer;
+var
+  Count : Integer;
+begin
+  Count := chklbx.Count;
+  if Count = 0 then
+  begin
+    Result := -1;
+  end else
+  begin
+    Result := Max(0, Idx);
+    While (Result < Count) and (not chklbx.Checked[Result]) do Inc(Result);
+    if (Result >= Count) then Result := -1;
+  end;
+end;
+
+procedure TfrmSelectList.NextTag(var IndexBased1: SmallInt);
+begin
+  IndexBased1 := NextChecked(IndexBased1 -1) +1;
+end;
+
+function TfrmSelectList.IdxOk(const Idx: Integer): Boolean;
+begin
+  Result := (Idx >= 0) and (Idx < chklbx.Count);
+end;
+
+procedure TfrmSelectList.chklbxClickCheck(Sender: TObject);
+// go down when SpaceDown is set to True;
+var
+  Idx : Integer;
+begin
+//  ShowMessage('OnClickCheck');
+//if Assigned(sender) then
+//ShowMessageFmt('Classname: "%s"', [Sender.ClassName]);
+  Idx := chklbx.ItemIndex;
+  if (ssShift in ShiftState) then
+  begin
+    if IdxOk(Idx) then
+      chklbx.Checked[Idx] := false;
+  end;
+  if (ssCtrl in ShiftState) then
+  begin
+    if IdxOk(Idx) then
+      chklbx.Checked[Idx] := True;
+  end;
+  if SpaceDown then
+  begin
+    SpaceDown := False;
+    chklbx.Perform(WM_KEYDOWN, VK_DOWN, 1);
+    chklbx.Perform(WM_KEYUP,   VK_DOWN, 1);
+  end;
+end;
+
+procedure TfrmSelectList.ShowHelp;
+begin
+  Self.Hint := 'Space: Invert Check; Shift+Space: Clear Check; Ctrl+Space: Check';
+  ShowMessage(Self.Hint); 
+end;
+
+procedure TfrmSelectList.FormKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+// needs KeyPreview := True;
+// supports F2 like Space: Toggle Check and go down
+begin
+  ShiftState := Shift;
+  if (Key = VK_SPACE) then
+  begin
+     SpaceDown := True;  // enable chklbxClickCheck to go down
+  end else
+  if (Key = VK_F1   ) and (Shift = []) then
+  begin
+    ShowHelp;
+    Key := 0;
+  end else
+  if (Key = VK_F2   ) and (Shift = []) then
+  begin
+    SpaceDown := True;   // enable chklbxClickCheck to go down
+    chklbx.Perform(WM_CHAR, VK_SPACE, 1);  // direct to chklbx; Send to Form does not reach chklbx.keypress!
+  end;
+end;
+
+procedure TfrmSelectList.FormKeyUp(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+begin
+  ShiftState := Shift;
+end;
+
+{
+function RandomColor : TColor;
+begin
+  Case Random(8) of
+    0 : Result := clGray;
+    1 : Result := clRed;
+    3 : Result := clPurple;
+    4 : Result := clAqua;
+    5 : Result := clLime;
+    6 : Result := clLtGray;
+    7 : Result := clBlue;
+  end;
+end;
+
+procedure TfrmSelectList.chklbxDrawItem(Control: TWinControl;
+  Index: Integer; Rect: TRect; State: TOwnerDrawState);
+// needs chklbx.Style = lbOwnerDrawFixed or lbOwnerDrawVariable
+  function ChkCtr(Idx: Integer): Integer;
+  var
+    I : Integer;
+  begin
+    Result := 0;
+    for I := 0 to Idx do
+      if chklbx.Checked[I] then Inc(Result);
+  end;
+begin
+  if InRange(Index, 0, chklbx.Count -1) then
+  begin
+    if chklbx.Checked[Index]
+      then
+        chklbx.Canvas.TextRect(Rect, Rect.Left + 2, Rect.Top, Format('%s,%4d', [chklbx.Items[Index], ChkCtr(Index)]))
+      else
+        chklbx.Canvas.TextRect(Rect, Rect.Left + 2, Rect.Top, chklbx.Items[Index]);
+  end;
+end;
+}
+
+
+procedure BmpSetPixelFormat(Bmp: TBitmap; pixfmt: TPixelFormat);
+begin
+  Bmp.PixelFormat := pixfmt;
+  Case pixfmt of
+    pf4bit: Bmp.Palette := CreateGrayPal_16;  // is not protected by Graphics.pas InternalDeletePalette!
+    pf8bit: Bmp.Palette := CreateGrayPal256;
+  end;
+end;
+
+const
+  BmpWH = 90;
+  pfFormat = pf4bit;
+type
+  PSL = ^TSL;
+  TSL = Array[0..MaxWord] of Byte; // 2 points per byte
+  PStampByArr = ^TStampByArr;
+  TStampByArr = Array [0 .. (BmpWH div 2) -1, 0 .. BmpWH -1] of Byte;
+var
+  StampByArrs_FileMask : AnsiString = '';
+  StampUseImages : Boolean = False;
+  StampByArrs    : Array [0..NumSlicesMaxAll] of PStampByArr;   // 17 MB for BmpWH = 64!
+  StampStateArr  : Array [0..NumSlicesMaxAll] of Byte;
+  StampBounds    : TRect;
+  StampStored    : Boolean = False;
+{
+const
+  pfFormat = pf32bit;
+type
+  PSL = ^TSL;
+  TSL = Array[0..MaxWord] of Integer;
+  PStampByArr = ^TStampByArr;
+  TStampByArr = Array [0..BmpWH-1, 0..BmpWH-1] of Byte;
+var
+  StampByArrs : Array [0..NumSlicesMaxAll] of PStampByArr;   // 17 MB for BmpWH = 64!
+}
+
+constructor TfrmSelectList.Create(AOwner: TComponent; AParent: TWinControl;
+  ACount: Integer; ATitle, AFileMask: String);
+var
+  I : Integer;
+begin
+  inherited Create(AOwner);
+  Parent := AParent;
+  PopulateListSlices(ACount);
+  Caption := ATitle;
+  FileMask := AFileMask;
+  FormShowUseStampState := False;
+
+  if (AFileMask = '') then
+  begin
+    ShowImages1.Enabled := False;
+    ShowImages1.Checked := False;
+  end else
+  begin
+    ShowImages1.Enabled := True;
+    if (AFileMask <> StampByArrs_FileMask) then
+    begin
+      for I := 0 to NumSlicesMaxAll do
+      begin
+        if Assigned(StampByArrs[I]) then
+        begin
+          FreeMem(StampByArrs[I], SizeOf(TStampByArr));
+          StampByArrs[I] := nil;
+        end;
+      end;
+      StampByArrs_FileMask := FileMask;
+    end else
+    if StampStored then
+    begin
+      FormShowUseStampState := True; // selection may be set here, but will be lost until FormShow occurs
+    end;
+  end;
+  UpdateStatusBar;
+end;
+
+constructor TfrmSelectList.Create(
+  ACount: Integer; ATitle, AFileMask: String);
+begin
+  Create(nil, nil, ACount, ATitle, AFileMask);
+end;
+
+destructor TfrmSelectList.Destroy;
+  function StateSet(A, B: Boolean): Byte;
+  begin
+    Result := 0;
+    if A then Result := Result or 1;
+    if B then Result := Result or 2;
+  end;
+var
+  I : Integer;
+begin
+  if (FileMask <> '') and (ModalResult = mrOk) and (not DosStreamUsed) then
+  begin
+    StampStored := True;
+    StampBounds := BoundsRect;
+    for I := 0 to Min(chklbx.Count -1, NumSlicesMaxAll) do
+      StampStateArr[I] := StateSet(chklbx.Checked[I], chklbx.Selected[I]);
+    StampUseImages := ShowImages1.Checked;  
+  end;
+  inherited Destroy;
+end;
+
+procedure TfrmSelectList.chklbxMeasureItem(Control: TWinControl;
+  Index: Integer; var Height: Integer);
+begin
+  Height := BmpWH+8;
+end;
+
+procedure TfrmSelectList.chklbxDrawItem(Control: TWinControl;
+  Index: Integer; aRect: TRect; State: TOwnerDrawState);
+// needs chklbx.Style = lbOwnerDrawFixed or lbOwnerDrawVariable; and Columns = 0
+
+
+  function BmpFromStampByArr(StampByArr: PStampByArr): TBitmap;
+  var
+    W, H, xb, y: Integer;
+    SL : PSL;
+  begin
+    W := BmpWH;
+    H := BmpWH;
+    Result := TBitmap.Create;
+    BmpSetPixelFormat(Result, pfFormat);
+    Result.Width  := W;
+    Result.Height := H;
+    for y := 0 to H -1 do
+    begin
+      SL := Result.ScanLine[y];
+      if Result.PixelFormat = pf4bit then
+      begin
+        for xb := 0 to (W div 2) -1 do
+        begin
+          SL[xb] := StampByArr^[xb, y];
+        end;
+      end else
+      begin
+        for xb := 0 to W -1 do
+          SL[xb] := GrayFrom(StampByArr^[xb, y]);
+      end;
+    end;
+  end;
+
+  function BmpToStampByArr(Bmp: TBitmap): PStampByArr;
+  var
+    W, H, xb, y: Integer;
+    SL : PSL;
+  begin
+    if not assigned(Bmp) then  // 10.11.08 P.W
+    begin
+      Result := nil;
+      Exit;
+    end;
+    GetMem(Result, SizeOf(TStampByArr));
+    FillChar(Result^, SizeOf(TStampByArr), #0);
+    W := Min(BmpWH, Bmp.Width);
+    H := Min(BmpWH, Bmp.Height);
+    for y := 0 to H -1 do
+    begin
+      SL := Bmp.ScanLine[y];
+      if Bmp.PixelFormat = pf4bit then
+      begin
+        for xb := 0 to (W div 2) -1 do
+        begin
+          Result^[xb, y] := SL^[xb] and $FF;
+        end;
+      end else
+      begin // INVALID when TStampByArr is used!
+      //  for xb := 0 to W -1 do
+      //    Result^[xb, y] := SL^[xb] and $FF;
+      end;
+    end;
+  end;
+
+  function BmpSlice(Idx: Integer): TBitmap;
+  begin
+    if not Assigned(StampByArrs[Idx]) then
+    begin
+      Result := BmpFromXctImage(ChangeFileExt(FileMask, SliceNrToNamePart(Idx + 1)), BmpWH, BmpWH);
+      BmpSetPixelFormat(Result, pfFormat);  // 10.11.08 P.W
+      StampByArrs[Idx] := BmpToStampByArr(Result);
+    end else
+    begin
+      Result := BmpFromStampByArr(StampByArrs[Idx]);
+    end;
+
+  end;
+
+var
+  Txt : String;
+  TL, TT, GL, GT : Integer;
+  Bmp : TBitmap;
+begin
+  if InRange(Index, 0, chklbx.Count -1) then
+  begin
+    TL := aRect.Left + 2;
+    if ShowImages1.Checked
+    then TT := - 4 + aRect.Bottom - Canvas.TextHeight('S')
+    else TT := - 1 + ((aRect.Top + aRect.Bottom - Canvas.TextHeight('S')) div 2);
+
+    Txt := chklbx.Items[Index];
+
+    chklbx.Canvas.TextRect(aRect, TL, TT, Txt);
+    GL := TL;
+    GT := aRect.Top+2;
+
+    if ShowImages1.Checked then
+    begin
+      Bmp := BmpSlice(Index);
+//    chklbx.Canvas.StretchDraw(Rect(GL, GT, GL+BmpWH, GT+BmpWH), Bmp);
+      chklbx.Canvas.Draw(GL, GT, Bmp);
+      FreeAndNil(Bmp);
+    end;
+  end;
+end;
+
+procedure TfrmSelectList.SetValueKeepSelection(SV: TSetValue; Value: Integer);
+// Keeps the selection.
+// Setting ItemHeight directly clears the selection!
+// Changing Columns between 0 and 1 looses also the selection!
+// Reason: RecreateWnd does not take care about selection.
+  function GetValue: Integer;
+  begin
+    Case SV of
+      SV_Columns   : Result := chklbx.Columns;
+      SV_ItemHeight: Result := chklbx.ItemHeight;
+      else           raise(Exception.Create('GetValue out of range'));
+    end;
+  end;
+  procedure SetValue(Value: Integer);
+  begin
+    Case SV of
+      SV_Columns   : chklbx.Columns    := Value;
+      SV_ItemHeight: chklbx.ItemHeight := Value;
+      else           raise(Exception.Create('SetValue out of range'));
+    end;
+  end;
+var
+  Len, I : Integer;
+  SavVis : Boolean;
+  SavSel : Array of Boolean;
+begin
+  if GetValue <> Value then
+  begin
+    if chklbx.SelCount = 0 then
+    begin
+      SetValue(Value);
+    end else
+    begin
+      Len := chklbx.Count;
+      SetLength(SavSel, Len);
+      for I := 0 to Len -1 do
+        SavSel[I] := chklbx.Selected[I];
+      SavVis := chklbx.Visible;
+
+      chklbx.Visible := False;          // avoids wild painting while selection is refreshed
+
+      SetValue(Value);
+
+      for I := 0 to Len -1 do
+        chklbx.Selected[I] := SavSel[I];
+        
+      chklbx.Visible := SavVis;
+    end;
+  end;
+end;
+
+procedure TfrmSelectList.MyMouseWheel(Sender: TObject;
+  Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint;
+  var Handled: Boolean);
+// 19.06.09 P.W
+var
+  NumDelta : Integer;
+begin
+  NumDelta := WheelDelta div WHEEL_DELTA;
+  Handled := True;
+  if NumDelta > 0 then
+  begin
+    chklbx.Perform(WM_KEYDOWN, VK_UP,   1);
+    chklbx.Perform(WM_KEYUP,   VK_UP,   1);
+  end else
+  if NumDelta < 0 then
+  begin
+    chklbx.Perform(WM_KEYDOWN, VK_DOWN, 1);
+    chklbx.Perform(WM_KEYUP,   VK_DOWN, 1);
+  end;
+end;
+
+procedure TfrmSelectList.FormResize(Sender: TObject);
+var
+  chkWidth,
+  MinW, W, Col : Integer;
+  ChkTxt : AnsiString;
+  NewItemHeight: Integer;
+begin
+  if chklbx.Count = 0
+    then ChkTxt := Format('#%d', [NumSlicesMaxAll])
+    else ChkTxt := chklbx.Items[chklbx.Count -1];
+
+  chkWidth := (3* GetSystemMetrics(SM_CXMENUCHECK)) div 2;
+  W := chklbx.ClientWidth;
+
+  if ShowImages1.Checked then
+  begin
+    NewItemHeight := BmpWH + chklbx.Canvas.TextHeight('S');
+    MinW := chkWidth +   Max(chklbx.Canvas.TextWidth(ChkTxt), BmpWH);
+
+    if W > 2 *(BtnCancel.Left + BtnCancel.Width + chkWidth) then
+    begin
+      lblDisclaimer.Visible := True;
+      pnlDisclaimer.Visible := False;
+    end else
+    begin
+      lblDisclaimer.Visible := False;
+      pnlDisclaimer.Visible := True;
+    end;
+  end else
+  begin
+    pnlDisclaimer.Visible := False;
+    lblDisclaimer.Visible := False;
+    NewItemHeight := 0  + chklbx.Canvas.TextHeight('S');
+    MinW := chkWidth +    chklbx.Canvas.TextWidth(ChkTxt);
+  end;
+
+  SetValueKeepSelection(SV_ItemHeight, NewItemHeight);
+
+  Col := W div MinW;
+  if Col = 1 then Col := 0;
+
+  SetValueKeepSelection(SV_Columns, Col);
+end;
+
+procedure TfrmSelectList.ShowImages1Click(Sender: TObject);
+begin
+  if ShowImages1.Checked then
+  begin
+    pnlDisclaimer.Caption := TraS(DisclaimerMsg2);
+    lblDisclaimer.Caption := pnlDisclaimer.Caption;
+  end;
+  FormResize(Sender);
+end;
+
+procedure Test;
+var
+  frmSel : TfrmSelectList;
+  AFileMask : AnsiString;
+begin
+  AFileMask := 'D:\XCT\AV002\A0026480\I0026519.*';
+//AFileMask := 'D:\XCT\AV002\A0020000\I0020007.*';
+
+  frmSel := TfrmSelectList.Create(NumSlicesMaxAll, 'Please Check the slices', AFileMask);
+
+  frmSel.ShowModal;
+
+  if false then
+  case frmSel.ModalResult of
+    mrOk  : ShowMessage('Modal result: mrOk');
+    mrNone: ShowMessage('Modal result: mrNone');
+    mrCancel: ShowMessage('Modal result: mrCancel');
+    mrAbort: ShowMessage('Modal result: mrAbort');
+  end;
+  FreeAndNil(frmSel);
+  H_alt(1);
+end;
+
+//initialization
+//  Test;
+
+procedure TfrmSelectList.FormShow(Sender: TObject);
+var
+  I : Integer;
+begin
+  if FormShowUseStampState then
+  begin
+    ShowImages1.Checked := StampUseImages;
+    BoundsRect := StampBounds;
+    for I := 0 to Min(chklbx.Count -1, NumSlicesMaxAll) do
+    begin
+      chklbx.Checked [I] := (0 <> (StampStateArr[I] and 1));
+      chklbx.Selected[I] := (0 <> (StampStateArr[I] and 2));
+    //chklbx.Selected[I] := chklbx.Checked [I];             // mark checked
+    end;
+    UpdateStatusBar;
+  end;
+
+end;
+
+procedure TfrmSelectList.btnOKClick(Sender: TObject);
+  function CheckSelectionDiffer: Boolean;
+  var
+    I : Integer;
+  begin
+    Result := True;
+    for I := 0 to chklbx.Count -1 do
+      if chklbx.Checked[I] <> chklbx.Selected[I] then
+        EXIT;
+    Result := False;
+  end;
+  function AllSelectedChecked: Boolean;
+  var
+    I : Integer;
+  begin
+    Result := False;
+    for I := 0 to chklbx.Count -1 do
+      if chklbx.Selected[I] and (not chklbx.Checked[I]) then
+        EXIT;
+    Result := True;
+  end;
+begin
+  if (chklbx.SelCount > 0) and (CheckCount <> chklbx.Count) and (not AllSelectedChecked) then
+  if False then // disabled: 08.04.08 P.W
+  begin
+    ShowMessage(
+      TraS('Some items are marked but not checked.') + sLineBreak +
+      TraS('Only the checked items will be used!'));
+    ModalResult := 0;
+  end;
+end;
+
+var
+  InfoGlb : Integer = 10000;
+procedure TfrmSelectList.StatusBar1Click(Sender: TObject);
+var
+  SecondThread: TThread;
+  I : Integer;
+  Info : Integer;
+begin
+exit;
+  Info := InfoGlb;
+  Inc(InfoGlb, 10000);
+  SecondThread := TThreadView.Create(false, Info); {create and run the thread }
+  for I := 1 to 1000 do
+  begin
+    lblDisclaimer.Caption := Format('Ctr: %5d; ThreadInfo: %d', [I, Info]);
+    Application.ProcessMessages;
+    Sleep(20);
+    if (Info = -1) then break;
+  end;
+  SecondThread.Terminate;
+
+end;
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  InfoGlb              := 10000;
+  StampByArrs_FileMask := '';
+  StampUseImages       := False;
+  FillChar(StampByArrs, SizeOf(StampByArrs), #0);
+  FillChar(StampStateArr, SizeOf(StampStateArr), #0);
+  FillChar(StampBounds, SizeOf(StampBounds), #0);
+  StampStored          := False;
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Initialization part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init); // 03.05.24 P.W
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.
+

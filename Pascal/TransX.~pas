@@ -1,0 +1,186 @@
+// Created: 08.04.05 P.W
+// Purpose: Support translation of Buttons...
+// Modification
+// 01.08.06 P.W:
+//   Replace call of TraX for each control of a form by a single call of TraXC(form)
+//   Translation is uppercase if original is uppercase
+// 10.03.08 P.W DisableTranslation added for use by UTAna.pas function TGenAnalysis.ShortParamStr
+unit TransX;
+
+interface
+
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  Translate,
+  ExtCtrls, Spin, ComCtrls,
+  Menus, StdCtrls, Controls;
+
+var
+  DisableTranslation : Boolean = False;  // 10.03.08 P.W
+
+// Call Translation:
+function TranslatedTimeUnit(TimeUnit: char): String;
+function  TraS(const S: String; MinLen:Integer=0): String;
+procedure TraXC(X: TControl);
+procedure TraXM(X: TMainMenu);
+procedure TraXP(X: TPopupMenu);
+
+Implementation
+
+uses SysUtils;
+  const Unit_Name = 'TransX'; // 03.05.24 P.W
+
+function TranslatedTimeUnit(TimeUnit: char): String;
+// created: 24.08.06 P.W
+// called by UtAna.pas function TGenAnalysis.DoShowNormGraph
+begin
+  case TimeUnit of
+    'Y': Result := TraS('Years');
+    'M': Result := TraS('Months');
+    'W': Result := TraS('Weeks');
+    'D': Result := TraS('Days');
+    else Result := TimeUnit;
+  end;  
+end;
+
+function  TraS(const S: String; MinLen:Integer=0): String;
+// Modifications:
+// 10.03.08 P.W skip Translation when DisableTranslation is true
+// 20.11.08 P.W support MinLen > 0 leftjustify < 0 rightjustify
+var
+  NumSpc : Integer; // 20.11.08 P.W
+begin
+  if DisableTranslation then   // 10.03.08 P.W
+  begin
+    Result := S;
+    Exit;
+  end;
+  if Assigned(TranslateDataModule)
+  then Result := TranslateDataModule.TranslateOrg(S)
+  else Result := S;
+
+  // Translation is uppercase if original is uppercase:
+  if (UpperCase(S) = S) then              // 01.08.06 P.W
+    Result := UpperCase(Result);
+
+  if (MinLen <> 0) then   // 20.11.08 P.W
+  begin
+    NumSpc := Abs(MinLen) - Length(Result);
+    if (NumSpc > 0) then
+    begin
+      if (MinLen < 0) then
+        Result := StringOfChar(' ', NumSpc) + Result
+      else
+        Result := Result + StringOfChar(' ', NumSpc);
+    end;
+  end;
+end;
+
+//Hierarchy: TObject TPersistent TComponent TControl TGraphicControl TCustomLabel TLabel
+//Hierarchy: TObject TPersistent TComponent TControl TGraphicControl TToolButton
+//Hierarchy: TObject TPersistent TComponent TControl TWidgetControl TCustomSpinEdit TSpinEdit
+//Hierarchy: TObject TPersistent TComponent TControl TWinControl TButtonControl TCustomCheckBox TCheckBox
+//Hierarchy: TObject TPersistent TComponent TControl TWinControl TButtonControl TButton
+//Hierarchy: TObject TPersistent TComponent TControl TWinControl TCustomControl THintWindow
+//Hierarchy: TObject TPersistent TComponent TControl TWinControl TCustomControl THintWindow TCustomEdit TCustomMemo TMemo
+//Hierarchy: TObject TPersistent TComponent TControl TWinControl TToolWindow
+//Hierarchy: TObject TPersistent TComponent TMenuItem
+//Hierarchy: TObject TPersistent TComponent TMenu TMainMenu
+//Hierarchy: TObject TPersistent TComponent TMenu TPopupMenu
+
+procedure TraX(X: TMemo);       overload;
+var
+  I : Integer;
+begin
+  For I := 0 to X.Lines.Count -1 do
+    X.Lines[I] := TraS(X.Lines[I]);
+end;
+
+type
+  TControl_Caption = class(TControl)
+    // property Caption is protected for TControl
+    // only opened for some childs
+    // but using this as type cast allows acces to caption
+  end;
+
+procedure TraXC(X: TControl);   overload;
+//01.08.06 P.W
+//Hierarchy: TObject TPersistent TComponent TControl TWinControl
+//TWinControl introduces Controls
+var
+  I : Integer;
+begin
+  X.Hint := TraS(X.Hint);
+
+  if X is TMemo             then TraX(TMemo           (X)) else;
+
+  if X is TWinControl then
+    for I := 0 to TWinControl(X).ControlCount -1 do
+        TraXC(TWinControl(X).Controls[I]);
+
+{ check for published captions:
+  TLabel       (X).Caption;
+  TToolButton  (X).Caption;          // caption not visible  (when TToolBar ShowCaptions is false)
+//TSpinEdit    (X).Caption;          // caption not published
+  TCheckBox    (X).Caption;
+  TButton      (X).Caption;
+  THintWindow  (X).Caption;
+//TMemo        (X).Caption;          // caption not published
+//TTrackBar    (X).Caption;          // caption not published
+  TToolBar     (X).Caption;          // caption not visible!
+  TEdit        (X).Caption;          // caption not published
+{}
+  if (X is TSpinEdit      ) or
+     (X is TToolButton    ) or      // has an invisible caption (when TToolBar ShowCaptions is false)
+     (X is TToolBar       ) or      // has an invisible caption
+     (X is TEdit          ) or
+     (X is TMemo          ) or
+     (X is TTrackBar      ) then
+  begin      // do not translate the caption
+  end else
+  begin      // translate the caption
+     TControl_Caption(X).Caption := TraS(TControl_Caption(X).Caption);
+  end;
+end;
+
+procedure TraXMI(X: TMenuItem);
+// Modifications:
+// 01.08.06 P.W:
+//   translate the subitems
+var
+  I : Integer;
+begin
+  X.Caption := TraS(X.Caption);
+  for I := 0 to X.Count -1 do     // 01.08.06 P.W
+    TraXMI(X.Items[I]);             // TMenuItem
+end;
+
+procedure TraXM(X: TMainMenu);
+//01.08.06 P.W
+begin
+  TraXMI(X.Items);  // TMenuItem
+end;
+
+procedure TraXP(X: TPopupMenu);
+//01.08.06 P.W
+begin
+  TraXMI(X.Items);  // TMenuItem
+end;
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  DisableTranslation := False;
+//  FillChar(, SizeOf(), #0);
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Initialization part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+
+end.

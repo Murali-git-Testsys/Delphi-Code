@@ -1,0 +1,1774 @@
+unit UseDelphi;
+// Created: 29.04.04 P.W
+// Purpose inable use of Delphi Mouse for TMenuApp.pas
+// used also by FemurPcForm1.pas
+// Modifications
+// 11.02.08 P.W: TDelphiEasyListBox supports "Ctrl-C" to copy content to Clipboard
+// 17.03.08 P.W: TDelphiEasyListBox AutoComplete set to true;
+//   ChangeF2 added to avoid unwanted leave of Listbox when number key has been preessed
+//   in case where ChangeF2 is false (UtParam.pas procedure TGenParams.ShowList_New)
+// 25.03.08 P.W: TDelphiEasyListBox support colored Listbox Lines
+//   keep Center Position when Listbox is larger than default
+//   Copy Content to Clipboard via Popupmenu
+// 01.09.08 P.W: Use TCanvas_Plus by ListBoxDrawItem; Support VirtualData = True
+//   aim: get correct DOS-OEM-Ansi (containing "µ" (micro)) texts when non unicode locale is Japan
+//   VirtualData is also used for clipboard
+// 19.06.09 P.W: Support MouseWheel by TDelphiEasyListBox
+interface
+
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  Messages,          // 19.06.09 P.W
+  GraphicsExt,       // 01.09.08 P.W
+  GlbDecs, Menus,    // 25.03.08 P.W
+  TransX,
+  ExtCtrls,
+  ClipBrdUse,  // 11.02.08 P.W
+  Classes,
+  Windows,
+  Graphics,
+  Controls, ComCtrls,
+  StdCtrls,
+  Forms,
+  Dialogs,
+  Draw,
+  GraphGlb,   // 15.06.04 P.W
+  Graph0,
+  Math,
+  MenuIds;
+
+type
+  THelpValidator = function(const S: String): Boolean;
+  TUseDelphiMouseEvent = (DME_MouseDown, DME_MouseMove, DME_MouseUp);  // 19.06.09 P.W
+const
+  AddBtnDelResult = -123;  // 25.03.08 P.W
+  AddBtnInsResult = -124;  // 25.03.08 P.W
+  AddBtnF2_Result = -125;  // 25.03.08 P.W
+
+procedure RegisterViewPortButtons(NumButtons: Integer);
+procedure RegisterAciveButton(No: Integer; ActiveFlg, ValidFlg: Boolean);
+
+procedure UseDelphiMouseDown(Button: TMouseButton; Shift: TShiftState; MouseX, MouseY: Integer);
+procedure UseDelphiMouseMove(Shift: TShiftState; MouseX, MouseY: Integer);
+procedure UseDelphiMouseUp  (Button: TMouseButton; Shift: TShiftState; MouseX, MouseY: Integer);
+function  UseDelphiGetMouseShift: TShiftState;  // 15.06.09 P.W
+function  UseDelphiGetMouseEvent: TUseDelphiMouseEvent;
+
+function  GetNumRightLeftKeys(MouseX, MouseY: Integer; var RightFlg: Boolean): Integer;
+procedure RegisterPane;  // 30.04.04 P.W
+procedure RegisterPaneListBox(NumHead, Nums, NumDispl: Integer);  // 30.04.04 P.W
+procedure RegisterPaneKeyWorld(x1, y1, x2, y2: Double);  // 30.04.04 P.W
+procedure UnRegisterPaneListBox;
+function  GetPaneKeyXValue(MouseX: Integer): Double;
+function  GetPaneKeyYValue(MouseY: Integer): Double;
+function  CheckPaneClickMove(MouseX, MouseY: Integer): Boolean;  // 30.04.04 P.W
+function  CheckPaneMouseUp(MouseX, MouseY: Integer): Boolean;  // 30.04.04 P.W
+procedure SetPaneDblClick;
+
+function  IsOutsideClicked(var MouseX, MouseY: Integer; Delta:Integer=0; Reset:Boolean=True): Boolean; overload;
+function  IsOutsideClicked(Delta:Integer=0; Reset:Boolean=False): Boolean; overload;
+function  IsPaneClicked(var MouseX, MouseY: Integer; Reset: Boolean = True): Boolean; // 30.04.04 P.W
+function  IsPaneDblClicked(Reset: Boolean = True): Boolean; // 26.07.04 P.W
+function  GetListBoxClickLine(Reset: Boolean = True): Integer; // 30.04.04 P.W
+function  GetOkButtonDown(Reset: Boolean = True): Integer; // 05.05.04 P.W
+
+procedure FormSize(a_Form: TForm;
+    RelExtX: Double = 0.6;
+    RelExtY: Double = 0.6;
+    RelExtX_L: Double = 0.0;
+    RelExtY_B: Double = 0.0);
+function FormCreate(aTitle: String;
+    RelExtX: Double = 0.6;
+    RelExtY: Double = 0.6): TForm;
+procedure ShowFileContent(FName, Title: String; ModalFlg:Boolean=True); // 04.05.04 P.W
+function SelectBox(FName, Title, DefaultSelection: String; aValid:THelpValidator=nil): String;
+
+procedure RegisterOkButtons(Num: Integer); //05.05.04 P.W
+procedure RegisterOkButton(ButtonNum: Integer; EnabledFlg: Boolean); //05.05.04 P.W
+function  IsAnyPaneRegistered: Boolean;
+procedure OptScrollWidthX(var LB: TListBox; ArrowTxt:String='');
+
+const
+  MaxAddBtn = 4;
+
+type
+  //v--- 23.07.04 P.W ---
+  TClickProcedure = procedure(Sender: TObject);
+  TAddBtn        = record
+    btnAdd       : TButton;
+    aModalResult : TModalResult;
+    aResult      : Integer;
+  end;
+  //^--- 23.07.04 P.W ---
+
+  TDelphiEasyListBox = class(TListBox) // 12.05.04 P.W
+    aForm : TForm;
+    aPop  : TPopupMenu;
+    pnlButtons : TPanel;
+    btnOk, btnCancel : TButton;
+    procedure ListBoxDblClick(Sender: TObject);
+    procedure btnOkClick(Sender: TObject);
+    procedure btnCancelClick(Sender: TObject);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+   Private
+    btnDx : Integer; // = 20;  // space between Buttons
+    btnDy : Integer; // = 10;
+    FChangeF2 : Boolean; // 17.03.08 P.W
+    DefaultCol: TDisplColors;           // 25.03.08 P.W
+    DefaultColDefined : Boolean;        // 25.03.08 P.W
+    MyCols    : Array of TDisplColors;  // 25.03.08 P.W
+    MyCols_PS : Array of AnsiString;    // 25.03.08 P.W
+    FAllowDelete: Integer;              // 25.03.08 P.W
+    UpdateEnabledStatesRuns: Boolean;   // 25.03.08 P.W
+    FVirtualData: Boolean;              // 01.09.08 P.W
+    VirtualList : TStringList;          // 01.09.08 P.W  // ListBox.Items[] is not ok under Japan!
+
+    procedure btnAddClick(Sender: TObject);
+    procedure OptScrollWidth;
+    procedure KeyPress(Sender: TObject; var Key: Char);  reintroduce;  // 08.01.09 P.W: "reintroduce" to avoid warning
+    procedure MyDefaultOnKeyDown(Sender: TObject; var Key: Word;
+      Shift: TShiftState);
+    procedure MyMouseWheel(Sender: TObject;
+      Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint;
+      var Handled: Boolean);
+    procedure SetChangeF2(const Value: Boolean);
+    procedure SetAllowDelete(const Value: Integer);
+    function CheckDeleteItem(aRes: Integer): Integer;
+    function CheckInsertItem(aRes: Integer): Integer;
+    procedure UpdateEnabledStates;
+    function CheckF2Item(aRes: Integer): Integer;
+    procedure CreatePopupMenu;
+    procedure PopupMenuItemsClick(Sender: TObject);
+    function ArrowText(Selected: Boolean): String;
+   Public
+    aResult : Integer;
+    ModalResult   : Integer;  // 25.03.08 P.W
+    ButtonNr_Del  : Integer;  // 25.03.08 P.W
+    ButtonNr_Ins  : Integer;  // 25.03.08 P.W
+    ButtonNr_F2   : Integer;  // 25.03.08 P.W
+    PreferTop     : Boolean;  // 25.03.08 P.W
+    ArrowSelected : Boolean;  // 25.03.08 P.W
+    OkClicked     : Boolean;
+    F2_Taste_Char : Char;     // 27.07.05 P.W
+
+
+    AddBtnArr : array[0..MaxAddBtn-1] of TAddBtn;  // 23.07.04 P.W
+    NumAddBtn : Integer;                           // 23.07.04 P.W
+    function  AddBtn(_Caption: String; _ModalResult: TModalResult;
+                     _Result: Integer = 0; _Hint: String=''): Integer;
+
+    procedure AddColorPattern(_MyCols: TDisplColors; S: AnsiString);
+    procedure ListBoxDrawItem(Control: TWinControl; Index: Integer; Rect:TRect;State: TOwnerDrawState);
+    procedure ListBoxResize(Sender: TObject);
+    constructor Init(aTitle: String; aNumLines: Integer; aList:TStringList=nil; VirtualData: Boolean=False);
+    destructor  Done;
+    destructor  Destroy; override;
+    procedure InsItem(Entry: String); overload;
+    procedure InsItem(Entry: String; _MyCols: TDisplColors); overload;
+    procedure InsItem(Entry: String; _MyCols: TDisplColors; UseMyCols: Boolean); overload;
+    procedure InsItemAtIndex(S: String; Index: Integer);
+    function  ExeDialog(SelectIndex: Integer = 0): Integer;
+    function  StrList_At(Indx: Integer): String;
+    procedure MyOnKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    property ChangeF2: Boolean read FChangeF2 write SetChangeF2;
+    property AllowDelete: Integer read FAllowDelete write SetAllowDelete; // -1: disable delete; else Index of first deletable Item
+  end;
+
+
+Implementation
+
+uses SysUtils;
+  const Unit_Name = 'UseDelphi'; // 03.05.24 P.W
+
+procedure CheckViewPortSortOrder(var aViewPort: ViewPortType);
+  procedure CheckSort(var a, b: SmallInt);
+  var
+    h : SmallInt;
+  begin
+    If (a > b) then
+    begin
+      h := a;
+      a := b;
+      b := h;
+    end;
+  end;
+begin
+  CheckSort(aViewPort.x1, aViewPort.x2);
+  CheckSort(aViewPort.y1, aViewPort.y2);
+end;
+
+type
+  TDoubleRect = Record
+    x1, y1,
+    x2, y2  : Double;
+  end;
+const
+  BtnFirst   = 1; // 0 not a valid button!
+  MaxButtons   =  10;  // "OkButtons" // Duplicates in UseDelphi and THaloWin!
+
+var
+  // --- Main MenuId.. like Analysis, CalcBc, Roi, Select ---
+  BtnActive   : Integer = -1;
+  BtnCount    : Integer = 0;
+  BtnValidArr : Array[BtnFirst.. MaxMenuFields] of boolean;
+  BtnViewPort : ViewPortType;
+
+  UseDelphiMouseShift : TShiftState;           // 15.06.09 P.W
+  UseDelphiMouseEvent : TUseDelphiMouseEvent;  // 19.06.09 P.W
+  UseDelphiEventWaits : Boolean = False;     // 19.06.09 P.W
+
+  // --- Outside Click
+  OutSideClicked  : Boolean = False;
+  OutSideClickMouseX : Integer = -1;
+  OutSideClickMouseY : Integer = -1;
+
+  LMouseDown : Boolean = False;
+  RMouseDown : Boolean = False;
+
+  // --- Pane of Threshold, or Roi-Setting Area ---
+  PaneActive  : Boolean = False;
+  PaneViewPort: ViewPortType;
+  PaneClickMouseX : Integer = -1;
+  PaneClickMouseY : Integer = -1;
+  PaneWorld  : TDoubleRect = (x1:0; y1:0; x2:0; y2:0);
+  PaneMouseDownFlg : Boolean = False;
+  PaneDoubleClicked: Boolean = False;
+
+  // --- Listbox like select RoiName, Select Macro ... ---
+  // (uses PaneViewPort)
+  ListBoxActive    : Boolean = False;
+  ListBox_NumHead  : Integer = 0;
+  ListBox_Nums     : Integer = 0;
+  ListBox_NumDispl : Integer = 0;
+  ListBox_ClickLine: Integer = 0;
+
+  // --- Buttons like Yes No Ok ... ---
+  // (uses PaneViewPort)
+  OkButtonCount      : Integer = 0;
+  OkButtonViewPorts  : Array[1..MaxButtons] of ViewPortType;
+  OkButtonEnabledArr : Array[1..MaxButtons] of boolean;
+  OkButtonDown       : Integer = 0;
+
+
+Procedure ClearOutSideClickMousePos;
+begin
+  OutSideClicked       := False;
+  OutSideClickMouseX   := -1;
+  OutSideClickMouseY   := -1;
+end;
+
+procedure SetOutSideClick(MouseX, MouseY: Integer); // 25.10.04 P.W.
+// also for Mouse Move
+begin
+  if LMouseDown then
+  begin
+    OutSideClickMouseX := MouseX;
+    OutSideClickMouseY := MouseY;
+    OutSideClicked := True;
+  end;
+end;
+
+Procedure ClearPaneClickMousePos;
+begin
+  PaneClickMouseX   := -1;
+  PaneClickMouseY   := -1;
+end;
+
+Procedure ClearPaneDblClick;
+begin
+  PaneDoubleClicked := False;
+end;
+
+Procedure ClearGlbs;
+begin
+  ButtonsInvalid := True; // 22.01.07 P.W  for TMenuApp.pas to enshure Main menu mouse support
+  BtnActive  := -1;
+  BtnCount   := 0;
+  FillChar(BtnValidArr, SizeOf(BtnValidArr), #0);
+  FillChar(BtnViewPort, SizeOf(BtnViewPort), #0);
+
+  PaneActive := False;
+  FillChar(PaneViewPort, SizeOf(PaneViewPort), #0);
+  FillChar(PaneWorld,    SizeOf(PaneWorld),    #0);
+  ClearPaneClickMousePos;
+  ClearPaneDblClick;
+  PaneMouseDownFlg := False;
+
+  ListBoxActive    := False;
+  ListBox_NumHead  := 0;
+  ListBox_Nums     := 0;
+  ListBox_NumDispl := 0;
+  ListBox_ClickLine:= 0;
+
+  OkButtonCount    := 0;
+  FillChar(OkButtonViewPorts,   SizeOf(OkButtonViewPorts),   #0);
+  FillChar(OkButtonEnabledArr,  SizeOf(OkButtonEnabledArr),  #0);
+  OkButtonDown     := 0;
+
+  ClearOutSideClickMousePos;
+end;
+
+procedure RegisterViewPortButtons(NumButtons: Integer);
+// called by TMenuApp.pas Procedure TMenPane.ShowAll;
+// informs about the screen area where the Menu-Buttons are drawn
+  procedure DrawButton(ViewPort : ViewPortType; BtnNr: Integer);
+  var
+    xa,xb : Integer;
+    dx : double;
+  begin
+    With ViewPort do
+    begin
+      dx := (x2 - x1)/ NumButtons;
+      xa := Round((BtnNr - 1) * dx);
+      xb := Round((BtnNr    ) * dx);
+      CmdOut(dc_Line, xa, y1, xb, y2);
+      CmdOut(dc_Line, xa, y2, xb, y1);
+    end;
+  end;
+//var
+//  I : Integer;
+begin
+  ClearGlbs;
+  ButtonsInvalid := False; // 22.01.07 P.W  for TMenuApp.pas to enshure Main menu mouse support
+
+  BtnCount  := NumButtons;
+  GetViewSettings(BtnViewPort);
+
+//  For I:= 1 to NumButtons do
+//    DrawButton(BtnViewPort, I);
+ // ShowMessage('UseDelphi RegisterViewPortButtons Waits ...');
+end;
+
+procedure RegisterAciveButton(No: Integer; ActiveFlg, ValidFlg: Boolean);
+begin
+  If (No > 0) and (No <= MaxMenuFields) then
+  begin
+    BtnValidArr[No]:=ValidFlg;
+    if ActiveFlg then
+      BtnActive := No;
+  end;
+end;
+
+procedure UseDelphiCheckSetEvent(Shift: TShiftState; Event: TUseDelphiMouseEvent);
+// 19.06.09 P.W
+// prefer detection of MouseDown/Up
+// Aim avoid these are overrun by mouse move events
+begin
+  if (not UseDelphiEventWaits) or
+     (Event = DME_MouseDown)   or
+     (Event = DME_MouseUp  )   then
+  begin
+    UseDelphiEventWaits := True;
+    UseDelphiMouseShift := Shift;
+    UseDelphiMouseEvent := Event;
+  end;
+end;
+
+procedure UseDelphiMouseDown(Button: TMouseButton; Shift: TShiftState; MouseX, MouseY: Integer);
+begin
+  UseDelphiCheckSetEvent(Shift, DME_MouseDown); // 19.06.09 P.W
+  Case Button of
+    mbLeft:  LMouseDown := True;
+    mbRight: RMouseDown := True;
+  end
+end;
+
+procedure UseDelphiMouseMove(Shift: TShiftState; MouseX, MouseY: Integer);
+begin
+  UseDelphiCheckSetEvent(Shift, DME_MouseMove); // 19.06.09 P.W
+end;
+
+procedure UseDelphiMouseUp  (Button: TMouseButton; Shift: TShiftState; MouseX, MouseY: Integer);
+begin
+  UseDelphiCheckSetEvent(Shift, DME_MouseUp); // 19.06.09 P.W
+  Case Button of
+    mbLeft:  LMouseDown := False;
+    mbRight: RMouseDown := False;
+  end
+end;
+
+function  UseDelphiGetMouseShift: TShiftState;
+// 15.06.09 P.W
+begin
+  Result := UseDelphiMouseShift;
+end;
+
+function  UseDelphiGetMouseEvent: TUseDelphiMouseEvent;
+// 19.06.09 P.W
+begin
+  Result := UseDelphiMouseEvent;
+  UseDelphiEventWaits := False;
+end;
+
+
+function IsPointInsideViewPort(X,Y: Integer; VP: ViewPortType; Delta: Integer = 0): Boolean;
+begin
+  Result :=
+    InRange( x, VP.x1-Delta, VP.x2+Delta) and
+    InRange( y, VP.y1-Delta, VP.y2+Delta)
+end;
+
+function IsBtnClick(MouseX, MouseY: Integer): Boolean;
+// returns true if click is inside BtnViewPort
+begin
+  Result := (BtnActive > 0) and
+    IsPointInsideViewPort(MouseX, MouseY, BtnViewPort);
+end;
+
+function IsInPane(MouseX, MouseY: Integer): Boolean;
+// returns true if click is inside PaneRect
+begin
+  Result := PaneActive and
+    IsPointInsideViewPort(MouseX, MouseY, PaneViewPort);
+end;
+
+function IsInPaneListBox(MouseX, MouseY: Integer): Boolean;
+// returns true if click is inside PaneRect
+begin
+  Result := ListBoxActive and
+    IsPointInsideViewPort(MouseX, MouseY, PaneViewPort);
+end;
+
+function IsInPaneOkButtons(MouseX, MouseY: Integer): Boolean;
+// returns true if click is inside PaneRect
+begin
+  Result := (OkButtonCount > 0) and
+    IsPointInsideViewPort(MouseX, MouseY, PaneViewPort);
+end;
+
+function CheckPaneClickMove(MouseX, MouseY: Integer): Boolean;  // 30.04.04 P.W
+// called by FemurPcForm1.pas procedure TfrmMain.imgMainMouseMove
+begin
+  Result := PaneMouseDownFlg and IsInPane(MouseX, MouseY);
+  if Result then
+  begin
+    PaneClickMouseX := MouseX;
+    PaneClickMouseY := MouseY;
+  end else
+  begin  // 25.10.04 P.W.
+    SetOutSideClick(MouseX, MouseY);  // 25.10.04 P.W.
+  end;
+end;
+
+function  CheckListBoxDown(MouseX, MouseY: Integer): Boolean;  // 30.04.04 P.W
+var
+  YL : Double;
+begin
+  Result := IsInPaneListBox(MouseX, MouseY);
+  if Result then
+  begin
+    YL := GetPaneKeyYValue(MouseY);
+    ListBox_ClickLine := Trunc(YL) + 1;
+    If ListBox_ClickLine < 1
+    then ListBox_ClickLine := 1
+    else
+      If ListBox_ClickLine > ListBox_Nums
+      then ListBox_ClickLine := ListBox_Nums;
+
+//    ShowMessageFmt('CheckListBoxDown NumHead:%d, Nums:%d, NumDispl:%d, YL:%3.2f, %d',
+  //    [ListBox_NumHead, ListBox_Nums, ListBox_NumDispl,
+    //   YL, ListBox_ClickLine]);
+  end;
+end;
+
+function  CheckPaneMouseUp(MouseX, MouseY: Integer): Boolean;  // 30.04.04 P.W
+// called by FemurPcForm1.pas procedure TfrmMain.imgMainMouseUp
+begin
+  Result := PaneMouseDownFlg and IsInPane(MouseX, MouseY);
+  PaneMouseDownFlg := False;
+end;
+
+function CheckOkButtonDown(MouseX, MouseY: Integer): Boolean;
+var
+  I : Integer;
+begin
+  OkButtonDown := 0;
+  Result := IsInPaneOkButtons(MouseX, MouseY);
+  if Result then
+  begin
+    Result := False;
+    for I:= 1 to OkButtonCount do
+    begin
+      If IsPointInsideViewPort(MouseX, MouseY, OkButtonViewPorts[I]) then
+      begin
+        Result := OkButtonEnabledArr[I];
+        If Result then
+          OkButtonDown := I;
+        Break;
+      end;
+    end;
+  end;
+end;
+
+function GetClickBtn(MouseX, MouseY: Integer): Integer;
+// returns 0 or positve if click is on a valid button
+// returns -1 if click is not in BtnViewPort or button is invalid
+var
+  mx, dx : Double;
+begin
+  ClearOutSideClickMousePos;
+  if IsBtnClick(MouseX, MouseY) then
+  begin
+    mx := MouseX - BtnViewPort.x1;
+    dx := BtnViewPort.x2 - BtnViewPort.x1;
+    Result := Round((BtnCount *  mx / dx)+0.5);
+  end else
+  begin
+    if CheckOkButtonDown(MouseX, MouseY) then
+    begin
+//      ShowMessageFmt('OkButtonClick Num:%d', [OkButtonDown]);
+    end else
+    if CheckListBoxDown(MouseX, MouseY) then
+    begin
+    end else
+    begin
+      PaneMouseDownflg := IsInPane(MouseX, MouseY);
+      if not CheckPaneClickMove(MouseX, MouseY) then
+      begin  // for any one else who is interessted:
+        SetOutSideClick(MouseX, MouseY);  // 25.10.04 P.W.
+      end;
+    end;
+    Result := -1;
+  end;
+// ShowMessageFmt('ClickBtn: %d'+FixSem+' mx=%5.2f'+FixSem+' dx=%5.2f', [Result, mx, dx]);
+end;
+
+
+function GetNumRightLeftKeys(MouseX, MouseY: Integer; var RightFlg: Boolean): Integer;
+// called by FemurPcForm1.pas procedure TfrmMain.imgMainMouseDown
+// returns 0 or positve if click is on a valid button
+// returns -1 if click is not in BtnViewPort or button is invalid
+// modifications:
+// 19.07.05 P.W: check that clicked Button is not disabled
+var
+  ClickBtn: Integer;
+  BtnTest: Integer;
+  RightCnt, LeftCnt : Integer;
+begin
+  ClickBtn := GetClickBtn(MouseX, MouseY);
+  if (ClickBtn > 0) and (BtnValidArr[ClickBtn]) then  // and BtnValidArr:19.07.05 P.W
+  begin
+    // --- RightKeys to aim (aim = ClickBtn)
+    RightCnt := 0;
+    BtnTest := BtnActive;
+    While (BtnTest <> ClickBtn) do
+    begin // count the RightKeys necessary, ignore invalid buttons
+      If (BtnTest < BtnCount)
+        then Inc(BtnTest)
+        else BtnTest := BtnFirst;
+      if BtnValidArr[BtnTest] then inc(RightCnt);
+    end;
+    // --- RightKeys to aim (aim = ClickBtn)
+    LeftCnt := 0;
+    BtnTest := BtnActive;
+    While (BtnTest <> ClickBtn) do
+    begin // count the RightKeys necessary, ignore invalid buttons
+      If (BtnTest > BtnFirst)
+        then Dec(BtnTest)
+        else BtnTest := BtnCount;
+      if BtnValidArr[BtnTest] then inc(LeftCnt);
+    end;
+    // Result: shortest way
+    RightFlg := (RightCnt <= LeftCnt);
+    Result := Min(RightCnt, LeftCnt);
+  end else
+  begin
+    Result := -1;
+  end;
+//  ShowMessageFmt('NumLeftRightKeys: %d'+FixSem+' ClickBtn:%d'+FixSem+' BtnActive:%d'+FixSem+' RightFlg:%d',
+//                 [Result, ClickBtn, BtnActive, Ord(RightFlg)]);
+end;
+
+procedure RegisterPane;  // 30.04.04 P.W
+// called by:
+//   a) UtParam.pas  Procedure TGenParams.SetThreshold
+//   b) KN_Slc0.pas  Procedure DoSetRoi (sub-) Procedure DrawSliceImage;
+begin
+  ClearGlbs;
+  PaneActive := True;
+  GetViewSettings(PaneViewPort);
+end;
+
+procedure RegisterPaneListBox(NumHead, Nums, NumDispl: Integer);  // 30.04.04 P.W
+// called by:
+//   a) THaloWin.pas Procedure TListBox2.InitFirst;
+begin
+  ClearGlbs;
+  ListBoxActive := True;
+  GetViewSettings(PaneViewPort);
+  ListBox_NumHead  := NumHead;
+  ListBox_Nums     := Nums;
+  ListBox_NumDispl := NumDispl;
+end;
+
+procedure UnRegisterPaneListBox;
+// called by:
+//   THaloWin.pas Procedure TListBox2.Done;
+//   UtParam.pas  procedure TGenParams.SetThreshold
+//   Kn_Slc.pas   procedure TCTScreen.GetDistance
+begin
+  ClearGlbs;
+end;
+procedure RegisterPaneKeyWorld(x1, y1, x2, y2: Double);  // 30.04.04 P.W
+// called by
+//   a) UtParam.pas Procedure TGenParams.SetThreshold
+//   b) KN_Slc0.pas Procedure DoSetRoi (sub-) Procedure DrawSliceImage;
+//   c) THaloWin.pas Procedure TListBox2.InitFirst;
+begin
+  PaneWorld.x1 := x1;
+  PaneWorld.y1 := y1;
+  PaneWorld.x2 := x2;
+  PaneWorld.y2 := y2;
+end;
+
+function  GetPaneKeyXValue(MouseX: Integer): Double;
+begin
+  Result := PaneWorld.x1
+            + (MouseX - PaneViewPort.x1)
+            * (PaneWorld.x2 - PaneWorld.x1)
+            / (PaneViewPort.x2 - PaneViewPort.x1);
+end;
+
+function  GetPaneKeyYValue(MouseY: Integer): Double;
+begin
+  Result := PaneWorld.y1
+            - (MouseY - PaneViewPort.y2)
+            * (PaneWorld.y2 - PaneWorld.y1)
+            / (PaneViewPort.y2 - PaneViewPort.y1);
+end;
+
+function  IsOutsideClicked(var MouseX, MouseY: Integer; Delta:Integer=0; Reset:Boolean=True): Boolean;
+// 25.10.04 P.W. for svComp set position
+// 16.06.05 P.W. support Delta
+begin
+  Result := OutSideClicked;
+  MouseX := OutSideClickMouseX;
+  MouseY := OutSideClickMouseY;
+  If Result and Reset then        // Reset independend of Delta!
+    ClearOutSideClickMousePos;
+
+  if (Delta<>0) and Result then // 16.06.05 P.W. support Delta
+  begin
+    if (PaneViewPort.x1 <> PaneViewPort.x2) then
+      Result := not IsPointInsideViewPort(MouseX, MouseY, PaneViewPort, Delta)
+    else
+    if (BtnViewPort.x1 <> BtnViewPort.x2) then
+      Result := not IsPointInsideViewPort(MouseX, MouseY, BtnViewPort, Delta)
+  end;
+end;
+
+function  IsOutsideClicked(Delta:Integer=0; Reset:Boolean=False): Boolean;
+var
+  MouseX, MouseY: Integer;
+begin
+  Result := IsOutsideClicked(MouseX, MouseY, Delta, Reset);
+end;
+
+function  IsPaneClicked(var MouseX, MouseY: Integer; Reset: Boolean = True): Boolean;
+// 30.04.04 P.W
+// called by TKeyApp.pas FUNCTION TApp.KeyMouseHandler
+begin
+  Result := PaneActive and (PaneClickMouseX >= 0);
+  MouseX := PaneClickMouseX;
+  MouseY := PaneClickMouseY;
+  If Result and Reset then
+    ClearPaneClickMousePos;
+end;
+
+procedure SetPaneDblClick;
+// 26.07.04 P.W
+begin
+  PaneDoubleClicked := True;
+end;
+
+function  IsPaneDblClicked(Reset: Boolean = True): Boolean;
+// 26.07.04 P.W
+begin
+  Result := PaneDoubleClicked;
+  if Result and Reset then
+    ClearPaneDblClick;
+end;
+
+function  GetListBoxClickLine(Reset: Boolean = True): Integer; // 30.04.04 P.W
+// called by
+//   a) THaloWin.pas
+begin
+  Result := ListBox_ClickLine;
+  If Reset then
+    ListBox_ClickLine := 0;
+end;
+
+type
+  TMemoKeyPress = class(TMemo)
+    ParentForm:TForm;                                                // 29.08.06 P.W
+    procedure MemoKeyPress(Sender: TObject; var Key: Char);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);  // 29.08.06 P.W
+  end;
+
+procedure TMemoKeyPress.MemoKeyPress(Sender: TObject; var Key: Char);
+begin
+  if Assigned(Parent) and (Parent is TForm) then
+  begin
+    TForm(Parent).ModalResult := mrOk;
+    if TForm(Parent).FormStyle = fsStayOnTop then  // 29.08.06 P.W
+    begin
+      TForm(Parent).Close;
+    end;
+  end;
+end;
+
+procedure TMemoKeyPress.FormClose(Sender: TObject; var Action: TCloseAction);
+// 29.08.06 P.W
+begin
+// crashes sometimes:
+//  if Assigned(Parent) and (Parent is TForm) and Assigned(ParentForm) then FreeAndNil(ParentForm);
+// better:
+  Action := caFree;
+end;
+
+procedure FormSize(a_Form: TForm;
+            RelExtX: Double = 0.6;
+            RelExtY: Double = 0.6;
+            RelExtX_L: Double = 0.0;     // define left   edge as centered with this ratio
+            RelExtY_B: Double = 0.0);    // define bottom edge as centered with this ratio
+// centered to the WorkArea
+// Modifications:
+// 30.10.08 P.W: additional parameters: RelExt_L(eft)/_B(ottom):
+//   used to set the bottom left corner to a position same as with a call where the first two parameter equal these:
+//   used by UfrmErrBox when changing between "Detailed and non detailed" form size:
+//       detailed: FormSize(Self, 0.7, 0.9, 0.9, 0.9);
+//   non detailed: FormSize(Self, 0.5, 0.3, 0.9, 0.9);
+//   this ensures both screens have the same left bottom corners (as centered form 0.9 x 0.9)
+var
+  BR : TRect;
+begin
+//  aForm.Position := poMainFormCenter; // poWorkAreaCenter (not defined)
+//  aForm.Width  := Round(RelExtX * Application.MainForm.Width);
+//  aForm.Height := Round(RelExtY * Application.MainForm.Height);
+{
+  aForm.Width  := Round(RelExtX * Screen.WorkAreaWidth);
+  aForm.Height := Round(RelExtY * Screen.WorkAreaHeight);
+
+  if RelExtX_L < 0.001 then RelExtX_L := RelExtX;
+  if RelExtY_B < 0.001 then RelExtY_B := RelExtY;
+  aForm.Left   := Round( 0.5 * (1 - RelExtX_L)       * Screen.WorkAreaWidth);
+  aForm.Top    := Round((0.5 * (1 - RelExtY_B) + (RelExtY_B-RelExtY)) * Screen.WorkAreaHeight);
+}
+
+  if RelExtX_L < 0.001 then RelExtX_L := RelExtX;
+  if RelExtY_B < 0.001 then RelExtY_B := RelExtY;
+  BR.Left   := Round( 0.5 * (1 - RelExtX_L)       * Screen.WorkAreaWidth);
+  BR.Top    := Round((0.5 * (1 - RelExtY_B) + (RelExtY_B-RelExtY)) * Screen.WorkAreaHeight);
+  BR.Right  := BR.Left + Round(RelExtX * Screen.WorkAreaWidth);
+  BR.Bottom := BR.Top  + Round(RelExtY * Screen.WorkAreaHeight);
+  a_Form.BoundsRect := BR;
+end;
+
+function FormCreate(aTitle: String;
+    RelExtX: Double = 0.6;
+    RelExtY: Double = 0.6): TForm;
+// centered to the WorkArea
+begin
+  Result:= TForm.Create(nil);
+  Result.Parent := nil;
+  Result.Caption := aTitle;
+  FormSize(Result, RelExtX, RelExtY);
+end;
+
+procedure ShowFileContent(FName, Title: String; ModalFlg:Boolean=True);
+// 04.05.04 P.W
+// used by UTKnApp.pas Function TMKNApp.DoSelectMacro
+// Please use in future: PrinterGlb.pas ViewTextFile
+var
+  aForm : TForm;
+  aMemo : TMemoKeyPress;
+begin
+  aForm := FormCreate(Title);
+    aMemo := TMemoKeyPress.Create(aForm);
+    aMemo.Parent := aForm;
+    aMemo.Align  := alClient;
+    aMemo.ScrollBars := ssBoth;
+    aMemo.Font.Charset := DEFAULT_CHARSET;
+    aMemo.Font.Name := 'Courier New';
+    aMemo.Font.Style := [fsBold];
+
+    aMemo.Font.Height := (3*aMemo.Font.Height) div 2;
+    aMemo.ReadOnly := True;
+    if FileExists(FName)
+      then aMemo.Lines.LoadFromFile(FName)
+      else aMemo.Lines.Append(Format(TraS('File not found:"%s"!'), [FName]));
+    //aMemo.Lines[0] := Format('MemUsed: %d; MemCount: %d', [AllocMemSize, AllocMemCount]);
+    aMemo.OnKeyPress := aMemo.MemoKeyPress;
+  if ModalFlg then
+  begin
+    aForm.ShowModal;
+    aForm.Free;
+  end else
+  begin     // 29.08.06 P.W
+    aMemo.ParentForm := aForm;
+    aForm.OnClose    := aMemo.FormClose;     // for clean up at close
+    aForm.FormStyle  := fsStayOnTop;
+    aForm.Show;
+  end;
+end;
+
+Type
+  THelpValid = class
+    Combo : TComboBox;
+    Ok    : TButton;
+    Valid : THelpValidator;
+    constructor create(aCombo: TComboBox; aOk: TButton; aValid : THelpValidator);
+    destructor  Destroy;   override;
+    procedure OnChange(Sender: TObject);
+  end;
+
+constructor THelpValid.create(aCombo: TComboBox; aOk: TButton; aValid : THelpValidator);
+begin
+  Combo := aCombo;
+  Ok    := aOk;
+  Valid := aValid;
+end;
+destructor THelpValid.Destroy;
+begin
+  Combo := nil;
+  Ok    := nil;
+  Valid := nil;
+  inherited Destroy;
+end;
+procedure THelpValid.OnChange(Sender: TObject);
+begin
+  if Assigned(Valid)
+  then Ok.Enabled := Valid(Combo.Text)
+  else Ok.Enabled := (Combo.Text <> '');
+end;
+
+
+function SelectBox(FName, Title, DefaultSelection: String; aValid:THelpValidator=nil): String;
+// form with Combobox, Ok and Escape button
+// FName serves to fill the items of combobox from file if FName is not empty string
+const
+  df = 5;
+//procedure TfrmMain.ComboBox1Change(Sender: TObject);
+//begin
+//
+//end;
+
+var
+  aForm  : TForm;
+  aCombo : TComboBox;
+  aOk    : TButton;
+  aEsc   : TButton;
+  aRem   : TButton;   // allows remove of entries
+  FontHt : Integer;
+  BtnHt  : Integer;
+  aHelpValid  : THelpValid;
+begin
+  FontHt := (3 * DefaultTextHeight) div 2;
+  aForm := FormCreate(Title);
+    aCombo := TComboBox.Create(aForm);
+    aCombo.Parent := aForm;
+  BtnHt := aCombo.Height;
+    aCombo.Font.Name := 'Arial';
+    aCombo.Font.Height := FontHt;
+    aCombo.Align := alTop;
+//    aCombo.Width:= aForm.ClientWidth;
+    aCombo.Font.Style  := [fsBold];
+    aCombo.Text := DefaultSelection;
+    aCombo.Sorted := True;
+    aCombo.CharCase := ecUpperCase;
+    if FileExists(FName) then
+    begin
+      aCombo.Items.LoadFromFile(FName);
+    end;
+  aForm.Top := aForm.Top + aForm.Height - 5 * BtnHt;  // 26.07.06 P.W
+  aForm.Height :=  5 * BtnHt;
+  aForm.Width  := 12 * BtnHt;
+
+    aOk:= TButton.Create(aForm);
+    aOk.Parent      := aForm;
+    aok.Left        := df;
+    aOk.Top         := aForm.ClientHeight - aOk.Height - df;
+    aOk.ModalResult := mrOk;
+    aOk.Caption     := TraS('Ok');
+    aOk.Default     := True;
+
+    aEsc:= TButton.Create(aForm);
+    aEsc.Parent      := aForm;
+    aEsc.Left        := aok.Left + aOk.Width + df;
+    aEsc.Top         := aOk.Top;
+    aEsc.ModalResult := mrCancel;
+    aEsc.Caption     := TraS('Escape');
+    aEsc.Cancel      := True;
+
+    aRem:= TButton.Create(aForm);
+    aRem.Parent      := aForm;
+    aRem.Left        := aForm.ClientWidth - (aRem.Width + df);
+    aRem.Top         := aOk.Top;
+    aRem.ModalResult := mrRetry;  // used to remove item
+    aRem.Caption     := TraS('Remove');
+
+    aHelpValid := THelpValid.create(aCombo, aOk, aValid);
+    aCombo.OnChange := aHelpValid.OnChange;      // disables Ok button when Combo.Text is empty
+  repeat
+    aForm.ShowModal;
+    if (aForm.ModalResult = mrRetry) and (aCombo.ItemIndex >= 0) then
+    begin     // remove item
+      aCombo.Items.Delete(aCombo.ItemIndex);
+      aCombo.Items.SaveToFile(FName);
+    end;
+  until aForm.ModalResult <> mrRetry;
+
+  if aForm.ModalResult = mrOk then
+  begin
+    if (aCombo.ItemIndex >= 0) and (aCombo.ItemIndex < aCombo.Items.Count)
+      then Result := aCombo.Items[aCombo.ItemIndex]
+      else Result := aCombo.Text;
+  end else
+  begin
+//    Result := DefaultSelection;
+    Result := '';
+  end;
+  if (Result <> '') and (aCombo.Items.IndexOf(Result) < 0) then
+  if (aCombo.Items.Count < 15) then
+  begin
+    aCombo.Items.Append(Result);
+    aCombo.Items.SaveToFile(FName);
+  end;
+
+  FreeAndNil(aHelpValid);
+  FreeAndNil(aForm);
+end;
+
+procedure RegisterOkButtons(Num: Integer); //05.05.04 P.W
+// called by THaloWin.pas Procedure TGenButtonManager.Show
+begin
+  ClearGlbs;
+  GetViewSettings(PaneViewPort);
+  OkButtonCount := Num;
+//  ShowMessageFmt('RegisterOkButtons', []);
+end;
+
+procedure RegisterOkButton(ButtonNum: Integer; EnabledFlg: Boolean); //05.05.04 P.W
+// called by THaloWin.pas Procedure TButtonDT.Show
+begin
+  If inRange(ButtonNum, 1, MaxButtons) then
+  begin
+    OkButtonViewPorts [ButtonNum] := G0_LastCoord;
+    CheckViewPortSortOrder(OkButtonViewPorts [ButtonNum]);
+    OkButtonEnabledArr[ButtonNum] := EnabledFlg;
+//    ShowMessageFmt('RegisterOkButton Num:%d, Enabled:%d',
+  //    [ButtonNum, Word(EnabledFlg)]);
+  end;
+end;
+
+function  GetOkButtonDown(Reset: Boolean = True): Integer;
+// 05.05.04 P.W
+// called by THaloWin.pas
+// called by TKeyApp.pas FUNCTION TApp.KeyMouseHandler
+begin
+  Result := OkButtonDown;
+  If Reset then
+    OkButtonDown := 0;
+end;
+
+function  IsAnyPaneRegistered: Boolean;
+begin
+  IsAnyPaneRegistered := PaneActive;
+end;
+
+procedure OptScrollWidthX(var LB: TListBox; ArrowTxt:String='');
+// created: 11.04.05 P.W
+// Purpose: support horizontal scrollbar
+var
+  I, wmax: Integer;
+begin
+  wmax := 0;
+  LB.Canvas.Font := LB.Font;   // !
+  for I := 0 to LB.Items.Count -1 do
+    wmax := max(wmax,  LB.Canvas.TextWidth(LB.items[I]));
+  wmax := wmax + LB.Canvas.TextWidth(ArrowTxt);
+
+  LB.ScrollWidth := max(LB.ScrollWidth, wmax+1);      // Scrollwidth in pixels
+end;
+
+
+{ TDelphiEasyListBox }
+
+
+function TDelphiEasyListBox.AddBtn(_Caption: String;
+  _ModalResult: TModalResult; _Result: Integer = 0; _Hint: String=''): Integer;
+// created 23.07.04 P.W
+// Modifications
+// 25.03.08 P.W set button width
+begin
+  If NumAddBtn < MaxAddBtn then
+  begin
+    Result := NumAddBtn;  // index of new button
+    Inc(NumAddBtn);
+    With AddBtnArr[NumAddBtn-1] do
+    begin
+      btnAdd:= TButton.Create(pnlButtons);
+      btnAdd.Parent  := pnlButtons;
+      btnAdd.Left    := btnOk.Left + ((btnDx div 2) + btnOk.Width) * NumAddBtn;
+      btnAdd.Width   := btnOk.Width;   // 25.03.08 P.W
+
+      btnCancel.Left := btnAdd.Left+ ((btnDx div 2) + btnOk.Width);
+      pnlButtons.Constraints.MinWidth := btnCancel.Left + btnCancel.Width+(btnDx div 2);   // 26.07.06 P.W
+
+      btnAdd.Top     := btnOk.Top;
+      btnAdd.Default := False;
+      btnAdd.Cancel  := False;
+      btnAdd.Caption := _Caption;
+      btnAdd.OnClick := btnAddClick;
+      btnAdd.Hint    := _Hint;
+      
+      aModalResult := _ModalResult;
+      aResult      := _Result;
+      if aResult = AddBtnDelResult then     // 25.03.08 P.W
+        ButtonNr_Del := NumAddBtn-1;
+      if aResult = AddBtnInsResult then     // 25.03.08 P.W
+        ButtonNr_Ins := NumAddBtn-1;
+      if aResult = AddBtnF2_Result then     // 25.03.08 P.W
+        ButtonNr_F2 := NumAddBtn-1;
+    end;
+  end else
+  begin
+    Result := -1;
+  end;
+end;
+
+function  TDelphiEasyListBox.ArrowText(Selected: Boolean): String;
+begin
+  if ArrowSelected then
+  begin
+    if Selected then
+      Result := '> ' else
+      Result := '  ';
+  end else
+    Result := '';
+end;
+
+procedure TDelphiEasyListBox.OptScrollWidth;
+// created: 11.04.05 P.W
+// Purpose: support horizontal scrollbar
+// 25.03.08 P.W keep center position when enlarged
+const
+  MinFact = 1.05;
+var
+  DCH, DCW, dw, dh : Integer;
+begin
+  OptScrollWidthX(TListBox(Self), ArrowText(True));
+
+  // reduce size 26.07.06 P.W:
+  DCW := aForm.ClientWidth;
+  dw  := aForm.Width - DCW;  // difference between Form and Client Width
+  aForm.ClientWidth := min(Screen.WorkAreaWidth -dw, // "aForm.ClientWidth" -> "Screen.WorkAreaWidth -dw":  25.03.08 P.W
+    Round(MinFact * (ScrollWidth)) +8);  // +8:  minimal +4 to avoid scrollbar if MinFact is 1.0
+  DCW := DCW - aForm.ClientWidth;
+  if DCW < 0 then                           // 25.03.08 P.W
+    aForm.Left := aForm.Left + (DCW div 2);
+
+  DCH := aForm.ClientHeight;
+  dh  := aForm.Height - DCH;  // difference between Form and Client Height
+  aForm.ClientHeight:= min(Screen.WorkAreaHeight -dh,  // "aForm.ClientHeight" -> "Screen.WorkAreaHeight -dh":  25.03.08 P.W
+    Round(MinFact * (Count+1)*ItemHeight) +pnlButtons.Height);
+  DCH := DCH - aForm.ClientHeight;
+  if DCH > 0 then
+  begin
+    if not PreferTop then
+      aForm.Top := aForm.Top + DCH;   // smaller: keep bottom pos
+  end else                                   // else: 25.03.08 P.W
+  begin
+    aForm.Top := aForm.Top + (DCH div 2);    // larger : keep Center
+  end;
+end;
+
+procedure TDelphiEasyListBox.AddColorPattern(_MyCols: TDisplColors; S: AnsiString);
+// 25.03.08 P.W
+// Ignores _MyCols.P
+// entry with S = '' as default color
+var
+  Len : Integer;
+begin
+//  ShowMessage('TDelphiEasyListBox.AddColorPattern is missing');
+{
+  I:=1;
+  While (I<=MaxColorPattern-1) And (MyCols[I].P<>NIL) Do
+    Inc(I);
+  MyCols[I]:=_MyCols;
+}
+  Len := Length(MyCols);
+  Inc(Len);
+  SetLength(MyCols, Len);
+  SetLength(MyCols_PS, Len);
+  MyCols   [Len -1]   := _MyCols;
+  MyCols_PS[Len -1]   := S;
+  MyCols   [Len -1].P := nil;
+  if (S = '') then
+  begin
+    DefaultColDefined := True;
+    DefaultCol := MyCols   [Len -1];
+    if (self.Style <> lbStandard) then
+      Self.Color := Graph0Palette[_MyCols.Back].DelphiColor;
+  end;
+end;
+
+procedure TDelphiEasyListBox.UpdateEnabledStates;
+// 25.03.08 P.W
+// called by ListBoxDrawItem
+var
+  Idx : Integer;
+begin
+  if UpdateEnabledStatesRuns then EXIT;
+  UpdateEnabledStatesRuns := True;
+  try
+    if (ButtonNr_Del >= 0) and Assigned(AddBtnArr[ButtonNr_Del].btnAdd) then
+    begin
+      // force behind headlines:
+      Idx := Min(Items.Count -1 , Max(ItemIndex, AllowDelete));
+      if ItemIndex <> Idx then
+      begin
+        ItemIndex := Idx;  // this iterates endless when not protected by UpdateEnabledStatesRuns!
+        Invalidate;
+      end;
+
+      // set enable
+      AddBtnArr[ButtonNr_Del].btnAdd.Enabled :=
+        (AllowDelete >= 0) and (ItemIndex >= AllowDelete);
+    end;
+  finally
+    UpdateEnabledStatesRuns := False;
+  end;
+end;
+
+
+procedure TDelphiEasyListBox.ListBoxDrawItem(Control: TWinControl; Index: Integer; Rect:TRect;State: TOwnerDrawState);
+// 25.03.08 P.W
+// support colored Lines as in UtAna.pas Function   TGenAnalysis.DoShowTrendList
+// Modifications:
+// 01.09.08 P.W use TCanvas_Plus  TextOut_W
+
+{
+  TOwnerDrawState = set of (odSelected, odGrayed, odDisabled, odChecked,
+    odFocused, odDefault, odHotLight, odInactive, odNoAccel, odNoFocusRect,
+    odReserved1, odReserved2, odComboBoxEdit);
+Value	          Meaning
+
+odSelected	    The item is selected.
+odGrayed	      The item should appear grayed.
+odDisabled	    The item is disabled.
+odChecked	      The item should appear checked. (This does not apply to all objects)
+odFocused	      Keyboard input is directed to the item.
+odDefault	      The item is the default item (This does not apply to all objects)
+odHotLight	    The item is hot-lighted because under the mouse (only if the operating system supports hot-lighting)
+odInactive	    The item and its associated menu are inactive (only under Windows 98 or later)
+
+odNoAccel	      Any underline of an accelerator character should be skipped when drawing the control (only under Windows 2000 or later)
+odNoFocusRect	  Do not display visual cues that indicate focus (only under Windows 2000 or later)
+odReserved1	    Not currently used.
+odReserved2	    Not currently used.
+odComboBoxEdit	The drawing takes place in the edit box of a combo box control.
+}
+
+  procedure SetMyColors(Cv: TCanvas; S: AnsiString; Selected: Boolean);
+    function SearchMyCol(out Found: Boolean): TDisplColors;
+    var
+      Len, I : Integer;
+    begin
+      Found := True;
+      Len := Length(MyCols_PS);
+      for I := 0 to Len -1 do
+        If (S = MyCols_Ps[I]) then
+        begin
+          Result := MyCols[I];
+          Exit;
+        end;
+      Found := DefaultColDefined;
+      if DefaultColDefined then
+        Result := DefaultCol
+      else
+        Result := MyCols[0];
+    end;
+
+    procedure UseWindowsColors;
+    begin
+      if Selected then
+      begin
+        Cv.Brush.Color := clHighlight;
+        Cv.Font. Color := clHighlightText;
+      end else
+      begin
+        Cv.Brush.Color := Self.Color;//clWhite;   // in some cases light yellow (SerialPortXCT.pas)
+        Cv.Font. Color := clBlack;
+      end;
+    end;
+
+  var
+    MC : TDisplColors;
+    Found : Boolean;
+  begin
+    if Length(MyCols) = 0 then
+    begin // Default colors
+      UseWindowsColors;
+    end else
+    begin
+      MC := SearchMyCol(Found);
+      if Found then
+      begin
+        if Selected then
+        begin
+          Cv.Brush.Color := Graph0Palette[MC.HBack].DelphiColor;
+          Cv.Font. Color := Graph0Palette[MC.HVor ].DelphiColor;
+        end else
+        begin
+          Cv.Brush.Color := Graph0Palette[MC.Back ].DelphiColor;
+          Cv.Font. Color := Graph0Palette[MC.Vor  ].DelphiColor;
+        end;
+      end else
+      begin
+        UseWindowsColors;
+      end;
+    end;
+  end;
+
+var
+  Offset: Integer;      { text offset width }
+  Lb : TListBox;
+  Cv : TCanvas;
+  Selected : Boolean;
+  Txt: String; // 01.09.08 P.W
+begin
+
+  UpdateEnabledStates;
+
+  if (Control is TListBox) then
+  begin
+    //-----------------------------------
+    // use for abbreviation:
+      Lb := TListBox(Control);
+      Cv := Lb.Canvas;
+    //-----------------------------------
+
+    Selected := (odSelected in State);
+    SetMyColors(Cv, Lb.Items[Index], Selected);
+
+    Cv.FillRect(Rect);       { clear the rectangle }
+    Offset := 2;          { provide default offset }
+
+    // Cv.TextOut(Rect.Left + Offset, Rect.Top+Offset, ArrowText(Selected) + Lb.Items[Index])  { display the text } // u.: 01.09.08 P.W
+    // s.: 01.09.08 P.W :
+    if FVirtualData
+      then Txt := VirtualList[Index]   // get correct text under non unicode locale = Japan
+      else Txt := Lb.Items[Index];
+    TCanvas_Plus(Cv).TextOut_W(Rect.Left + Offset, Rect.Top+Offset, ArrowText(Selected) + Txt)  { display the text }
+  end;
+end;
+
+procedure TDelphiEasyListBox.ListBoxResize(Sender: TObject);
+// 25.03.08 P.W
+begin
+  Invalidate;  // is missing when long text scrolled to left edge!
+end;
+
+procedure TDelphiEasyListBox.CreatePopupMenu;
+// 25.03.08 P.W
+var
+  index: Integer;
+  NewItem: TMenuItem;
+begin
+  for index := 0 to 0 do
+  begin
+    NewItem := TMenuItem.Create(aPop); // create the new item
+    aPop.Items.Add(NewItem);// add it to the Popupmenu
+//  NewItem.Caption := 'Menu Item ' + IntToStr(index);
+    NewItem.Caption := TraS('Copy all'); 
+    NewItem.ShortCut:= ShortCut(Ord('C'), [ssCtrl]);
+    NewItem.Tag := index;
+    NewItem.OnClick := PopupMenuItemsClick;// assign it an event handler
+  end;
+end;
+
+procedure TDelphiEasyListBox.PopupMenuItemsClick(Sender: TObject);
+// 25.03.08 P.W
+begin
+  with Sender as TMenuItem do
+  begin
+    case Tag of
+      0:  begin
+            //ShowMessage('first item clicked');
+            ToClipboard(Self.aForm.Caption);
+            if FVirtualData then // if: 01.09.08 P.W
+              AppendToClipboard(Self.VirtualList.Text)
+            else
+              AppendToClipboard(Self.Items.Text);
+          end;
+      1:  ShowMessage('second item clicked');
+      2:  ShowMessage('third item clicked');
+      3:  ShowMessage('fourth item clicked');
+    end;
+  end;
+end;
+
+constructor TDelphiEasyListBox.Init(aTitle: String; aNumLines: Integer; aList:TStringList=nil; VirtualData: Boolean=False);
+  // parameter aNumLines is not used (only for compatibility)
+// used by
+// 1) UtFilter.pas Function SelectFiltInfo
+// 2) UTParam.pas  Procedure TGenParams.ShowList
+// Modifications:
+// 01.09.08 P.W: new parameter VirtualData: Boolean=False
+begin
+  AutoComplete := True; // 17.03.08 P.W
+  AllowDelete  := -1;   // 25.03.08 P.W
+  ButtonNr_Del := -1;   // 25.03.08 P.W
+  ButtonNr_Ins := -1;   // 25.03.08 P.W
+  ButtonNr_F2  := -1;   // 25.03.08 P.W
+
+  btnDx := 20;  // space between Buttons
+  btnDy := 10;
+  NumAddBtn := 0;
+  // --- Form ---
+  aForm := FormCreate(aTitle);
+  aForm.ModalResult := mrNone;
+
+ // only for use by non modal use!
+   aForm.OnCloseQuery := FormCloseQuery;  // Close leads to same as btnCancelClick
+
+  inherited Create(aForm);  // to here: 01.09.08 P.W
+  Parent := aForm;          // to here: 01.09.08 P.W
+
+  self.OnKeyPress := self.KeyPress;
+
+  self.Style      := lbOwnerDrawFixed;    // 25.03.08 P.W
+  self.OnDrawItem := ListBoxDrawItem;     // 25.03.08 P.W
+  self.OnResize   := ListBoxResize;       // 25.03.08 P.W
+  // lbOwnerDrawFixed needs adapt of ItemHeight also (see below)
+
+  // --- ListBox ---
+  //inherited Create(aForm);  // to above: 01.09.08 P.W
+  //Parent := aForm;          // to above: 01.09.08 P.W
+
+  FVirtualData := VirtualData; // 01.09.08 P.W
+  if VirtualData then          // 01.09.08 P.W
+  begin
+    // look out! Virtual list is used parallel to self.Items!
+    // move delete and sort is not supported!
+    VirtualList := TStringList.Create;  // only use: draw correct content by ListBoxDrawItem!
+  end;
+
+  aForm.ShowHint := True;  // 25.03.08 P.W
+
+  // --- PopupMenu ---
+  aPop := TPopupMenu.Create(Self);
+  CreatePopupMenu;
+  PopupMenu := aPop;
+
+  // --- pnlButtons ---
+  pnlButtons := TPanel.Create(aForm);
+  pnlButtons.Parent := aForm;
+  pnlButtons.Align  := alBottom;
+
+
+  // --- Button Ok ---
+  btnOk := TButton.Create(pnlButtons);
+  btnOk.Parent  := pnlButtons;
+  btnOk.Width := Round(1.4 * btnOk.Width);
+  btnOk.Left := btnDx div 2;
+  btnOk.Top  := btnDy div 2;
+  btnOk.Default := True;
+  btnOk.Caption := TraS('Ok');
+  btnOk.OnClick := btnOkClick;
+  btnOk.Default := True;  // 16.02.05 P.W
+
+  // --- Button Cancel ---
+  btnCancel:= TButton.Create(pnlButtons);
+  btnCancel.Parent  := pnlButtons;
+  btnCancel.Width   := btnOk.Width;
+  btnCancel.Left    := btnOk.Left + (btnDx div 2) + btnOk.Width;
+  btnCancel.Top     := btnOk.Top;
+  btnCancel.Cancel  := True;
+  btnCancel.Caption := TraS('Escape');
+  btnCancel.OnClick := btnCancelClick;
+
+  // --- pnlButtons continued ---
+  pnlButtons.Height := BtnOk.Height + 10;
+
+  pnlButtons.Constraints.MinWidth := btnCancel.Left + btnCancel.Width;  // 26.07.06 P.W
+  pnlButtons.Constraints.MinHeight:= pnlButtons.Height;                 // 26.07.06 P.W
+
+
+  // --- ListBox contiued ---
+  Align := alClient;
+  OnDblClick := ListBoxDblClick;
+  // -- ListBox Font ---
+  Font.Charset := DEFAULT_CHARSET;
+//  Font.Name := 'System';
+//  Font.Style := [fsBold];
+//  Font.Name := 'FixedSys';
+//  Font.Style := [];
+
+  Font.Name := 'Courier New';
+  Font.Style := [fsBold];
+  Font.Size := (DefaultTextHeight*3) div 4;
+  ItemHeight := Round(1.3 * Abs(Font.Height)); // 25.03.08 P.W
+
+  // --- others ---
+  aResult := 0;
+  OkClicked := False;
+
+  if Assigned(aList) then   // 16.02.05 P.W
+  begin
+    Items.Assign(aList);
+  end;
+
+  OnKeyDown := MyDefaultOnKeyDown; // Ctrl C: Copy to ClipBoard // 11.02.08 P.W
+  OnMouseWheel := MyMouseWheel;    // 19.06.09 P.W
+end;
+
+destructor TDelphiEasyListBox.Done;
+begin
+  inherited Destroy;  // before aForm.free!
+  aForm.Free;
+end;
+
+destructor TDelphiEasyListBox.Destroy;
+begin
+  // don't call Done!
+  inherited Destroy;  // before aForm.free!
+  aForm.Free;
+end;
+
+function TDelphiEasyListBox.ExeDialog(SelectIndex: Integer = 0): Integer;
+// Returns Zero in case of "ESCAPE",
+// Returns 1 or higher is something is selected
+//
+// per default select first Item (Index = 0)
+// used by UtFilter.pas
+
+// Look out: SelectIndex counts starting with 0
+//     BUT result starts with 1 for first item!! (for compatibility ...)
+begin
+  if SelectIndex < -1 then SelectIndex := -1;  // select nothing;
+  if (Items.Count > SelectIndex)
+    then ItemIndex := SelectIndex;
+//    Selected[0] := True;
+  OptScrollWidth;  // 11.04.05 P.W
+  aForm.ActiveControl := Self;      // 25.03.08 P.W
+  ModalResult := aForm.ShowModal;
+  Result := aResult;   // 1 for first item ...!
+end;
+
+procedure TDelphiEasyListBox.InsItem(Entry: String);
+begin
+  if FVirtualData then VirtualList.Append(Entry); // 01.09.08 P.W
+  Items.Append(Entry);
+end;
+
+procedure TDelphiEasyListBox.InsItem(Entry: String; _MyCols: TDisplColors);
+begin
+  InsItem(Entry);
+  AddColorPattern(_MyCols, Entry);
+end;
+
+procedure TDelphiEasyListBox.InsItem(Entry: String; _MyCols: TDisplColors; UseMyCols: Boolean);
+begin
+  InsItem(Entry);
+  if UseMyCols then
+    AddColorPattern(_MyCols, Entry);
+end;
+
+procedure TDelphiEasyListBox.InsItemAtIndex(S: String; Index: Integer);
+// Index starts from 0
+begin
+  if Index < 0 then exit;
+  While Index > Items.Count -1 do Items.Append('');
+  Items[Index] := S;
+end;
+
+function TDelphiEasyListBox.StrList_At(Indx: Integer): String;
+begin
+  Result := Items[Indx];
+end;
+
+function  TDelphiEasyListBox.CheckDeleteItem(aRes: Integer): Integer;
+// 25.03.08 P.W
+var
+  Idx : Integer;
+begin
+  Idx := ItemIndex;
+  if (aRes = AddBtnDelResult) and (Idx >= AllowDelete) and (AllowDelete >=0 ) then
+  begin
+    Items.Delete(Idx);
+    Result := Idx;
+    ItemIndex := Min(Idx, Count -1);
+    aForm.ActiveControl := Self;
+  end else
+  begin
+    Result := -1;
+  end;
+end;
+
+function  TDelphiEasyListBox.CheckInsertItem(aRes: Integer): Integer;
+// 25.03.08 P.W
+var
+  Idx : Integer;
+  Btn : TButton;
+begin
+  Idx := ItemIndex;
+  if (aRes = AddBtnInsResult) and (ButtonNr_Ins >= 0) and (Assigned(AddBtnArr[ButtonNr_Ins].btnAdd) ) then
+  begin
+    Btn := AddBtnArr[ButtonNr_Ins].btnAdd;
+    if Assigned(Btn.OnClick) then
+      Btn.OnClick(Btn);
+    Result := Idx;
+    aForm.ActiveControl := Self;
+  end else
+  begin
+    Result := -1;
+  end;
+end;
+
+function  TDelphiEasyListBox.CheckF2Item(aRes: Integer): Integer;
+// 25.03.08 P.W
+var
+  Idx : Integer;
+  Btn : TButton;
+begin
+  Idx := ItemIndex;
+  if (aRes = AddBtnF2_Result) and (ButtonNr_F2 >= 0) and (Assigned(AddBtnArr[ButtonNr_F2].btnAdd) ) then
+  begin
+    Btn := AddBtnArr[ButtonNr_F2].btnAdd;
+    if Assigned(Btn.OnClick) then
+      Btn.OnClick(Btn);
+    Result := Idx;
+    aForm.ActiveControl := Self;
+  end else
+  begin
+    Result := -1;
+  end;
+end;
+
+procedure TDelphiEasyListBox.ListBoxDblClick(Sender: TObject);
+var
+  I : Integer;
+begin
+  aResult := 0;
+  for i := 0 to Items.Count -1 do
+    if Selected[I] and (aResult = 0) then aResult := I+1;
+  aForm.ModalResult := mrOk;
+  aForm.ActiveControl := Self;      // 25.03.08 P.W
+end;
+
+procedure TDelphiEasyListBox.MyDefaultOnKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+// 27.06.05 P.W       for use by UtParam "Change F2"
+begin
+  case Key of
+    VK_F2:         // 25.03.08 P.W
+      CheckF2Item    (AddBtnF2_Result);
+    VK_DELETE:     // 25.03.08 P.W
+      CheckDeleteItem(AddBtnDelResult);
+    VK_INSERT:     // 25.03.08 P.W
+      CheckInsertItem(AddBtnInsResult);
+//  Ord('C'), Ord('c'):
+//    if (ssCtrl in Shift) then
+//    begin
+//      ToClipboard(Self.aForm.Caption);
+//      AppendToClipboard(Self.Items.Text);
+//    end;
+  end;
+end;
+
+procedure TDelphiEasyListBox.MyOnKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+// 27.06.05 P.W       for use by UtParam "Change F2"
+begin
+  case Key of
+    VK_F2:
+      ListBoxDblClick(Sender);
+    else
+      MyDefaultOnKeyDown(Sender, Key, Shift);
+  end;
+end;
+
+procedure TDelphiEasyListBox.KeyPress(Sender: TObject; var Key: Char);
+// Modifications
+// 27.07.05 P.W Parameter dialog Number key pressed: jump into change mode
+// 17.03.08 P.W Support Number key only when ChangeF2 is true;
+// 25.03.08 P.W Support CheckDeleteItem
+var
+  KeyF2 : Word;
+begin
+//  beep;
+  if ChangeF2 and (Key in ['0' .. '9', '-', '.']) then  // ChangeF2: 17.03.08 P.W
+  begin
+    F2_Taste_Char := Key;
+    if Assigned(Self.OnKeyDown) then
+    begin
+      KeyF2 := VK_F2;
+      OnKeyDown(Sender, KeyF2, []);
+    end;
+  end else
+  begin
+    F2_Taste_Char := #0;
+  end
+end;
+
+procedure TDelphiEasyListBox.MyMouseWheel(Sender: TObject;
+  Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint;
+  var Handled: Boolean);
+// 19.06.09 P.W
+var
+  NumDelta : Integer;
+begin
+  NumDelta := WheelDelta div WHEEL_DELTA;
+  Handled := True;
+  if NumDelta > 0 then
+  begin
+    Perform(WM_KEYDOWN, VK_UP,   1);
+    Perform(WM_KEYUP,   VK_UP,   1);
+  end else
+  if NumDelta < 0 then
+  begin
+    Perform(WM_KEYDOWN, VK_DOWN, 1);
+    Perform(WM_KEYUP,   VK_DOWN, 1);
+  end;
+end;
+
+procedure TDelphiEasyListBox.SetChangeF2(const Value: Boolean);
+// 17.03.08 P.W
+begin
+  FChangeF2 := Value;
+end;
+
+procedure TDelphiEasyListBox.SetAllowDelete(const Value: Integer);
+// 25.03.08 P.W
+begin
+  FAllowDelete := Value;
+end;
+
+procedure TDelphiEasyListBox.btnCancelClick(Sender: TObject);
+begin
+  aResult := 0;
+  aForm.ModalResult := mrCancel;
+end;
+
+procedure TDelphiEasyListBox.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+begin
+  if (fsModal in aForm.FormState) then
+  begin
+    CanClose := True;
+  end else
+  begin
+    CanClose := False;
+    btnCancelClick(Sender);
+  end;
+end;
+
+procedure TDelphiEasyListBox.btnAddClick(Sender: TObject);
+var
+  I, BtnNum : Integer;
+begin
+  aResult := 0;
+
+  // find the button:
+  btnNum := -1;
+  for I := 0 to NumAddBtn -1 do
+    if (btnNum = -1) then
+      If (Sender = AddBtnArr[I].btnAdd) then BtnNum := I;
+
+//  ShowMessageFmt('btnAddClick %d', [BtnNum]);
+  if (btnNum >= 0) then
+  begin
+    aResult := AddBtnArr[btnNum].aResult;
+    CheckDeleteItem(aResult); // 25.03.08 P.W
+    if (aResult = -1) then
+      ListBoxDblClick(Sender);
+    aForm.ModalResult := AddBtnArr[btnNum].aModalResult;
+  end;
+  aForm.ActiveControl := Self;      // 25.03.08 P.W
+end;
+
+procedure TDelphiEasyListBox.btnOkClick(Sender: TObject);
+begin
+  OkClicked := True;
+  ListBoxDblClick(Sender);
+  aForm.ActiveControl := Self;      // 25.03.08 P.W
+end;
+
+function Test_TDelphiEasyListBox: Integer;
+var
+  EList : TDelphiEasyListBox;
+  Mem0, Mem1, Mem2: Integer;
+begin
+  Mem0 := AllocMemSize;
+  EList := TDelphiEasyListBox.Init('', 20, nil);
+  Mem1 := AllocMemSize;
+  EList.ExeDialog;
+  EList.Done;
+  Mem2 := AllocMemSize;
+  Result := Mem2 - Mem0;
+end;
+procedure Test;
+var
+  dMem : Array[0..15] of Integer;
+begin
+  FillChar(dMem, SizeOf(dMem), #0);
+  dMem[0] := Test_TDelphiEasyListBox;    // first call has dMem > 0 !
+  dMem[1] := Test_TDelphiEasyListBox;
+  dMem[2] := Test_TDelphiEasyListBox;
+  if dMem[0]+dMem[1]+dMem[2]=0 then;
+//  H_alt(1);
+end;
+
+//initialization
+
+//Test;
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  BtnActive   := -1;
+  BtnCount    := 0;
+  FillChar(BtnValidArr, SizeOf(BtnValidArr), #0);
+  FillChar(BtnViewPort, SizeOf(BtnViewPort), #0);
+  FillChar(UseDelphiMouseShift, SizeOf(UseDelphiMouseShift), #0);
+  FillChar(UseDelphiMouseEvent, SizeOf(UseDelphiMouseEvent), #0);
+  UseDelphiEventWaits := False;
+  OutSideClicked  := False;
+  OutSideClickMouseX := -1;
+  OutSideClickMouseY := -1;
+  LMouseDown := False;
+  RMouseDown := False;
+  PaneActive  := False;
+  FillChar(PaneViewPort, SizeOf(PaneViewPort), #0);
+  PaneClickMouseX := -1;
+  PaneClickMouseY := -1;
+  FillChar(PaneWorld, SizeOf(PaneWorld), #0);
+  PaneMouseDownFlg := False;
+  PaneDoubleClicked:= False;
+  ListBoxActive    := False;
+  ListBox_NumHead  := 0;
+  ListBox_Nums     := 0;
+  ListBox_NumDispl := 0;
+  ListBox_ClickLine:= 0;
+  OkButtonCount      := 0;
+  FillChar(OkButtonViewPorts, SizeOf(OkButtonViewPorts), #0);
+  FillChar(OkButtonEnabledArr, SizeOf(OkButtonEnabledArr), #0);
+  OkButtonDown       := 0;
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Initialization part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init); // 03.05.24 P.W
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.
