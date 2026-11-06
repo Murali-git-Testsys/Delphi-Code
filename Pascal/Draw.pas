@@ -1,0 +1,800 @@
+unit Draw;
+// 25.10.04 P.W. PieSlice_B: now left, right. top and down are as assumed by Grap0.pas PieSlice
+// originates from GraphScreenFormR
+
+// ====== not ready: ============
+// GlbClipRegion (Handle) is not freed when program terminates!
+
+// === Modifications:
+//
+// 06.10.04 P.W : procedure function ScrSave uses InvertBlackWhite
+// 25.10.04 P.W.: dc_PieSlice: Top &Bottom, Left & Right inverted
+// 25.10.04 P.W.: dc_Text: use Pointer to AnsiString instead of repeated call with
+//   4 byte portions
+// 24.07.06 P.W dc_line additional ActivateGlbClipRegion to avoid last point of line not clipped
+// 09.07.08 P.W: canvas.textRec replaced by a Unicode version to keep the english ansipage for draw text
+//   TextRect_W
+// 01.09.08 P.W: use TCanvas_Plus from moved location: no longer PrinterGlb.pas but GraphicsExt.pas
+interface
+
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  GraphicsExt,        // 01.09.08 P.W
+  //PrinterGlb,       // s.: 17.07.08 P.W u.: 01.09.08 P.W
+  UMsgDelay, TransX,
+  GlbType, // 01.04.05 P.W for AsciiExpSep and FixSem
+  GraphGlb,           // 06.10.04 P.W
+  GlbPath,
+  Math,
+  Forms,
+  StrUtils,
+  Controls,
+  jpeg,
+  TurboToDelphi,
+  Windows,
+  SysUtils,
+  Classes,
+  Graphics,
+  Dialogs;
+
+type
+  TDrawCmd = (dc_Nothing,
+              dc_MsgMode,
+              dc_LineStyle,
+              dc_PenColor,
+              dc_PenXor,
+              dc_PenNorm,
+              dc_BrushColor,
+              dc_Bar,
+              dc_BarInv,
+              dc_FillRect,
+              dc_Rect,
+              dc_Circle,
+              dc_Ellipse,
+              dc_Line,
+              dc_Pixel,
+              dc_GetPixel,
+              dc_FileNr,
+              dc_Close,
+              dc_UpdateScreen,
+              dc_PieSlice,
+              dc_Text,
+              dc_Move,
+              dc_TextSize,
+              dc_GetImage,
+              dc_PutImage,
+              dc_SetClipRegion,
+              dc_SetFontHeight,
+              dc_GetFontHeight,
+              dc_TextDir);
+
+  TDrawCmdRec = packed Record
+    DrawCmd : TDrawCmd;
+    case Integer of
+      0: (si1, si2, si3, si4, si5 : SmallInt);
+      1: (Ptr0, Ptr1 : Pointer);
+      2: (I0, I1 : Integer);
+      3: (PAStr: ^AnsiString);
+  end;
+
+  TBWMode = (BWUseExpSetting, BWInvert, BWUnchanged);
+
+function GetFormImagePixFmt(aForm: TForm; PixFmt: TPixelFormat): TBitmap;
+procedure ScrSaveNamed(aForm: TForm; aName: String; BWMode:TBWMode=BWUseExpSetting);
+function ScrSave(aForm: TForm; BWMode:TBWMode=BWUseExpSetting): AnsiString;
+function ScrSaveNameMask(aForm: TForm; NameMask: AnsiString; MsgMode:TMsgMode=Msg_Delay; BWMode:TBWMode=BWUseExpSetting): AnsiString;
+procedure SaveBitMapAsAny(aBitMap: TBitMap; aFileName: AnsiString);
+procedure LoadBitMapFromAny(var aBitMap: TBitMap; aFileName: AnsiString);
+
+procedure ChkDelGlbClipRegion;
+procedure ActivateGlbClipRegion(Canvas: TCanvas);
+function CallDrawCmd(Canvas: TCanvas; Const DrawCmdRec: TDrawCmdRec): Pointer;
+procedure TextOutVert(Canvas: TCanvas; DrawTxt: String);
+
+Implementation
+  const Unit_Name = 'Draw'; // 03.05.24 P.W
+
+
+function AskOk(Msg: String): Boolean;
+begin
+  Result :=
+    mrOk =
+    MessageDlgPos(Msg, mtConfirmation,
+      [mbOK, mbCancel], 0, -1, -1);
+end;
+
+function LeadZeros(aInt, MinLen : Integer): String;
+begin
+  Result := IntToStr(AInt);
+  While Length(Result) < MinLen do Result := '0' + Result;
+end;
+
+function GetFormImagePixFmt(aForm: TForm; PixFmt: TPixelFormat): TBitmap;
+// 15.06.04 P.W as copy of TForm.GetFormImage
+// added: Parameter PixFmt because later change
+// disturbes colors
+var
+  Ofs: Integer;
+begin
+  Result := TBitmap.Create;
+  try
+    Result.PixelFormat := PixFmt;  // added 15.06.04 P.W
+    Result.Width  := aForm.ClientWidth;
+    Result.Height := aForm.ClientHeight;
+    Result.Canvas.Brush := aForm.Brush;
+    Result.Canvas.FillRect(aForm.ClientRect);
+    Result.Canvas.Lock;
+    try
+      if GetWindowLong(aForm.Handle, GWL_STYLE) and WS_BORDER <> 0 then
+        Ofs := -1  // Don't draw form border
+      else
+        Ofs := 0;  // There is no border
+      aForm.PaintTo(Result.Canvas.Handle, Ofs, Ofs);
+    finally
+      Result.Canvas.Unlock;
+    end;
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+procedure ScrSaveNamed(aForm: TForm; aName: String; BWMode:TBWMode=BWUseExpSetting);
+// 06.10.04 P.W: Support InvertBlackWhite
+var
+  Bmp : TBitMap;
+begin
+  if not assigned(aForm) then Exit;
+
+  Bmp := GetFormImagePixFmt(aForm, BmpPixFmt);
+  if (ExpImgInvBW and (BWMode = BWUseExpSetting))
+     or (BWMode = BWInvert)
+  then
+    InvertBlackWhite(Bmp);  // 06.10.04 P.W
+  SaveBitMapAsAny(Bmp, aName);
+  Bmp.Free;
+end;
+
+function ScrSave(aForm: TForm; BWMode:TBWMode=BWUseExpSetting): AnsiString;
+begin
+  Result := GetFirstFreeMaskName(ScreenNameMask);
+  ScrSaveNamed(aForm, Result, BWMode);
+end;
+
+function ScrSaveNameMask(aForm: TForm; NameMask: AnsiString; MsgMode:TMsgMode=Msg_Delay; BWMode:TBWMode=BWUseExpSetting): AnsiString;
+// 28.07.06 P.W
+// Name Mask like "C:\XCT\USER\SCR\SC%s.jpg"
+begin
+  if (Pos('%', NameMask) = 0) then NameMask := NameMask + ScreenExpMaskStr; 
+  if not assigned(aForm) then aForm := Screen.ActiveForm;
+  Result := GetFirstFreeMaskName(NameMask);
+  ScrSaveNamed(aForm, Result, BWMode);
+  ShowMessageMode(Format(TraS('Screen saved to file "%s"'), [Result]), MsgMode);
+end;
+
+
+function GetTempFileName(Number: Integer; aExt: String='.BMP'): String;
+begin
+  Result := GetMaskNumberName(XctDir+'Temp\Delphi\GR%s'+aExt, Number, 6);
+  ForceDirectories(ExtractFilePath(Result));
+end;
+
+var
+  TempNumber : Integer = 0;
+
+function GetTempNumber: Integer;
+begin
+  Result := TempNumber;
+end;
+
+function GetNextTempNumber: Integer;
+begin
+  Inc(TempNumber);
+  Result := TempNumber;
+end;
+
+//-----------------------------------------------------------
+function GraphicClassFromExt(Ext: String): TGraphicClass;
+// replaces the private FileFormats of Graphics.pas:
+//  GraphicClass := FileFormats.FindExt(Ext);
+// in procedure TPicture.LoadFromFile
+const
+  MaxGraphicClass = 2;
+  GraphicClasses : Array[1..MaxGraphicClass] of TGraphicClass =
+    (TBitMap,
+//     TIcon,
+//     TMetafile,
+     TJPegImage);
+var
+  I : Integer;
+begin
+  for I := 1 to MaxGraphicClass do
+  begin
+    Result := GraphicClasses[I];
+    If AnsiSameText(Ext, GraphicExtension(Result)) then
+      Exit;
+  end;
+  Result := nil;
+end;
+
+procedure SaveBitMapAsAny(aBitMap: TBitMap; aFileName: AnsiString);
+var
+  OrgExt, Ext: string;
+  NewGraphic: TGraphic;
+  GraphicClass: TGraphicClass;
+begin
+  Ext := ExtractFileExt(aFileName);
+  Delete(Ext, 1, 1);
+  OrgExt := Ext;
+//  GraphicClass := FileFormats.FindExt(Ext);  // in procedure TPicture.LoadFromFile
+  GraphicClass := GraphicClassFromExt(Ext);
+  If not Assigned(GraphicClass) then
+  begin
+    GraphicClass := TJPegImage;
+    Ext := GraphicExtension(GraphicClass);
+    aFileName := ChangeFileExt(aFileName,'')+'.'+Ext;
+    If  AskOk(Format ('Format ".%s" not supported!'+sLineBreak+
+          'Save as "%s"?',[OrgExt, aFileName])) then
+    begin
+      If FileExists(aFileName) then
+      begin
+        If  AskOk(Format ('Overwrite file "%s"?',[aFileName])) then
+        begin
+        end else
+        begin
+          EXIT;
+        end;
+      end;
+    end else
+    begin
+      EXIT;
+    end;
+  end;
+
+  NewGraphic := GraphicClass.Create;
+  try
+//    NewGraphic.OnProgress := Progress;
+    NewGraphic.Assign(aBitMap);
+    ForceDirectories(ExtractFilePath(aFileName));
+    NewGraphic.SaveToFile(aFilename);
+  except
+    NewGraphic.Free;
+    raise;
+  end;
+  NewGraphic.Free;
+end;
+
+procedure LoadBitMapFromAny(var aBitMap: TBitMap; aFileName: AnsiString);
+var
+  APict : TPicture;
+begin
+  APict := TPicture.Create;
+  APict.LoadFromFile(aFileName);
+
+  if not Assigned(aBitMap)
+    then aBitMap := TBitMap.Create;  // 24.06.05 P.W
+    
+  aBitMap.Assign(APict.Graphic);
+  APict.Free;
+end;
+//-----------------------------------------------------------
+
+type
+  TPieRec = Record
+    X1, Y1, X2, Y2, X3, Y3, X4, Y4 : Integer;
+  end;
+var
+  FileNr    : Integer = 0;
+  LineCtr   : Integer = 0;
+  DelayMode : Boolean = False;
+  MsgMode   : Integer = 0;
+
+function CmdMsg(DrawCmdRec: TDrawCmdRec): String;
+begin
+  With DrawCmdRec do
+  begin
+    case DrawCmd of
+      dc_Nothing      : Result := 'dc_Nothing';
+      dc_MsgMode      : Result := 'dc_MsgMode';
+      dc_LineStyle    : Result := 'dc_LineStyle';
+      dc_PenColor     : Result := 'dc_PenColor';
+      dc_PenXor       : Result := 'dc_PenXor';
+      dc_PenNorm      : Result := 'dc_PenNorm';
+      dc_BrushColor   : Result := 'dc_BrushColor';
+ //   dc_BrushMode    : Result := 'dc_BrushColor';
+      dc_Bar          : Result := 'dc_Bar';
+      dc_BarInv       : Result := 'dc_BarInv';
+      dc_FillRect     : Result := 'dc_FillRect';
+      dc_Rect         : Result := 'dc_Rect';
+      dc_Circle       : Result := 'dc_Circle';
+      dc_Ellipse      : Result := 'dc_Ellipse';
+      dc_Line         : Result := 'dc_Line';
+      dc_Pixel        : Result := 'dc_Pixel';
+      dc_GetPixel     : Result := 'dc_GetPixel';
+      dc_FileNr       : Result := 'dc_FileNr';
+      dc_Close        : Result := 'dc_Close';
+      dc_UpdateScreen : Result := 'dc_UpdateScreen';
+      dc_PieSlice     : Result := 'dc_PieSlice_A (XC,YC,Ang1,Ang2)';
+      dc_Text         : Result := 'dc_Text';
+      dc_Move         : Result := 'dc_Move';
+      dc_TextSize     : Result := 'dc_TextSize';
+      dc_GetImage     : Result := 'dc_GetImage';
+      dc_PutImage     : Result := 'dc_PutImage';
+
+      dc_SetClipRegion  : Result := 'dc_SetClipRegion';
+      dc_SetFontHeight   : Result := 'dc_SetFontHeight';
+      dc_GetFontHeight   : Result := 'dc_GetFontHeight';
+      dc_TextDir      : Result := 'dc_TextDir';
+    end;
+    Result:= '"'+Result+'"'+FixSem+' '
+          +IntToStr(si1)+FixSem+' '
+          +IntToStr(si2)+FixSem+' '
+          +IntToStr(si3)+FixSem+' '
+          +IntToStr(si4)+FixSem+' '
+           ;
+  end;
+  CmdMsg := Result;
+end;
+
+var
+  SleepCtr : Integer = 0;
+
+procedure ShowMsg(Msg: string);
+begin
+  writeln(Msg);
+//  ShowMessage(Msg);
+end;
+
+var
+  GlbClipRegion : HRGN = 0;
+  Glb_TextDir   : Integer = 0; // Direction: HorizDir=0 or VertDir=1
+
+procedure TextOutVert(Canvas: TCanvas; DrawTxt: String);
+{
+for (angle = 0; angle < 3600; angle += 100) {
+    plf->lfEscapement = angle;
+    hfnt = CreateFontIndirect(plf);
+    hfntPrev = SelectObject(hdc, hfnt);
+    TextOut(hdc, rc.right / 2, rc.bottom / 2,
+        lpszRotate, lstrlen(lpszRotate));
+    SelectObject(hdc, hfntPrev);
+    DeleteObject(hfnt);
+
+}
+
+var
+  LogFont : TLogFont; //=plf
+  hfntprev,
+  hfnt: THandle;  // new font handle
+  RetBytes : Integer;
+  dx : Integer;
+begin
+  dx := 0;
+  RetBytes:=GetObject(Canvas.Font.Handle, SizeOf(LogFont), Addr(LogFont));
+  if RetBytes=SizeOf(LogFont) then
+  begin
+    dx := Canvas.Font.Height;
+    LogFont.lfEscapement:=900;  // [0.1 deg]
+    LogFont.lfOrientation:= 900;   // for Win95 set same as lfEsc.
+    hfnt := CreateFontIndirect(LogFont);
+    hfntPrev := SelectObject(canvas.Handle, hfnt);
+
+    Canvas.TextOut(Canvas.PenPos.X-(8*dx)div 9, Canvas.PenPos.Y+dx, DrawTxt);
+
+    SelectObject(canvas.Handle, hfntPrev);
+    DeleteObject(hfnt);
+  end else
+  begin
+    Canvas.TextOut(Canvas.PenPos.X-dx, Canvas.PenPos.Y+dx, DrawTxt);
+  end;
+end;
+
+function SortedRect(Rect: TRect): TRect;
+// Top <= Bottom; Left <= Right;
+begin
+  Result.Top    := Min(Rect.Top,  Rect.Bottom);
+  Result.Bottom := Max(Rect.Top,  Rect.Bottom);
+  Result.Left   := Min(Rect.Left, Rect.Right);
+  Result.Right  := Max(Rect.Left, Rect.Right);
+end;
+
+procedure ChkDelGlbClipRegion;
+begin
+  if (GlbClipRegion <> 0) then
+  begin
+    DeleteObject(GlbClipRegion);
+    GlbClipRegion := 0;
+  end;
+end;
+
+procedure ActivateGlbClipRegion(Canvas: TCanvas);
+begin
+  if (GlbClipRegion <> 0) then
+    SelectClipRgn(Canvas.Handle, GlbClipRegion);
+end;
+
+
+var
+  DebDelCtr : Byte =0;
+function CallDrawCmd(Canvas: TCanvas; Const DrawCmdRec: TDrawCmdRec): Pointer;
+{  We draw only once but to a Bitmap of an ImageCtrl
+   refresh .. is handled by the ImageCtrl
+}
+
+var
+  PieRec    : TPieRec;
+  IH1 : Integer;
+  bStySave : TBrushStyle;
+  bColSave : TColor;
+  p1, p2, p3, p4, p5 : Integer;  // Frame.Canvas coordinates
+  HelpRect, hlp1Rect: TRect;           // Frame.Canvas coordinates
+  HelpHeight, HelpWidth: Integer;
+  copyModeSav : LongInt;
+  GetImageBitMap : TBitMap;
+  DebRes : LongBool;
+begin
+//Deb0('%s CallDrawCmd %d', [Unit_Name, Ord(DrawCmdRec.DrawCmd)]);
+  Result := nil;
+  bStySave  := Canvas.Brush.Style;
+  bColSave  := Canvas.Brush.Color;
+  With DrawCmdRec do
+  begin
+    p1:= si1;
+    p2:= si2;
+    p3:= si3;
+    p4:= si4;
+    p5:= si5;
+
+    HelpRect.Left   := p1;
+    HelpRect.Top    := p2;
+    HelpRect.Right  := p3;
+    HelpRect.Bottom := p4;
+
+    HelpHeight := Abs(P4 - P2);
+    HelpWidth  := Abs(P3 - P1);
+  end; {With DrawCmdRec}
+
+  If (MsgMode > 0) then
+  begin
+    case DrawCmdRec.DrawCmd of
+      dc_Text:;
+      else
+        ShowMsg(CmdMsg(DrawCmdRec));
+    end
+  end;
+
+  If DelayMode then
+  begin
+    Inc(SleepCtr);
+    If SleepCtr > 50 then
+    begin
+      sleep(1);
+      SleepCtr := 0;
+    end;
+  end;
+
+  if (DrawCmdRec.DrawCmd <> dc_SetClipRegion) then
+    ActivateGlbClipRegion(Canvas); // ClipRegion has a short life!
+
+  case DrawCmdRec.DrawCmd of
+    dc_Nothing:
+      begin
+      end;
+    dc_MsgMode:
+      begin
+        MsgMode := P1;
+      end;
+    dc_LineStyle:
+      begin
+        Canvas.Pen.Style := TPenStyle(p1);
+        Canvas.Pen.Width := p2
+        //psSolid, psDash, psDot, psDashDot, psDashDotDot, psClear, psInsideFrame
+      end;
+    dc_PenColor:
+      begin
+        IH1 :=      p2 + p3 *256 + p4 *256*256;
+        Canvas.Pen.Color := IH1;
+      end;
+    dc_PenNorm:
+      begin
+        Canvas.Pen.Mode := pmCopy;
+      end;
+    dc_PenXor:
+      begin
+        Canvas.Pen.Mode := pmXor;
+      end;
+    dc_BrushColor:
+      begin
+        //type TBrushStyle = (bsSolid, bsClear,
+        //    bsHorizontal, bsVertical,
+        //    bsFDiagonal, bsBDiagonal, bsCross, bsDiagCross);
+
+        bColSave := p2 + p3 *256 + p4 *256*256;
+        Canvas.Brush.Color := bColSave;
+      end;
+    dc_Bar:
+      begin
+        //Canvas.Brush.Style := bsSolid;
+        // FillRect leaves out the Bottom
+        // and Right edge (?)
+
+        // HelpRect := SortedRect(HelpRect);
+        // Inc(HelpRect.Bottom, 1);
+        // Inc(HelpRect.Right, 1);  // too much
+        Canvas.FillRect(HelpRect);
+      end;
+    dc_FillRect:
+      begin
+        Canvas.FillRect(HelpRect);
+      end;
+    dc_BarInv:
+      begin      // ??????????????
+        copyModeSav := Canvas.CopyMode;
+        Canvas.CopyMode := cmDstInvert;
+        Canvas.CopyRect(HelpRect, Canvas, HelpRect); 
+        Canvas.CopyMode := copyModeSav;
+      end;
+    dc_Move:
+      begin
+        Canvas.MoveTo(p1, p2);
+      end;
+    dc_Rect:
+      begin
+        Canvas.Brush.Style := bsClear;
+        Canvas.Rectangle(HelpRect);
+{
+With DrawCmdRec do                     // ##DEBUG!
+begin         // returns zero in case of failur:
+  DebRes :=  Windows.Rectangle(Canvas.Handle, p1+5, p2+5, p3-1, p4-1);
+  if not DebRes then
+  begin
+    Deb0('%s Windows.Rectangle fails %d! ######', [Unit_Name, GetLastError]);
+  end else
+  begin
+    Deb0('%s Windows.Rectangle ok!', [Unit_Name]);
+  end;
+end;
+{
+//  if Canvas.Handle
+With DrawCmdRec do
+Deb0('%s CallDrawCmd Canvas Handle: %d, Brush.Handle: %d, dc_Rect(%d, %d, %d, %d)', [Unit_Name, Canvas.Handle, Canvas.Brush.Handle, p1, p2, p3, p4]);
+if Canvas.Handle = 0 then
+begin
+  ShowMsg(Unit_Name+' dc_Rect Canvas.Handle is zero ####');
+end;
+}
+      end;
+    dc_Circle:
+      begin
+        HelpRect.Left   := p1 - p3;  // p1, p2: Center; p3: Radius
+        HelpRect.Top    := p2 - p3;
+        HelpRect.Right  := p1 + p3;
+        HelpRect.Bottom := p2 + p3;
+
+        Canvas.Brush.Style := bsClear;
+        Canvas.Ellipse(HelpRect);
+      end;
+    dc_Ellipse:
+      begin
+        Canvas.Ellipse(HelpRect);
+      end;
+    dc_Line:
+      begin
+        Canvas.MoveTo(p1,p2);
+        Canvas.LineTo(p3,p4);          // may destroy the clipRegion (if picture is not scaled 1 to 1)
+                                       // reason: Canvas.OnChange -> Picture.OnChange ...
+        // LineTo does not include (p3,p4) so:
+        ActivateGlbClipRegion(Canvas);  // LineTo might have destroyed the clipregion!  // 24.07.06 P.W
+        Canvas.Pixels[p3,p4] := Canvas.Pen.Color;
+      end;
+    dc_Pixel:
+      begin
+        Canvas.Pixels[p1,p2] := Canvas.Pen.Color;
+      end;
+    dc_GetPixel:
+      begin
+        Integer(Result) := Canvas.Pixels[p1,p2];
+      end;
+    dc_FileNr:
+      begin
+        FileNr := P1;
+        LineCtr :=0;
+      end;
+    dc_Close:
+      begin
+        //Form1.Close;
+      end;
+    dc_UpdateScreen:
+      begin
+        //Form1.UpdateFormBitMap;
+      end;
+    dc_PieSlice:
+      begin
+        {parameter:
+          p1 = XCenter;
+          p2 = yCenter;
+          p3 = StartAngle;
+          p4 = EndAngle;
+          p5 = Radius;
+        }
+        PieRec.X1 := p1; // p1 = XCenter;
+        PieRec.Y1 := p2; // p2 = yCenter;
+                         // p3 = StartAngle;   [deg]
+                         // p4 = EndAngle;     [deg]
+                         // p5 = Radius;
+
+        // s.: 25.10.04 P.W. now left, right, top & down as assumed by Grap0.pas PieSlice
+        //                     v-- 4x the signs inverted: 25.10.04 P.W.
+        PieRec.X3 := PieRec.X1 + Round(p5*cos(p3*Pi/180)); // Section: Endpoint of Radius1
+        PieRec.Y3 := PieRec.Y1 - Round(p5*sin(p3*Pi/180)); // Section: Endpoint of Radius1
+        PieRec.X4 := PieRec.X1 + Round(p5*cos(p4*Pi/180)); // Section: Endpoint of Radius2
+        PieRec.Y4 := PieRec.Y1 - Round(p5*sin(p4*Pi/180)); // Section: Endpoint of Radius2
+
+        PieRec.X1 := PieRec.X1 - p5;       // Left   of ellipse  (Left < Right)
+        PieRec.Y1 := PieRec.Y1 - p5;       // Top    of ellipse  (Top  < Bottom)
+        PieRec.X2 := PieRec.X1 + 2 * p5;   // Right  of ellipse
+        PieRec.Y2 := PieRec.Y1 + 2 * p5;   // Bottom of ellipse
+
+        with PieRec do
+          Canvas.Pie(X1, Y1, X2, Y2,  // surrounding Rect (Left Top Right Bottom)
+                     X3, Y3,          // Endpoint of Radius 1
+                     X4, Y4);         // Endpoint of Radius 2
+                     // Pie is drawn counterclockwise ++++++++++++++from intersection of Radius 1
+      end;
+    dc_TextSize:
+      begin
+        If P1<>0 then
+          Canvas.Font.Size   := p1;
+        If P2<>0 then
+          Canvas.Font.Height := p2;
+      end;
+    dc_Text:
+      begin
+        If (MsgMode > 0) then
+          ShowMsg('dc_Text:"' + DrawCmdRec.PAStr^ + '"');
+
+        Canvas.Font.Color :=
+        Canvas.Pen.Color;
+        case Glb_TextDir of
+          0:  begin //HorizDir
+//                 Canvas.Brush.Style := bsClear;
+// now by caller CmdTextOut
+             // Canvas.TextRect(                    // u.: 09.07.08 P.W
+                TCanvas_Plus(Canvas).TextRect_W(    // s.: 09.07.08 P.W
+                Rect(
+                  Canvas.PenPos.X,
+                  Canvas.PenPos.Y,
+                  Canvas.PenPos.X+
+                    Canvas.TextWidth(DrawCmdRec.PAStr^),
+                  Canvas.PenPos.Y+
+                    Canvas.TextHeight(DrawCmdRec.PAStr^)),
+                Canvas.PenPos.X,
+                Canvas.PenPos.Y,DrawCmdRec.PAStr^);
+              end;
+          1:  begin //VertDir
+                TextOutVert(Canvas, DrawCmdRec.PAStr^);
+                //Canvas.TextOut(
+                //Canvas.PenPos.X,
+                //Canvas.PenPos.Y, DrawCmdRec.PAStr^);
+              end;
+        end;
+      end;
+    dc_GetImage:
+      begin    // from canvas to file  NextTempNumber
+        {parameter:
+          p1 = Left;
+          p2 = Top;
+          p3 = Right;
+          p4 = Bottom;
+         Return: Number of file
+        }
+        //copyModeSav := Canvas.CopyMode;
+        //Canvas.CopyMode := cmDstInvert;
+        hlp1Rect.Left   := 0;
+        hlp1Rect.Top    := 0;
+        hlp1Rect.Bottom := HelpHeight;
+        hlp1Rect.Right  := HelpWidth;
+
+        GetImageBitMap := TBitMap.Create;
+//        GetImageBitMap.PixelFormat := pf8bit;  // reduces space on disk
+        GetImageBitMap.Height := HelpHeight;
+        GetImageBitMap.Width  := HelpWidth;
+        GetImageBitMap.Canvas.CopyRect(hlp1Rect, Canvas, HelpRect);
+
+        Integer(Result) := GetNextTempNumber;
+        GetImageBitMap.SaveToFile(GetTempFileName(Integer(Result)));
+        GetImageBitMap.Free;
+        //Canvas.CopyMode := copyModeSav;
+      end;
+    dc_PutImage:
+      begin
+        {parameter:
+          p1 = Left;
+          p2 = Top;
+          ptr1 = Pointer to BitMap;  // or TempNumber
+        }
+        //copyModeSav := Canvas.CopyMode;
+        //Canvas.CopyMode := cmDstInvert;
+        GetImageBitMap  := TBitMap.Create;
+        GetImageBitMap.LoadFromFile(GetTempFileName(DrawCmdRec.I1));
+        hlp1Rect.Left   := 0;
+        hlp1Rect.Top    := 0;
+        hlp1Rect.Bottom := GetImageBitMap.Height;
+        hlp1Rect.Right  := GetImageBitMap.Width;
+
+        HelpRect.Right  := P1 + GetImageBitMap.Width;
+        HelpRect.Bottom := P2 + GetImageBitMap.Height;
+        Canvas.CopyRect(HelpRect, GetImageBitMap.Canvas, hlp1Rect);
+        GetImageBitMap.Free;
+        //Canvas.CopyMode := copyModeSav;
+      end;
+    dc_SetClipRegion:
+      begin
+//SMsg('%d %d %d %d', [p1, p2, p3, p4]);
+        //Canvas.ClipRect := HelpRect;
+        ChkDelGlbClipRegion;
+        GlbClipRegion:=CreateRectRgn(p1, p2, p3, p4);
+        ActivateGlbClipRegion(Canvas);
+      end;
+    dc_SetFontHeight:
+      begin
+        Canvas.Font.Height := p1;
+//ShowMessageFmt('Draw.pas SetFontHeight: %d -> %d', [p1, Canvas.TextHeight('Äy')]);
+      end;
+    dc_GetFontHeight:
+      begin
+        Integer(Result) := Canvas.Font.Height;
+      end;
+    dc_TextDir:
+      case P1 of
+        0: begin // HorizDir
+             Glb_TextDir := 0;
+           end;
+        1: begin // VertDir
+             Glb_TextDir := 1;
+           end;
+      end;
+  end; {case DrawCmdRec.DrawCmd of}
+
+  if not assigned(Canvas.Brush.BitMap) then
+  begin
+    Canvas.Brush.Color := bColSave;
+    Canvas.Brush.Style := bStySave;
+  end;
+
+//inc(DebDelCtr); if ((DebDelCtr mod 4) = 0) then sleep(1);
+  if PaintDebug then Application.ProcessMessages;  // refresh Screen each time
+//if PaintDebug then sleep(1);
+  if (Win32Platform <> VER_PLATFORM_WIN32_WINDOWS) then
+    ApplicationProcessMessages;   // otherwise is drawing too slow under Win98
+end;
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  DebDelCtr     :=0;
+  DelayMode     := False;
+  FileNr        := 0;
+  GlbClipRegion := 0;
+  Glb_TextDir   := 0;
+  LineCtr       := 0;
+  MsgMode       := 0;
+  SleepCtr      := 0;
+  TempNumber    := 0;
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Initialization part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init); // 03.05.24 P.W
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.

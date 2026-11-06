@@ -1,0 +1,312 @@
+unit Accessibility;
+// created: 22.06.05 P.W
+// purpose: avoid problems with the Windows Accessibility Options
+// when using the left and right shift keys for positioning the device
+// windows help themes:
+//  Accessibility Structures:
+//    ACCESSTIMEOUT
+//    FILTERKEYS
+//    HIGHCONTRAST
+//    MOUSEKEYS
+//    SERIALKEYS
+//    SOUNDSENTRY
+//    STICKYKEYS
+//    TOGGLEKEYS
+// Modifications:
+// the following 4 calls need uiParam set to size of structure (Win 98)
+// SystemParametersInfo(SPI_GETSTICKYKEYS,
+// SystemParametersInfo(SPI_SETSTICKYKEYS,
+// SystemParametersInfo(SPI_GETFILTERKEYS,
+// SystemParametersInfo(SPI_SETFILTERKEYS,
+// So instead of 10 complex calls two functions generated:
+//  SysParInfo_StickyKeys and SysParInfo_FilterKeys
+// Changed: 19.01.22 P.W:
+//   function SetAccessKeys added: stdcall;
+//                                 ^---stdcall avoids  Error:
+//     ------------------------------------------------------
+//     SystemParametersInfo(SPI_SETSTICKYKEYS): Error occured
+//     Unzulässiger Zugriff auf einen Speicherbereich.
+//     ------------------------------------------------------
+
+
+interface
+
+uses
+  Dialogs, Windows, SysUtils;
+
+type
+  PAccessKeys = ^TAccessKeys;
+  TAccessKeys = record
+    STICKYKEYS_dwFlags : DWORD;
+    FILTERKEYS_dwFlags : DWORD;
+  end;
+
+function GetAccessKeysInfo: BOOL;
+function SetAccessKeys(Enable: Boolean): BOOL; stdcall;
+ // Changed: 19.01.22 P.W:
+ // ^---stdcall avoids  Error:
+ // ---------------------------
+ // SystemParametersInfo(SPI_SETSTICKYKEYS): Error occured
+ // Unzulässiger Zugriff auf einen Speicherbereich.
+ // ---------------------------
+
+function RestoreAccessKeys: BOOL;
+
+Implementation
+  const Unit_Name = 'Accessibility'; // 03.05.24 P.W
+
+procedure ShowLastError(Msg:String='');
+// from Graphics.pas procedure GDIError;
+var
+  ErrorCode: Integer;
+  Buf: array [Byte] of Char;
+begin
+  ErrorCode := GetLastError;
+  if (ErrorCode <> 0) and (FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, nil,
+    ErrorCode, LOCALE_USER_DEFAULT, Buf, sizeof(Buf), nil) <> 0) then
+    begin
+    //raise EOutOfResources.Create(Buf)
+//       if (Msg <> '') then ShowMessage(Msg);
+       ShowMessage(Msg + sLineBreak + Buf);
+    end
+  else
+    //OutOfResources;
+end;
+
+type
+  TGetSet = (C_Get, C_Set);
+function SysParInfo_StickyKeys(SG: TGetSet; var STICKYKEYS: TStickyKeys): Bool;
+// created 15.07.05 P.W
+var
+  uiParam: UINT;
+begin
+  uiParam           := SizeOf(STICKYKEYS);
+  STICKYKEYS.cbSize := uiParam;
+  Case SG of
+    C_Get:
+      Result := SystemParametersInfo(SPI_GETSTICKYKEYS, uiParam, @STICKYKEYS, 0);
+    else
+      Result := SystemParametersInfo(SPI_SETSTICKYKEYS, uiParam, @STICKYKEYS, 0);
+  end;
+  if not Result then
+  begin
+    if SG = C_Get
+    then
+      ShowLastError('SystemParametersInfo(SPI_GETSTICKYKEYS): Error occured')
+    else
+      ShowLastError('SystemParametersInfo(SPI_SETSTICKYKEYS): Error occured');
+  end;
+end;
+
+function SysParInfo_FilterKeys(SG: TGetSet; var FILTERKEYS: TFilterKeys): Bool;
+// created 15.07.05 P.W
+var
+  uiParam: UINT;
+begin
+  uiParam           := SizeOf(FILTERKEYS);
+  FILTERKEYS.cbSize := uiParam;
+  Case SG of
+    C_Get:
+      Result := SystemParametersInfo(SPI_GETFILTERKEYS, uiParam, @FILTERKEYS, 0);
+    else
+      Result := SystemParametersInfo(SPI_SETFILTERKEYS, uiParam, @FILTERKEYS, 0);
+  end;
+  if not Result then
+  begin
+    if SG = C_Get
+    then
+      ShowLastError('SystemParametersInfo(SPI_GETFILTERKEYS): Error occured')
+    else
+      ShowLastError('SystemParametersInfo(SPI_SETFILTERKEYS): Error occured');
+  end;
+end;
+
+function GetAccessKeysInfo: BOOL;
+var
+  STICKYKEYS : TStickyKeys;
+  MsgStickKeys : AnsiString;
+  function SKFMsg(SKF_Bit: DWORD): String;
+  begin
+    if ((STICKYKEYS.dwFlags and SKF_Bit) <> 0)
+      then Result := '1 '
+      else Result := '0 ';
+  end;
+var
+  FILTERKEYS : TFilterKeys;
+  MsgFilterKeys : AnsiString;
+  function FKFMsg(FKF_Bit: DWORD): String;
+  begin
+    if ((FILTERKEYS.dwFlags and FKF_Bit) <> 0)
+      then Result := '1 '
+      else Result := '0 ';
+  end;
+begin
+  // --------------------------------------------------------------
+  Result := SysParInfo_StickyKeys(C_Get, STICKYKEYS);
+  // --------------------------------------------------------------
+  if Result then
+  begin
+    MsgStickKeys := Format(
+      'GetStickyKeysInfo OK!'+sLineBreak+
+      '%s SKF_AUDIBLEFEEDBACK'+sLineBreak+
+      '%s SKF_AVAILABLE'+sLineBreak+
+      '%s SKF_CONFIRMHOTKEY'+sLineBreak+
+      '%s SKF_HOTKEYACTIVE'+sLineBreak+
+      '%s SKF_HOTKEYSOUND'+sLineBreak+
+      '%s SKF_INDICATOR'+sLineBreak+
+      '%s SKF_STICKYKEYSON'+sLineBreak+
+      '%s SKF_TRISTATE'+sLineBreak+
+      '%s SKF_TWOKEYSOFF'+sLineBreak,
+      [
+      SKFMsg(SKF_AUDIBLEFEEDBACK),
+      SKFMsg(SKF_AVAILABLE),
+      SKFMsg(SKF_CONFIRMHOTKEY),
+      SKFMsg(SKF_HOTKEYACTIVE),
+      SKFMsg(SKF_HOTKEYSOUND),
+      SKFMsg(SKF_INDICATOR),
+      SKFMsg(SKF_STICKYKEYSON),
+      SKFMsg(SKF_TRISTATE),
+      SKFMsg(SKF_TWOKEYSOFF)]);
+  end else
+  begin
+     MsgStickKeys := 'GetStickyKeysInfo failed!';
+  end;
+  // --------------------------------------------------------------
+  // --------------------------------------------------------------
+  Result := SysParInfo_FilterKeys(C_Get, FILTERKEYS);
+  // --------------------------------------------------------------
+  if Result then
+  begin
+    MsgFilterKeys := Format(
+      'GetFilterKeysInfo OK!'+sLineBreak+
+      '%s FKF_AVAILABLE'+sLineBreak+
+      '%s FKF_CLICKON'+sLineBreak+
+      '%s FKF_FILTERKEYSON'+sLineBreak+
+      '%s FKF_HOTKEYACTIVE'+sLineBreak+
+      '%s FKF_HOTKEYSOUND'+sLineBreak+
+      '%s FKF_CONFIRMHOTKEY'+sLineBreak+
+      '%s FKF_INDICATOR'+sLineBreak,
+      [
+      FKFMsg(FKF_AVAILABLE),
+      FKFMsg(FKF_CLICKON),
+      FKFMsg(FKF_FILTERKEYSON),
+      FKFMsg(FKF_HOTKEYACTIVE),
+      FKFMsg(FKF_HOTKEYSOUND),
+      FKFMsg(FKF_CONFIRMHOTKEY),
+      FKFMsg(FKF_INDICATOR)]);
+  end else
+  begin
+    MsgFilterKeys := 'GetFilterKeysInfo failed!';
+  end;
+  // --------------------------------------------------------------
+  ShowMessage(MsgStickKeys + sLineBreak + sLineBreak + MsgFilterKeys);
+end;
+
+var
+  OrigAccessKeys : PAccessKeys = nil;
+
+function SetAccessKeys(Enable: Boolean): BOOL; stdcall;
+// Changed: 19.01.22 P.W:
+//                                 ^---stdcall avoids  Error:
+//     ------------------------------------------------------
+//     SystemParametersInfo(SPI_SETSTICKYKEYS): Error occured
+//     Unzulässiger Zugriff auf einen Speicherbereich.
+//     ------------------------------------------------------
+var
+  STICKYKEYS : TStickyKeys;
+  FILTERKEYS : TFilterKeys;
+  Prev       : TAccessKeys;
+  Ok : Boolean;
+begin
+  Ok := True;
+  // --------------------------------------------------------------
+  Result := SysParInfo_StickyKeys(C_Get, STICKYKEYS);
+  Prev.STICKYKEYS_dwFlags := STICKYKEYS.dwFlags;
+  // --------------------------------------------------------------
+  if Result then
+  begin
+    if Enable then
+    begin
+      STICKYKEYS.dwFlags := STICKYKEYS.dwFlags
+        or  (SKF_HOTKEYACTIVE);
+      STICKYKEYS.dwFlags := STICKYKEYS.dwFlags
+        and (not SKF_STICKYKEYSON);
+    end else
+    begin
+      STICKYKEYS.dwFlags := STICKYKEYS.dwFlags
+        and (not SKF_HOTKEYACTIVE);
+      STICKYKEYS.dwFlags := STICKYKEYS.dwFlags
+        and (not SKF_STICKYKEYSON);
+    end;
+    Result := SysParInfo_StickyKeys(C_Set, STICKYKEYS);
+  end;
+  Ok := Ok and Result;
+  if (not Result) and (not Enable) then
+    ShowMessage('Disable Accessibility Keys failed! (StickyKeys)');
+  // --------------------------------------------------------------
+  // --------------------------------------------------------------
+  Result := SysParInfo_FilterKeys(C_Get, FILTERKEYS);
+  Prev.FILTERKEYS_dwFlags := FILTERKEYS.dwFlags;
+  // --------------------------------------------------------------
+  if Result then
+  begin
+    if Enable then
+    begin
+      FILTERKEYS.dwFlags := FILTERKEYS.dwFlags
+        or  (FKF_HOTKEYACTIVE);
+      FILTERKEYS.dwFlags := FILTERKEYS.dwFlags
+        and (not FKF_FILTERKEYSON);
+    end else
+    begin
+      FILTERKEYS.dwFlags := FILTERKEYS.dwFlags
+        and (not FKF_HOTKEYACTIVE);
+      FILTERKEYS.dwFlags := FILTERKEYS.dwFlags
+        and (not FKF_FILTERKEYSON);
+    end;
+    Result := SysParInfo_FilterKeys(C_Set, FILTERKEYS);
+  end;
+  Ok := Ok and Result;
+  if (not Result) and (not Enable) then
+    ShowMessage('Disable Accessibility Keys failed! (FilterKeys)');
+  // --------------------------------------------------------------
+  if Ok and (not Assigned(OrigAccessKeys)) then
+  begin  // store Orig only the first time
+    New(OrigAccessKeys);
+    OrigAccessKeys^ := Prev;
+  end;
+  Result := Ok;
+end;
+
+function RestoreAccessKeys: BOOL;
+var
+  STICKYKEYS : TStickyKeys;
+  FILTERKEYS : TFilterKeys;
+  Ok : Boolean;
+begin
+  if Assigned(OrigAccessKeys) then
+  begin
+    Ok := True;
+    // --------------------------------------------------------------
+    // get a complete filled structure!
+    Result := SysParInfo_StickyKeys(C_Get, STICKYKEYS);
+    Ok := Ok or Result;
+    STICKYKEYS.dwFlags := OrigAccessKeys.STICKYKEYS_dwFlags;
+    Result := SysParInfo_StickyKeys(C_Set, STICKYKEYS);
+    Ok := Ok or Result;
+    // --------------------------------------------------------------
+    // get a complete filled structure!
+    Result := SysParInfo_FilterKeys(C_Get, FILTERKEYS);
+    Ok := Ok or Result;
+    FILTERKEYS.dwFlags := OrigAccessKeys.FILTERKEYS_dwFlags;
+    Result := SysParInfo_FilterKeys(C_Set, FILTERKEYS);
+    Ok := Ok or Result;
+    // --------------------------------------------------------------
+  end else
+  begin
+    Ok := False;
+  end;
+  Result := Ok;
+end;
+
+end.
+

@@ -1,0 +1,504 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; changes: 1; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+{*******************************************************}
+{                                                       }
+{       Turbo Pascal Runtime Library                    }
+{       CRT Interface Unit                              }
+{                                                       }
+{       Copyright (C) 1988,92 Borland International     }
+{                                                       }
+{*******************************************************}
+{   Modifications:                                      }
+{     1) CT-BugFix Rt-200 on 200Mhz or more   (1997)    }
+{     2) Const NewPtr_CliSti for check   28.06.99 P.W   }
+{   Further Modifications see below:                    }
+{*******************************************************}
+{ 22.10.03 P.W                                          }
+{    copied from RTL\Crt                                }
+{      function defined empty for allow adapt by delphi }
+{                                                       }
+{*******************************************************}
+
+(*
+Modifications:
+{14.01.02 P.W}
+  Try to support GotoXY, Writeln, ...
+  for extended graphics mode (256 Colors ...) as
+  for EGA 16 Colors 640*480 to avoid Writeln... disturbing the
+  screen
+  Steps:
+    A) Crt.ASM all publics renamed: "E_" added to each name
+    B) Crt.Pas all functions are Pointers to the renamed externals
+    C) Decide depending of the current screen mode what to do
+       inside the new procedures that have the old names
+    D) Overwritting of the CRT routines see unit Gr_CRT.Pas
+// 19.07.04 P.W
+// since we run under Delphi we use the original names
+// and support directly the graphic mode
+// no longer unit Gr_Crt is needed (only for info)
+// CRT is mostly used by Scans0.pas and Sancs.pas
+// 22.10.07 P.W: function GrDeltaY uses a factor of 0.95.
+// 27.06.08 P.W: Sound supports RequestSound := RS_Beep
+// 27.06.08 P.W: Sound again quiet (play Macro was to noisy!)
+// 26.08.09 P.W: function CRT_KeyBuf_ContainsNumEsc: Integer;
+
+*)
+
+unit Crt;  // used by DelphiCrt, Gr_Crt
+
+{$I-,S-}
+
+interface
+
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  HaltUnit,        // 03.05.24 P.W
+  KeyCodes,        // 26.08.09 P.W
+  TurboToDelphi;
+
+procedure CRT_KeyBuf_AddKey(Key: Char); // (08.03.04 P.W)
+
+var //const
+  // Turbo to Delphi
+  DelayCNT : LongInt = 50000;
+
+
+function  CRT_KeyBuf_Content: AnsiString;     // 26.08.09 P.W
+function  CRT_KeyBuf_ContainsNumEsc: Integer; // 26.08.09 P.W
+
+{ Interface procedures }
+procedure AssignCrt(var F: Text);
+function  KeyPressed: Boolean;
+function  ReadKey: Char;
+procedure SetMouseClickFlg;               // 22.01.07 P.W
+procedure ClrMouseClickFlg;               // 22.01.07 P.W
+function  KeyPressedOrMouseClicked: Boolean; // 22.01.07 P.W
+procedure TextMode(Mode: Smallint);
+procedure Window(X1,Y1,X2,Y2: Byte);
+procedure GotoXY(X,Y: Byte);
+function  WhereX: Byte;
+function  WhereY: Byte;
+procedure ClrScr;
+procedure ClrEol;
+procedure InsLine;
+procedure DelLine;
+procedure TextColor(Color: Byte);
+procedure TextBackground(Color: Byte);
+procedure LowVideo;
+procedure HighVideo;
+procedure NormVideo;
+procedure Delay(MS: Word);
+procedure Sound(Hz: Word);
+procedure NoSound;
+
+
+// ===================================
+// 19.07.04 P.W enable a part of the functions again:
+// GotoXY, WhereX, WhereY... like Gr_Crt but
+// this time directly without the hook used by Gr_Crt
+// input is comming from DelphiCrt.Pas (which sends
+// until today the Writeln to FemurPc
+function GrCurX: Integer;
+function GrCurY: Integer;
+procedure CheckCursor;
+procedure CRT_TextOut(Msg: String);
+procedure Save_Gr_Crt_Mem(
+            OutName: String;
+            Msg : String;
+            AppendFlg: Boolean);
+
+Implementation
+
+uses
+  GraphGlb,
+  Graph0, SysUtils,
+  DosTimer;
+  const Unit_Name = 'Crt'; // 03.05.24 P.W
+
+const
+  CrtMaxX = 80;
+  CrtMaxY = 25;
+
+var
+  CurX             : Byte = 1;
+  CurY             : Byte = 1;
+
+//  CrtCurWanted        : Boolean = False; // in Graph0.pas for use by ClearPage
+  CurVisible       : Boolean = False;
+  CurTimer         : TDosTimer = (0, 0);
+
+  Gr_Crt_TextColor : Word = C_White;
+  Gr_Crt_BackColor : Word = C_Black;
+
+procedure Scroll;
+begin
+end;
+
+procedure Save_Gr_Crt_Mem(
+            OutName: String;
+            Msg : String;
+            AppendFlg: Boolean);
+begin
+end;
+
+Procedure IncCursor;
+begin
+  If (WhereX < CrtMaxX)
+  then GotoXY(WhereX+1, WhereY)
+  else GotoXY(1, WhereY+1);
+end;
+
+function GrDeltaX: Integer;
+begin
+  Result := GetMaxX div (CrtMaxX +1);
+end;
+
+function GrDeltaY: Integer;
+begin
+//  Result := GetMaxY div (CrtMaxY +3);           // u.: 22.10.07 P.W
+  Result := Round(0.95 * GetMaxY / (CrtMaxY +3)); // s.: 22.10.07 P.W (Sv Start Use Key: Msg Pg Up Dwn Sv len is not overwritten
+end;
+
+function GrCurX: Integer;
+begin
+  result :=  GrDeltaX * CurX;
+end;
+
+function GrCurY: Integer;
+begin
+  result :=  GrDeltaY * CurY;
+end;
+
+procedure CurInvert;
+var
+  BkColor_Sav : Word;
+begin
+  if CrtCurWanted then
+  begin
+    BkColor_Sav := GetBkColor;
+    SetBkColor(C_White);
+    BarInv(GrCurX, GrCurY, GrCurX+(8*GrDeltaX) div 10 , GrCurY+5);
+    SetBkColor(BkColor_Sav);
+    StartDosTimer(CurTimer);
+    CurVisible := not CurVisible;
+  end else
+  begin
+    CurVisible := False;
+  end;
+end;
+
+procedure CheckCursor;
+begin
+  if CrtCurWanted then
+  begin
+    If ReadDosTimer(CurTimer) > 0.5 then
+      CurInvert;
+  end else
+  begin
+    CurVisible := False;
+  end;
+end;
+
+Procedure SetColors;
+begin
+//  NeueFarben(Gr_Crt_BackColor, Gr_Crt_BackColor, Gr_Crt_TextColor);
+  SetColor(Gr_Crt_TextColor);
+  SetBkColor(Gr_Crt_BackColor);
+  SetFillStyle(SolidFill, Gr_Crt_BackColor);
+end;
+
+Procedure GrOutChar(Ch: Char);
+Var
+  SavTextInfo      : TextSettingsType;
+begin
+    GetTextSettings(SavTextInfo);
+
+      SetColor(Gr_Crt_TextColor);
+      SetFillStyle(SolidFill, Gr_Crt_BackColor);
+      Bar(GrCurX, GrCurY-GrDeltaY, GrCurX+GrDeltaX, GrCurY);
+      OutTextXY(GrCurX, GrCurY, Ch, TM_Transparent);
+
+//    WrtChar_Gr_Crt_Mem(WhereX, WhereY, Ch);
+
+    With SavTextInfo do
+    begin
+      SetTextStyle(Font, Direction, CharSize);
+      SetTextJustify(Horiz, Vert);
+    end;
+
+  IncCursor;
+end;
+
+var
+  CRT_KeyBuf : AnsiString = '';
+procedure CRT_KeyBuf_AddKey(Key: Char); // (08.03.04 P.W)
+begin
+  Deb0('CRT_KeyBuf_AddKey(%d)', [Ord(Key)]);
+  CRT_KeyBuf := CRT_KeyBuf + Key;
+end;
+
+function  CRT_KeyBuf_Content: AnsiString;
+// 26.08.09 P.W
+begin
+  Result := CRT_KeyBuf;
+end;
+
+function CRT_KeyBuf_ContainsNumEsc: Integer;
+// 26.08.09 P.W
+var
+  S : AnsiString;
+  I: Integer;
+begin
+  Result := 0;
+  S := CRT_KeyBuf_Content;
+  I := 0;
+  While I < Length(S) do
+  begin
+    Inc(I);
+    case S[I] of
+      #0 : Inc(I);  // function key code follows
+      KC1_Esc: Inc(Result);
+    end;
+  end;
+end;
+
+procedure CRT_TextOut(Msg: String);
+// 19.07.04 P.W
+// called from DelphiCrt.pas FUNCTION ModOut
+//  which is activated by Writeln(Output, ...);
+Var
+  P: Smallint;
+  Ch : Char;
+  WX, WY : Smallint;
+  SaveViewPort : ViewPortType;
+begin
+  if Length(Msg) = 0 then EXIT;
+
+  SaveViewPort := SetMaxViewPort;
+
+  For P:=1 to Length(Msg) do
+  begin
+    Ch := Msg[P];
+    Case Ch of
+      #08: begin {BS Back Space}
+             If (WhereX > 1) then
+               GotoXy(WhereX-1, WhereY);
+           end;
+      #10: begin {LF Line Feed}
+             WX := WhereX;
+             WY := WhereY;
+             If (WhereY < CrtMaxY) then
+             begin
+               GotoXy(WhereX, WhereY+1);
+             end else
+             begin
+               Scroll;
+               GotoXy(1, CrtMaxY);
+               ClrEol;
+               GotoXy(WX, WY);
+             end;
+           end;
+      #13: begin {CR Carriage Return}
+             GotoXy(1, WhereY);
+           end;
+      else begin
+             GrOutChar(Ch);
+           end;
+    end;
+  end;
+  SetViewPort(SaveViewPort);
+end;
+
+// since 19.07.04 adapted to support Graphic mode
+//TODO 2 -oPW: Implement stubbed out methods
+procedure Initialize;       {external;  external u.: 22.10.03 P.W}
+begin
+end;
+
+procedure AssignCrt;        {external;  external u.: 22.10.03 P.W}
+begin
+end; {empty code: 22.10.03 P.W}
+
+function  KeyPressed;       {external;  external u.: 22.10.03 P.W}
+begin
+  // support Delay to achive call of Application.ProcessMessages
+  if (Length(CRT_KeyBuf) = 0) then Delay(0); // 23.04.04 P.W
+
+  Result := (Length(CRT_KeyBuf) > 0);
+end;
+
+function  ReadKey;          {external;  external u.: 22.10.03 P.W}
+begin
+  ReadKey := #0;
+  While not KeyPressed do
+  begin
+    ChkEnableMainForm; // 07.01.08 P.W
+//    ApplicationProcessMessages; // included in Delay which calls DelphiSleep
+    Delay(10);
+  end;
+
+  If KeyPressed then
+  begin
+    ReadKey := Crt_KeyBuf[1];
+    Delete(CRT_KeyBuf, 1, 1);
+  end;
+
+end; {empty code: 22.10.03 P.W}
+
+var
+  MouseClickFlg    : Boolean = False;     // 22.01.07 P.W
+
+procedure SetMouseClickFlg;               // 22.01.07 P.W
+begin
+  MouseClickFlg := True;
+end;
+
+procedure ClrMouseClickFlg;               // 22.01.07 P.W
+begin
+  MouseClickFlg := False;
+end;
+
+function KeyPressedOrMouseClicked: Boolean; // 22.01.07 P.W
+// Clears MouseClickFlg!
+begin
+  if MouseClickFlg then
+  begin
+    ClrMouseClickFlg;
+    Result := True;
+  end else
+  begin
+    Result := KeyPressed;
+  end;
+end;
+
+procedure TextMode;         {external;  external u.: 22.10.03 P.W}
+begin
+end; {empty code: 22.10.03 P.W}
+
+procedure Window;           {external;  external u.: 22.10.03 P.W}
+begin
+end; {empty code: 22.10.03 P.W}
+
+procedure GotoXY;           {external;  external u.: 22.10.03 P.W}
+begin // code inserted 19.07.04 P.W
+  if CrtCurWanted then
+  begin
+    if ((CurX <> X) or (CurY <> Y)) then
+    begin
+      if CurVisible
+        then CurInvert
+        else StartDosTimer(CurTimer);
+    end;
+  end;
+  CurX := X;
+  CurY := Y;
+  CrtCurWanted := True;
+end; {empty code: 22.10.03 P.W}
+
+function  WhereX;           {external;  external u.: 22.10.03 P.W}
+begin // code inserted 19.07.04 P.W
+  //result := 0;
+  Result := CurX;
+end; {empty code: 22.10.03 P.W}
+
+function  WhereY;           {external;  external u.: 22.10.03 P.W}
+begin // code inserted 19.07.04 P.W
+  //result := 0;
+  Result := CurY;
+end; {empty code: 22.10.03 P.W}
+
+procedure ClrScr;           {external;  external u.: 22.10.03 P.W}
+begin
+  GotoXY(1,1);
+  ClearPage(Gr_Crt_BackColor);
+  CurVisible := False;
+  CrtCurWanted  := False;
+end; {empty code: 22.10.03 P.W}
+
+procedure ClrEol;           {external;  external u.: 22.10.03 P.W}
+begin
+end; {empty code: 22.10.03 P.W}
+
+procedure InsLine;          {external;  external u.: 22.10.03 P.W}
+begin end; {empty code: 22.10.03 P.W}
+
+procedure DelLine;          {external;  external u.: 22.10.03 P.W}
+begin
+end; {empty code: 22.10.03 P.W}
+
+procedure TextColor;        {external;  external u.: 22.10.03 P.W}
+begin // code inserted 19.07.04 P.W
+  Gr_Crt_TextColor := Color;
+  SetColors;
+end; {empty code: 22.10.03 P.W}
+
+procedure TextBackground;   {external;  external u.: 22.10.03 P.W}
+begin // code inserted 19.07.04 P.W
+  Gr_Crt_BackColor := Color;
+  SetColors;
+end; {empty code: 22.10.03 P.W}
+
+procedure LowVideo;         {external;  external u.: 22.10.03 P.W}
+begin
+end; {empty code: 22.10.03 P.W}
+
+procedure HighVideo;        {external;  external u.: 22.10.03 P.W}
+begin
+end; {empty code: 22.10.03 P.W}
+
+procedure NormVideo;        {external;  external u.: 22.10.03 P.W}
+begin
+end; {empty code: 22.10.03 P.W}
+
+procedure Delay;            {external;  external u.: 22.10.03 P.W}
+begin
+  DelphiSleep(MS);
+end;
+
+procedure Sound;            {external;  external u.: 22.10.03 P.W}
+begin
+//  RequestSound := RS_Beep;     // 27.06.08 P.W until 23.01.09 P.W
+// the sound make one crasy (even nearly deaf persons) during macro execution ...
+end; {empty code: 22.10.03 P.W}
+
+procedure NoSound;          {external;  external u.: 22.10.03 P.W}
+begin
+end; {empty code: 22.10.03 P.W}
+
+procedure Break;
+begin
+  H_alt(255, 'Crt.pas Break');
+end;
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  CurX             := 1;
+  CurY             := 1;
+  CRT_KeyBuf       := '';
+  CurTimer[0]      := 0;
+  CurTimer[1]      := 0;
+  CurVisible       := False;
+  DelayCNT         := 50000;
+  Gr_Crt_BackColor := C_Black;
+  Gr_Crt_TextColor := C_White;
+  MouseClickFlg    := False;
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Init  part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init);
+
+end.

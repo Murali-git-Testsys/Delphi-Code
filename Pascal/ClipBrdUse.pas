@@ -1,0 +1,916 @@
+unit ClipBrdUse;
+
+interface
+
+uses
+  GraphicsExt, // 01.09.08 P.W
+//dialogs,
+  WindowsEx,
+  DefHTMLOpts,
+  Math,
+  Classes, Clipbrd, SysUtils, TypesUse, Windows;
+
+procedure ToClipboard(Text: AnsiString);
+procedure ClearClipboard;
+procedure AppendToClipboard(Text: AnsiString); overload;
+procedure AppendToClipboard(StrArr: TStringArr); overload;
+procedure AppendToClipboard(Msg: AnsiString; Vals: Array of Double; Fmt: String=''); overload;
+procedure AppendToClipboard(Vals: Array of Double; Fmt: String=''); overload;
+procedure AppendToClipboard(const DArrArr: TDoubArrArr; Msg: String= ''; Fmt: String=''); overload;
+
+function GetHtmlPart(const S, MarkStart, MarkEnd: AnsiString; var Offset: DWORD): AnsiString; overload;
+function GetHtmlPart(const S, MarkStart, MarkEnd: AnsiString): AnsiString;                    overload;
+function ClipBoardGetHtml: AnsiString;
+function GetHtmlFragment(const S: AnsiString): AnsiString;
+function GetHtmlLinkBase(const S: AnsiString): AnsiString;
+function GetHtmlSourceURL(const S: AnsiString): AnsiString;
+function BuildAbsoluteLink(const HtmlLinkAndName, HtmlSourceURL, HtmlLinkBase: AnsiString): AnsiString;
+function GetHtmlAbsoluteLink: AnsiString;
+function GetHtmlAbsoluteLinks: TStringList;
+
+function GetHtmlHyperlink(const S: AnsiString; var Offset: DWORD): AnsiString;
+//function UTF8toAnsi(S: AnsiString): AnsiString;
+
+function  FilePathesAsHyperLink(const Names: TStringList; Opts: THTMLOpts): AnsiString;
+procedure FilePathesAsHyperLinkToClipboard(Names: TStringList; Opts: THTMLOpts);
+
+const
+  HtmlStartFragmentMarker = '<!--StartFragment-->';
+  HtmlEndFragmentMarker   = '<!--EndFragment-->';
+  HtmlFormat              = 'HTML Format';
+
+Implementation
+
+uses StrUtils;
+  const Unit_Name = 'ClipBrdUse'; // 03.05.24 P.W
+
+procedure ToClipboard(Text: AnsiString);
+begin
+  ClipBoard.SetTextBuf(PChar(Text));
+end;
+
+procedure ClearClipboard;
+begin
+  ToClipBoard('');
+end;
+
+procedure AppendToClipboard(Text: AnsiString); overload;
+  //The following code locks the memory for text on the Clipboard, then reads the text.
+  // and appends Text to Clipboard
+// Modifications:
+// 01.09.08 P.W: Use CF_UNICODETEXT
+
+  procedure {TClipboard.}SetBuffer(Format: Word; var Buffer; Size: Integer);
+  var
+    Data: THandle;
+    DataPtr: Pointer;
+  begin
+    Clipboard.Open;
+    try
+      Data := GlobalAlloc(GMEM_MOVEABLE+GMEM_DDESHARE, Size);
+      try
+        DataPtr := GlobalLock(Data);
+        try
+          Move(Buffer, DataPtr^, Size);
+          ClipBoard.Clear; //Adding;
+          SetClipboardData(Format, Data);
+        finally
+          GlobalUnlock(Data);
+        end;
+      except
+        GlobalFree(Data);
+        raise;
+      end;
+    finally
+      ClipBoard.Close;
+    end;
+  end;
+
+
+
+var
+  MyHandle : THandle;
+  TextPtr  : PWChar;
+  MyString : WideString;
+  WStr     : WideString;
+begin
+//    ClipBoard.Open;
+  try
+    MyHandle := Clipboard.GetAsHandle(CF_UNICODETEXT);
+    TextPtr  := GlobalLock(MyHandle);
+    MyString := TextPtr;                  // copy to MyString
+    GlobalUnlock(MyHandle);
+  finally
+//      Clipboard.Close;
+  end;
+  WStr := MyString + TextWfromText(sLineBreak+Text);
+  SetBuffer(CF_UNICODETEXT, WStr[1], (Length(WStr) + 1) * SizeOf(WChar));
+end;
+
+procedure AppendToClipboard_Ansi_old(Text: AnsiString); overload;
+  //The following code locks the memory for text on the Clipboard, then reads the text.
+  // and appends Text to Clipboard
+var
+  MyHandle: THandle;
+  TextPtr: PChar;
+  MyString: AnsiString;
+begin
+//    ClipBoard.Open;
+  try
+    MyHandle := Clipboard.GetAsHandle(CF_TEXT);
+    TextPtr := GlobalLock(MyHandle);
+    MyString := StrPas(TextPtr);
+    GlobalUnlock(MyHandle);
+  finally
+//      Clipboard.Close;
+  end;
+  ClipBoard.SetTextBuf(PChar(MyString+sLineBreak+Text));
+end;
+
+procedure AppendToClipboard(StrArr: TStringArr); overload;
+var
+  Text : AnsiString;
+begin
+  Text := StrArrToString(StrArr);
+  AppendToClipboard(Text);
+end;
+
+procedure AppendToClipboard(Msg: AnsiString; Vals: Array of Double; Fmt: String=''); overload;
+var
+  Text : AnsiString;
+  Len, I : Integer;
+begin
+  if Fmt = '' then Fmt := '%15.5f';   // alternatives: '%1.5e' -> "-1.1234E-005"
+  Text := Msg;
+  Len := Length(Vals);
+  For I := 0 to Len -1 do
+    Text := Format('%s'#9+Fmt, [Text, Vals[I]]);
+  AppendToClipboard(Text);
+end;
+
+procedure AppendToClipboard(Vals: Array of Double; Fmt: String=''); overload;
+begin
+  AppendToClipboard('', Vals, Fmt);
+end;
+
+procedure AppendToClipboard(const DArrArr: TDoubArrArr; Msg: String= ''; Fmt: String=''); overload;
+begin
+  AppendToClipboard(DoubArrArrToStringArr(DArrArr, Msg, Fmt, False));
+end;
+
+function GetHtmlPart(const S, MarkStart, MarkEnd: AnsiString; var Offset: DWORD): AnsiString;
+// HtmlCont := GetHtmlPart(HtmlCont, '&gt;&gt;', '&lt;&lt;'); // '>>' '<<'
+var
+  P0, P1 : Integer;
+begin
+  Offset := Max(1, Offset);
+  P0 := PosEx(MarkStart, S, Offset);
+  P1 := PosEx(MarkEnd,   S, P0+1);
+  if (P0 > 0) and (P1 > P0) then
+  begin
+    Inc(P0, Length(MarkStart));
+    Result := Copy(S, P0, P1-P0);
+    Offset := P1 + Length(MarkEnd);
+  end else
+  begin
+    Result := '';
+    Offset := Length(S) + 1;
+  end;
+end;
+
+function GetHtmlPart(const S, MarkStart, MarkEnd: AnsiString): AnsiString;
+var
+  Offset: DWORD;
+begin
+  Offset := 1;
+  Result := GetHtmlPart(S, MarkStart, MarkEnd, Offset);
+end;
+
+function ClipBoardGetHtml: AnsiString;
+var
+  ContHndl : THandle;
+  Reg_CF_Html : UINT;
+  TextPtr : PChar;
+  GlbSiz  : DWORD;
+begin
+  Result := '';
+  Reg_CF_Html := RegisterClipboardFormat(HtmlFormat);
+  ContHndl := Clipboard.GetAsHandle(Reg_CF_Html);
+  GlbSiz := GlobalSize(ContHndl);
+    TextPtr := GlobalLock(ContHndl);
+  try
+//    Result  := StrPas(TextPtr);    // HtmlFormat is not zero terminated!
+//  if Length(Result) > GlbSiz then
+//    SetLength(Result, GlbSiz);
+    SetLength(Result, GlbSiz);
+    StrLCopy(Pchar(Result), TextPtr, GlbSiz);
+//ShowMessage(Result);
+  finally
+    GlobalUnlock(ContHndl);
+  end;
+end;
+
+function GetHtmlFragment(const S: AnsiString): AnsiString;
+//...
+//<!--StartFragment-->
+//  <td height=18 class=xl24 width=212 style='height:13.5pt;width:159pt'><a
+//  href="Temp_PW%20Auszug%20aus%20Projekte%20Index.xls">Temp_PW Auszug aus
+//  Projekte Index.xls</a></td>
+//<!--EndFragment-->
+//...
+begin
+  Result := GetHtmlPart(S, HtmlStartFragmentMarker, HtmlEndFragmentMarker);
+end;
+
+function GetHtmlLinkBase(const S: AnsiString): AnsiString;
+//base of relative links:
+//<base href="file:///P:\TESTPW">
+begin
+  Result := GetHtmlPart(S, '<base href="', '">');
+  Result := StringReplace(Result, 'file:///',  '', [              rfIgnoreCase]);
+  Result := StringReplace(Result, '%20',  ' ', [rfReplaceAll, rfIgnoreCase]);
+end;
+
+function GetHtmlSourceURL(const S: AnsiString): AnsiString;
+//SourceURL:file:///P:\Entwicklung\QS_Doku\Pflichtenheft\Temp_PW%20Auszug%20aus%20Projekte%20Index.xls
+begin
+  Result := GetHtmlPart(S, 'SourceURL:', sLineBreak);
+  Result := StringReplace(Result, 'file:///',  '', [              rfIgnoreCase]);
+  Result := StringReplace(Result, '%20',  ' ', [rfReplaceAll, rfIgnoreCase]);
+end;
+
+
+function BuildAbsoluteLink(const HtmlLinkAndName, HtmlSourceURL, HtmlLinkBase: AnsiString): AnsiString;
+  function IsAbsolute(S: AnsiString): Boolean;
+  begin
+    Result := (Pos(':\', S) = 2) or (Pos('\\', S) = 1);
+  end;
+var
+  P : Integer;
+begin
+  // strip ShowName part:
+  P:= Max(Pos(#9, HtmlLinkAndName), Pos(sLineBreak, HtmlLinkAndName));
+  if P > 0 then
+    Result := Copy(HtmlLinkAndName, 1, P-1)
+  else
+    Result := HtmlLinkAndName;
+
+  // add absolute part if neccessary:
+  if not IsAbsolute(Result) then
+  begin
+
+    If (HtmlLinkBase <> '') then
+      Result := IncludeTrailingPathDelimiter(HtmlLinkBase) + Result
+    else
+      Result := ExtractFilePath(HtmlSourceURL) + Result;
+  end;
+  Result := ExpandFileName(Result);
+end;
+
+function GetHtmlHyperlink(const S: AnsiString; var Offset: DWORD): AnsiString;
+var
+  Part, LinkPart, ShowPart : AnsiString;
+begin
+  //----------------------------------------------------------------------------------
+  Part     := GetHtmlPart(S, '<a', '</a>', Offset);
+//from word:
+//
+//href="file:///C:\Temp\Test%20Hyperlink%20Creation\Files%20with%20strange%20names\Org%20ÄÖÜäöüß@ºµ.txt"><span
+//style='mso-bidi-font-family:Arial'>C:\Temp\Test Hyperlink Creation\Files with
+//strange names\Org ÄÖÜäöüß@ºµ.txt</span>
+
+//from excel:
+//
+// href="Temp_PW%20Auszug%20aus%20Projekte%20Index.xls">Temp_PW Auszug aus
+// Projekte Index.xls
+
+  //----------------------------------------------------------------------------------
+  LinkPart := GetHtmlPart(    Part, 'href="', '">');
+//file:///C:\Temp\Test%20Hyperlink%20Creation\Files%20with%20strange%20names\Org%20ÄÖÜäöüß@ºµ.txt
+
+  LinkPart := StringReplace(LinkPart, sLineBreak,  '', [rfReplaceAll]);
+  LinkPart := StringReplace(LinkPart, 'file:///',  '', [              rfIgnoreCase]);
+//C:\Temp\Test%20Hyperlink%20Creation\Files%20with%20strange%20names\Org%20ÄÖÜäöüß@ºµ.txt
+
+  LinkPart := StringReplace(LinkPart, '%20',  ' ', [rfReplaceAll, rfIgnoreCase]);
+//C:\Temp\Test Hyperlink Creation\Files with strange names\Org ÄÖÜäöüß@ºµ.txt
+
+  //----------------------------------------------------------------------------------
+  ShowPart := GetHtmlPart(    Part, '<span', '</span>');
+  if ShowPart = '' then  // for excel
+  begin
+    ShowPart := GetHtmlPart(Part+'</span>', '">', '</span>');
+  end else
+  begin
+//
+//style='mso-bidi-font-family:Arial'>C:\Temp\Test Hyperlink Creation\Files with
+//strange names\Org ÄÖÜäöüß@ºµ.txt
+
+    ShowPart := GetHtmlPart(ShowPart+'</span>', '>', '</span>');
+//C:\Temp\Test Hyperlink Creation\Files with
+//strange names\Org ÄÖÜäöüß@ºµ.txt
+  end;
+
+  ShowPart := StringReplace(ShowPart, sLineBreak+' ',  ' ', [rfReplaceAll]);
+  ShowPart := StringReplace(ShowPart, sLineBreak,      ' ', [rfReplaceAll]);
+  ShowPart := StringReplace(ShowPart, '  ',            ' ', [rfReplaceAll]);
+
+  ShowPart := StringReplace(ShowPart, '<B>',       '', [rfReplaceAll, rfIgnoreCase]);
+  ShowPart := StringReplace(ShowPart, '</B>',      '', [rfReplaceAll, rfIgnoreCase]);
+  ShowPart := StringReplace(ShowPart, '<I>',       '', [rfReplaceAll, rfIgnoreCase]);
+  ShowPart := StringReplace(ShowPart, '</I>',      '', [rfReplaceAll, rfIgnoreCase]);
+//C:\Temp\Test Hyperlink Creation\Files with strange names\Org ÄÖÜäöüß@ºµ.txt
+
+  //----------------------------------------------------------------------------------
+  if LinkPart <> '' then
+    Result := LinkPart + Char(VK_TAB) + ShowPart
+  else
+    Result := '';  
+  //----------------------------------------------------------------------------------
+end;
+
+function GetHtmlAbsoluteLink: AnsiString;
+const
+  MaxBuf = 1024;
+var
+//  J,
+  I, NameLen: Integer;
+  Offset : DWORD;
+  FormatValue : Word;
+  FormatName, HtmlCont, HtmlLinkBase, HtmlSourceURL  : AnsiString;
+begin
+  Result := '';
+  for I := 0 to Clipboard.FormatCount-1 do
+  begin
+    FormatValue := Clipboard.Formats[I];
+    SetLength(FormatName, MaxBuf);
+    NameLen := GetClipboardFormatName(FormatValue, PChar(FormatName), MaxBuf);
+    SetLength(FormatName, NameLen);
+
+//    Memo1.Lines.Add(Format('Format %d = "%s"', [FormatValue, FormatName]));
+    if FormatName = 'HTML Format' then
+    begin
+      HtmlCont := ClipBoardGetHtml;
+      HtmlCont := UTF8toAnsi(HtmlCont);
+      HtmlLinkBase  := GetHtmlLinkBase(HtmlCont);
+      HtmlSourceURL := GetHtmlSourceURL(HtmlCont);
+//      Memo1.Lines.Append(Format(' HTML   content: = "%s"', [HtmlCont]));
+      HtmlCont := GetHtmlFragment(HtmlCont);
+//      Memo1.Lines.Append(Format(' Fragment found: = "%s"', [HtmlCont]));
+      Offset := 1;
+      HtmlCont := GetHtmlHyperlink(HtmlCont, Offset);
+//      Memo1.Lines.Append(Format(' Link     found: = "%s"', [HtmlCont]));
+      HtmlCont := StringReplace(HtmlCont, Char(Vk_Tab), sLineBreak, [rfReplaceAll]);
+//      Memo1.Lines.Append(Format(' Link       found:%s%s', [sLineBreak, HtmlCont]));
+//      Memo1.Lines.Append(Format(' Link Base  found:%s%s', [sLineBreak, HtmlLinkBase]));
+//      Memo1.Lines.Append(Format(' Source URL found:%s%s', [sLineBreak, HtmlSourceURL]));
+      Result := BuildAbsoluteLink(HtmlCont, HtmlSourceURL, HtmlLinkBase);
+//      Memo1.Lines.Append(Format(' Absolute Link build:%s%s', [sLineBreak, AbsoluteLink]));
+
+      if FileExists(Result) then
+      begin
+        Exit;
+      end else
+      begin
+        Result := '';
+      end;
+
+//    for J := 1 to Length(HtmlCont) do
+//      Memo1.Lines.Append(Format('  %2d: <%3d> "%s"', [J, Ord(HtmlCont[J]), HtmlCont[J]]));
+    end;
+  end;
+end;
+
+function GetHtmlAbsoluteLinks: TStringList;
+const
+  MaxBuf = 1024;
+var
+  I, NameLen: Integer;
+  Offset : DWORD;
+  FormatValue : Word;
+  FormatName, HtmlCont, HtmlLinkBase, HtmlSourceURL, HtmlLink, AbsoluteLink  : AnsiString;
+  Ready : Boolean;
+begin
+  Result := TStringList.Create;
+  for I := 0 to Clipboard.FormatCount-1 do
+  begin
+    FormatValue := Clipboard.Formats[I];
+    SetLength(FormatName, MaxBuf);
+    NameLen := GetClipboardFormatName(FormatValue, PChar(FormatName), MaxBuf);
+    SetLength(FormatName, NameLen);
+
+    if FormatName = 'HTML Format' then
+    begin
+      HtmlCont := ClipBoardGetHtml;
+      HtmlCont := UTF8toAnsi(HtmlCont);
+
+      HtmlLinkBase  := GetHtmlLinkBase(HtmlCont);
+      HtmlSourceURL := GetHtmlSourceURL(HtmlCont);
+
+      HtmlCont := GetHtmlFragment(HtmlCont);
+
+      Offset := 1;
+      repeat
+        HtmlLink := GetHtmlHyperlink(HtmlCont, Offset);
+        Ready := (HtmlLink = '');
+        if not Ready then
+        begin
+          AbsoluteLink := BuildAbsoluteLink(HtmlLink, HtmlSourceURL, HtmlLinkBase);
+          Result.Append(AbsoluteLink);
+        end;  
+      until Ready;
+    end;
+  end;
+end;
+
+
+
+(*** better use system UTF8toAnsi!
+function UTF8toAnsi(S: AnsiString): AnsiString;
+// #  Hex Min  Hex Max : Byte Sequence in Binary                               : Free Bits : 2^FreeBits
+// 1 00000000 0000007F : 0vvvvvvv                                              :         7 :        128  0x0000 0080
+// 2 00000080 000007FF : 110vvvvv 10vvvvvv                                     :        11 :       2048  0x0000 0800
+// 3 00000800 0000FFFF : 1110vvvv 10vvvvvv 10vvvvvv                            :        16 :      65536  0x0001 0000
+// 4 00010000 001FFFFF : 11110vvv 10vvvvvv 10vvvvvv 10vvvvvv                   :        21 :    2097152  0x0020 0000
+// 5 00200000 03FFFFFF : 111110vv 10vvvvvv 10vvvvvv 10vvvvvv 10vvvvvv          :        26 :   67108864  0x0400 0000
+// 6 04000000 7FFFFFFF : 1111110v 10vvvvvv 10vvvvvv 10vvvvvv 10vvvvvv 10vvvvvv :        31 : 2147483648  0x8000 0000
+//-----------------------
+// #    Limit hex   bin           msks
+// 1    <    0x80 = 10000000      0x7F
+// 2    <    0xE0 = 11100000      0x1F
+// 3    <    0xF0 = 11110000      0x0F
+// 4    <    0xF8 = 11111000      0x07
+// 5    <    0xFC = 11111100      0x03
+// 6    <    0xFE = 11111110      0x01
+
+
+  function Utf8Bytes(by: Byte): Integer;
+  begin
+    if by < $80 then Result := 1 else
+    if by < $E0 then Result := 2 else
+    if by < $F0 then Result := 3 else
+    if by < $F8 then Result := 4 else
+    if by < $FC then Result := 5 else
+    if by < $FE then Result := 6 else
+                     Result := 0; //error!
+  end;
+
+var
+  Len, I, UsedBytes, UniCode: Integer;
+begin
+  Result := '';
+  Len  := Length(S);
+  I := 1;
+  While (I <= Len) do
+  begin
+    UsedBytes := Utf8Bytes(Ord(S[I]));
+
+    if (UsedBytes = 0) or (UsedBytes + I -1 > Len) then
+    begin
+      Result := 'Error: charset is not utf-8!';
+      EXIT;
+    end;
+
+    Case UsedBytes of
+      1: UniCode :=  (Ord(S[I  ]) and $7F);
+      2: UniCode := ((Ord(S[I  ]) and $1F) shl  6) +
+                     (Ord(S[I+1]) and $3F);
+      3: UniCode := ((Ord(S[I  ]) and $0F) shl 12) +
+                    ((Ord(S[I+1]) and $3F) shl  6) +
+                     (Ord(S[I+2]) and $3F);
+      4: UniCode := ((Ord(S[I  ]) and $07) shl 18) +
+                    ((Ord(S[I+1]) and $3F) shl  6) +
+                    ((Ord(S[I+2]) and $3F) shl  6) +
+                     (Ord(S[I+3]) and $3F);
+      5: UniCode := ((Ord(S[I  ]) and $03) shl 24) +
+                    ((Ord(S[I+1]) and $3F) shl  6) +
+                    ((Ord(S[I+2]) and $3F) shl  6) +
+                    ((Ord(S[I+3]) and $3F) shl  6) +
+                     (Ord(S[I+4]) and $3F);
+      6: UniCode := ((Ord(S[I  ]) and $01) shl 30) +
+                    ((Ord(S[I+1]) and $3F) shl  6) +
+                    ((Ord(S[I+2]) and $3F) shl  6) +
+                    ((Ord(S[I+3]) and $3F) shl  6) +
+                    ((Ord(S[I+4]) and $3F) shl  6) +
+                     (Ord(S[I+5]) and $3F);
+    end;
+
+    if UniCode < 256 then
+    begin
+//      if UsedBytes > 1 then
+//        Result := Result + '#';
+      Result := Result + Char(UniCode);
+    end else
+    begin
+      Result := Result + '?';
+    end;
+
+    Inc(I, UsedBytes);
+  end;
+end;
+(*^^^*)
+
+
+// copied  FormatHTMLClipboardHeader & CopyHTMLToClipBoard
+// from http://www.swissdelphicenter.ch/torry/showcode.php?id=1391
+// at 27.08.07 P.W
+{
+  If you've ever tried sticking html into the clipboard using the usual CF_TEXT
+  format then you might have been disappointed to discover that wysiwyg html
+  editors paste your offering as if it were just text,
+  rather than recognising it as html. For that you need the CF_HTML format.
+  CF_HTML is entirely text format and uses the transformation format UTF-8.
+  It includes a description, a context, and within the context, the fragment.
+
+  As you may know one can place multiple items of data onto the clipboard for
+  a single clipboard entry, which means that the same data can be pasted in a
+  variety of different formats in order to cope with target
+  applications of varying sophistocation.
+
+  The following example shows how to stick CF_TEXT (and CF_HTML)
+  into the clipboard.
+}
+
+{
+  Vielleicht hast du schon mal probiert, HTML-formatierter Text in die
+  Zwischenablage zu kopieren mit dem gewöhnlichen CF_TEXT Format.
+  Wenn man dann z.B in Word (Bearbeiten, Inhalte Einfügen) auswählt,
+  gibt's das HTML Format aber nicht zur Auswahl.
+  Lösung: Mit RegisterClipboardFormat das Format CF_HTML registrieren,
+  dann einen String so formatieren, wie es auf der Microsoft Seite beschrieben
+  ist (Siehe Link unten) und ihn dann mit der SetClipboardData API in
+  die Zwischenablage kopieren.
+  Das folgende Beispiel zeigt, wie man zwei verschiedene Formate (Text und HTML)
+  in die Zwischenablage einfügen kann.
+}
+
+function FormatHTMLClipboardHeader(HTMLText: AnsiString): AnsiString;
+const
+  CrLf = #13#10;
+begin
+  Result := 'Version:0.9' + CrLf;
+  Result := Result + 'StartHTML:-1' + CrLf;
+  Result := Result + 'EndHTML:-1' + CrLf;
+  Result := Result + 'StartFragment:000081' + CrLf;
+  Result := Result + 'EndFragment:°°°°°°' + CrLf;
+  Result := Result + HTMLText + CrLf;
+  Result := StringReplace(Result, '°°°°°°', Format('%.6d', [Length(Result)]), []);
+//  Writeln('Length:',Length(Result));
+end;
+
+//The second parameter is optional and is put into the clipboard as CF_HTML.
+//Function can be used standalone or in conjunction with the VCL clipboard so long as
+//you use the USEVCLCLIPBOARD conditional define
+{$define USEVCLCLIPBOARD}
+//(and clipboard.open, clipboard.close).
+//Code from http://www.lorriman.com
+procedure CopyHTMLToClipBoard(const str: AnsiString; const htmlStr: AnsiString = '');
+const
+  StringsCount = 2;
+var
+  gMem: HGLOBAL;
+  lp: PChar;
+  Strings: array[0 .. StringsCount-1] of AnsiString;
+  Formats: array[0 .. StringsCount-1] of UINT;
+  i: Integer;
+begin
+  gMem := 0;
+  {$IFNDEF USEVCLCLIPBOARD}
+  Win32Check(OpenClipBoard(0));
+  {$ENDIF}
+  try
+    //most descriptive first as per api docs
+    Strings[0] := FormatHTMLClipboardHeader(htmlStr);
+    Strings[1] := str;
+    Formats[0] := RegisterClipboardFormat(HtmlFormat);
+    Formats[1] := CF_TEXT;
+    {$IFNDEF USEVCLCLIPBOARD}
+    Win32Check(EmptyClipBoard);
+    {$ENDIF}
+    for i := 0 to High(Strings) do
+    begin
+      if Strings[i] = '' then Continue;
+      //an extra "1" for the null terminator
+      gMem := GlobalAlloc(GMEM_DDESHARE + GMEM_MOVEABLE, Length(Strings[i]) + 1);
+      {Succeeded, now read the stream contents into the memory the pointer points at}
+      try
+        Win32Check(gmem <> 0);
+        lp := GlobalLock(gMem);
+        Win32Check(lp <> nil);
+        CopyMemory(lp, PChar(Strings[i]), Length(Strings[i]) + 1);
+      finally
+        GlobalUnlock(gMem);
+      end;
+      Win32Check(gmem <> 0);
+      SetClipboardData(Formats[i], gMEm);
+      Win32Check(gmem <> 0);
+      gmem := 0;
+    end;
+  finally
+    {$IFNDEF USEVCLCLIPBOARD}
+    Win32Check(CloseClipBoard);
+    {$ENDIF}
+  end;
+end;
+
+// Example:
+{
+procedure TForm1.Button1Click(Sender: TObject);
+begin
+  CopyHTMLToClipBoard('SwissDelphiCenter', 'SwissDelphiCenter');
+end;
+
+procedure TfrmImgOverview.Button1Click(Sender: TObject);
+var
+  I: Integer;
+begin
+  ListBox1.Items.Clear;
+  for I := 0 to Clipboard.FormatCount-1 do
+    ListBox1.Items.Add(Format('#%3d: %5d', [I, Clipboard.Formats[I]]));
+end;
+
+procedure TfrmImgOverview.Button2Click(Sender: TObject);
+begin
+  Clipboard.Open;
+  Clipboard.Clear; // uses EmptyClipboard;
+//    CopyHTMLToClipBoard('SwissDelphiCenter', 'SwissDelphiCenter');
+//    CopyHTMLToClipBoard('', '<BODY> This is normal. <B>This is bold.</B> <I><B>This is bold italic.</B></I> <I>This is italic.</I> </BODY>');
+    CopyHTMLToClipBoard('', '<html><p><a href="file:///\\SERVER\Daten\Allgemein\SoftwareListe\MEDIEN.XLS"><span>Anzeige <B>1</B></span></a></P></html>');
+    CopyHTMLToClipBoard('', '<html><p><a href="file:///\\SERVER\Daten\Allgemein\SoftwareListe\MEDIEN.XLS"><span>Anzeige <B>2</B></span></a></P></html>');
+//<BODY> This is normal. <B>This is bold.</B> <I><B>This is bold italic.</B></I> <I>This is italic.</I> </BODY>
+  Button1Click(Sender);
+  Clipboard.Close;
+end;
+}
+
+function Ansi160ToHtml(const S: AnsiString): AnsiString;
+  function CharToHtml(Ch: Char): AnsiString;
+  // see "http://www.fabians-webdesign.de/tutorials/html_umlaute.htm"
+  //    'ÄÖÜäöüß' -> '&Auml;&Ouml;&Uuml;&auml;&ouml;&uuml;&szlig;';
+  begin
+    Case Ch of  // Name in HTML  // Unicode in HTML : AnsiCharSet 160 .. 255 -> '&#160;'
+      'Ä': Result := '&Auml;';
+      'Ö': Result := '&Ouml;';
+      'Ü': Result := '&Uuml;';
+      'ä': Result := '&auml;';
+      'ö': Result := '&ouml;';
+      'ü': Result := '&uuml;';
+      'ß': Result := '&szlig;';
+      else Result := Ch;
+    end;
+  end;
+var
+  LenS, LenR, LenU, I, U, IR : Integer;
+  Ch : Char;
+  UniCodeStr : AnsiString;
+begin
+  LenS := Length(S);
+  LenR := LenS;
+  SetLength(Result, LenR);
+
+  // S to Result convert char >= #160
+  IR := 0;
+  for I := 1 to LenS do
+  begin
+    Ch := S[I];
+    if (Ch < #160) then
+    begin
+      Inc(IR);
+      Result[IR] := Ch;
+    end else
+    begin
+      UnicodeStr := Format('&#%3d;', [Ord(Ch)]);
+
+      // adapt length of result:
+      LenU := Length(UniCodeStr);
+      Inc(LenR, LenU -1);
+      SetLength(Result, LenR);
+
+      // transfer UnicodeStr to Result
+      for U := 1 to LenU do
+      begin
+        Inc(IR);
+        Result[IR] := UnicodeStr[U];
+      end;
+    end;
+  end;
+//  ShowMessageFmt('"%s"%s"%s"', [S, sLineBreak, Result]);
+
+end;
+
+
+function RelativePath(const BaseName, DestName: AnsiString): AnsiString;
+begin
+  Result := ExtractRelativePath(BaseName, DestName);
+//  ShowMessageFmt('RelativePath "%s" "%s" "%s"', [BaseName, DestName, Result]);
+end;
+
+function FilePathesAsHyperLink(const Names: TStringList; Opts: THTMLOpts): AnsiString;
+// MS Word HTML Formats:
+// <a href="file">Anzeige</a>
+// <br> : New Line
+// <p> </p> New paragraph?
+// <div> </div>
+const
+  HtmlTab = '&#9;';
+
+  function HtmlNL : AnsiString;
+  begin
+    if Opts.JpgBmpAsImage
+    then Result := '<p>'
+    else Result := '<br>';
+  end;
+
+  function Header : AnsiString;
+    procedure Chk(Wanted: Boolean; const S: AnsiString);
+    begin
+      if Wanted then
+        if Result = ''
+          then Result :=                    S
+          else Result := Result + HtmlTab + S;
+    end;
+  begin
+    Result := '';
+    if Opts.ExtendedFormat and Opts.HeaderWanted then
+    begin
+      Chk  (Opts.JpgBmpAsImage, 'Images');
+
+      if Opts.RelativeLink then
+        Chk(Opts.W_Link       , 'Rel. Link')
+      else
+        Chk(Opts.W_Link       , 'Link');
+
+      if Opts.ExtendedFormat then
+      begin
+        Chk(Opts.W_Path       , 'Path');
+        Chk(Opts.W_Size       , 'Size');
+        Chk(Opts.W_Created    , 'Created');
+        Chk(Opts.W_Changed    , 'Changed');
+        Chk(Opts.W_Accessed   , 'Accessed');
+        Chk(Opts.W_ShortName  , 'Short Name');
+        Chk(Opts.W_Ext        , 'Ext');
+        Chk(Opts.W_Existing   , 'File Name');
+        Chk(Opts.W_Existing   , 'Existing');
+      end;
+      Result := Result + HtmlNL;
+    end;
+  end;
+
+  function CheckDatesAsText(const S: AnsiString): AnsiString;
+  begin
+    if Opts.DatesAsText
+      then Result := '"'+S+'"'
+      else Result := S;
+  end;
+
+  function CheckWanted(Wanted: Boolean; const S: AnsiString): AnsiString;
+  begin
+    if Wanted then
+    begin
+      Result := HtmlTab + S;
+    end else
+    begin
+      Result := '';
+    end;
+  end;
+
+  function ExistInfo(Name: AnsiString): AnsiString;
+  begin
+    if FileExists     (Name) then Result := 'file' else
+    if DirectoryExists(Name) then Result := 'dir'  else
+                                  Result := 'not found';
+  end;
+
+  function DataLine(const HtmlName, fName: AnsiString; const SRL: TSearchRecInt64) : AnsiString;
+  var
+    ColumnCtr : Integer;
+    procedure Chk(Wanted: Boolean; const S: AnsiString);
+    begin
+      if Wanted then
+      begin
+        Inc(ColumnCtr);
+        if (ColumnCtr = 1) 
+          then Result :=                    S
+          else Result := Result + HtmlTab + S;
+      end
+    end;
+  var
+    BoldA, BoldB, AbsPart, Ext, Txt: AnsiString;
+  begin
+    Result := '';
+    ColumnCtr := 0;
+    if Opts.Bold then
+    begin
+      BoldA := '<B>';
+      BoldB := '</B>';
+    end else
+    begin
+      BoldA := '';
+      BoldB := '';
+    end;
+
+    if Opts.RelativeLink then
+    begin
+      AbsPart := '';
+    end else
+    begin
+      AbsPart := 'file:///';
+    end;
+
+    Ext := ExtractFileExt(HtmlName);
+
+    if ((Ext = '.jpg') or (Ext = '.bmp')) then
+    begin
+      Txt := Format('<img width=%d height=%d' , [Opts.ImgWidth, Opts.ImgHeight])
+             + sLineBreak +
+             Format('src="'+AbsPart+'%s" v:shapes="_x0000_i1026">' , [HtmlName]);
+     if not Opts.W_Link then Txt :=
+       Txt + Format('<span>'+BoldA+'%s'+BoldB+'</span></a>' , [fName]);
+
+      Chk(Opts.JpgBmpAsImage, Txt);
+
+    end else
+    begin
+      Chk(Opts.JpgBmpAsImage, 'not a supported image');
+    end;
+    
+    Chk(Opts.W_Link       , Format('<a href="'+AbsPart+'%s"><span>'+BoldA+'%s'+BoldB+'</span></a>', [HtmlName, fName]));
+
+    if Opts.ExtendedFormat then
+    begin
+      Chk(Opts.W_Path      , ExtractFileDir (HtmlName));
+      Chk(Opts.W_Size      , IntToStr(SRL.SizeInt64));
+      Chk(Opts.W_Created   , CheckDatesAsText(SRL.CreationTimeStr  ));
+      Chk(Opts.W_Changed   , CheckDatesAsText(SRL.LastWriteTimeStr ));
+      Chk(Opts.W_Accessed  , CheckDatesAsText(SRL.LastAccessTimeStr));
+      Chk(Opts.W_ShortName , Ansi160ToHtml(SRL.AlternateFileName));
+      Chk(Opts.W_Ext       , Ext);
+      Chk(Opts.W_Existing  , ExtractFileName (HtmlName));
+      Chk(Opts.W_Existing  , ExistInfo(HtmlName));
+    end;
+  end;
+var
+  Len, I : Integer;
+  SR     : TSearchRec;
+  SRL    : TSearchRecInt64;
+  Name, HtmlName, fName : AnsiString;
+
+begin
+  Result := // '<p>' +
+    Header;
+
+  Len := Names.Count;
+  for I := 0 to Len -1 do
+  begin
+
+    Name     := Names[I];
+    if Name = '' then Continue;  // next I;
+
+    if (FindFirst(Name, faAnyFile, SR) = 0) then
+    begin
+      SysUtils.FindClose(SR);
+      SRL  := SrToSrInt64(SR);
+    end else
+    begin
+      FillChar(SR , SizeOf(SR ), #0);
+      FillChar(SRL, SizeOf(SRL), #0);
+    end;
+    HtmlName := Ansi160ToHtml(Name);
+    fName    := ExtractFileName(HtmlName);
+
+    if Opts.RelativeLink then
+      HtmlName := Ansi160ToHtml(RelativePath(Opts.RelativeRoot, Name));
+
+
+
+    Result := Result + DataLine(HtmlName, fName, SRL) + HtmlNL;
+
+  end; // for I
+//  Result := Result + HtmlNL + HtmlNL;
+//  Result := Result + '</p>';
+//ShowMessage(Result);
+end;
+
+function FileStrListTabbed(Names: TStringList): TStringList;
+var
+  Len, I : Integer;
+begin
+  Result := TStringList.Create;
+  Len := Names.Count;
+  for I := 0 to Len -1 do
+    Result.Append(ExtractFileName(Names[I])+#9+ExtractFileDir(Names[I]));
+end;
+
+procedure FilePathesAsHyperLinkToClipboard(Names: TStringList; Opts: THTMLOpts);
+var
+  TabbedList : TStringList;
+begin
+  Clipboard.Open;
+  Clipboard.Clear;
+    TabbedList := FileStrListTabbed(Names);
+    CopyHTMLToClipBoard(TabbedList.Text, FilePathesAsHyperLink(Names, Opts));
+    TabbedList.Free;
+  Clipboard.Close;
+end;
+
+end.

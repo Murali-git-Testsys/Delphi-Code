@@ -1,0 +1,642 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; changes: 4; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+{*******************************************************}
+{                                                       }
+{       Turbo Pascal Runtime Library                    }
+{       DOS Interface Unit                              }
+{                                                       }
+{       Copyright (C) 1988,92 Borland International     }
+{                                                       }
+{*******************************************************}
+{ Modifications:                                        }
+{ 30.10.00 P.W:                                         }
+{                                                       }
+{   GetTime & GetDate not from Time.Asm                 }
+{         (which makes problems under WindowsNT and     }
+{         possibly also under the debugger "TDX"?       }
+{         (Mouse Intr may not intr. GetTime (WinNT)     }
+{                                                       }
+{*******************************************************}
+{ 22.10.03 P.W                                          }
+{    copied from RTL\Dos                                }
+{      function defined empty for allow adapt by delphi }
+{    unused functions as comment                        }
+// 23.03.05 P.W: FindFirst and FindNext only as FindFirstDE and FindNextDE
+// 03.10.07 P.W: FExpand PathStr changed to String: 79 -> 255 characters
+//  also for FindFirstDE FSplit
+{*******************************************************}
+
+unit Dos;
+
+{$I-,O+,S-}
+
+interface
+
+uses
+  DebugUnit,       // 03.05.24 P.W
+  InitFinal_List,  // 03.05.24 P.W
+  GlbType,
+  Windows,
+  DateUtils,
+  SysUtils;
+
+const
+{ Dos Error codes }                         // (02.03.04 P.W)
+  DosErr_NoError                     =  0;  // (02.03.04 P.W)
+  DosErr_FileNotFound                =  2;  // (02.03.04 P.W)
+  DosErr_PathNotFound                =  3;  // (02.03.04 P.W)
+  DosErr_ManyOpenFiles               =  4;  // (02.03.04 P.W)
+  DosErr_FileAccesDenied             =  5;  // (02.03.04 P.W)
+  DosErr_InvalidDriveNumber          = 15;  // (02.03.04 P.W)
+  DosErr_CanotRemoveCurrentDirectory = 16;  // (02.03.04 P.W)
+  DosErr_CanotRenameAcrossDrives     = 17;  // (02.03.04 P.W)
+  DosErr_NoMoreFiles                 = 18;  // (02.03.04 P.W)
+
+{ File attribute constants }
+
+  ReadOnly  = faReadOnly;
+  Hidden    = faHidden;
+  SysFile   = faSysFile;
+  VolumeID  = faVolumeID;
+  Directory = faDirectory;
+  Archive   = faArchive;
+  AnyFile   = faAnyFile;
+
+type
+
+{ String types }
+
+  ComStr   = string[127];       { Command line string }
+  PathStr  = string[79];        { File pathname string }
+  DirStr   = string[67];        { Drive and directory string }
+  NameStr  = string[8];         { File name string }
+  ExtStr   = string[4];         { File extension string }
+
+  ComStrA  = AnsiString;        { Command line string }
+  PathStrA = AnsiString;        { File pathname string }
+  DirStrA  = AnsiString;        { Drive and directory string }
+  NameStrA = AnsiString;        { File name string }
+  ExtStrA  = AnsiString;        { File extension string }
+
+{ Registers record used by Intr and MsDos }
+
+  Registers = Packed Record // "record" to "Packed Record" Chg#55 (02.03.04 P.W)
+                case Smallint of
+                  0: (AX,BX,CX,DX,BP,SI,DI,DS,ES,Flags: Word);
+                  1: (AL,AH,BL,BH,CL,CH,DL,DH: Byte);
+              end;
+
+{ Typed-file and untyped-file record }
+
+  (*
+  FileRec = record
+              Handle: Word;
+              Mode: Word;
+              RecSize: Word;
+              Private: array[1..26] of Byte;
+              UserData: array[1..16] of Byte;
+              Name: array[0..79] of Char;
+            end;
+  *)
+
+{ Textfile record }
+
+  TextBuf = array[0..127] of Char;
+  TextRec = Packed Record                     {TTextRec under delphi!} // "record" to "Packed Record" Chg#56 (02.03.04 P.W)
+              Handle: Word;
+              Mode: Word;
+              BufSize: Word;
+              Private: Word;
+              BufPos: Word;
+              BufEnd: Word;
+              BufPtr: ^TextBuf;
+              OpenFunc: Pointer;
+              InOutFunc: Pointer;
+              FlushFunc: Pointer;
+              CloseFunc: Pointer;
+              UserData: array[1..16] of Byte;
+              Name: array[0..79] of Char;
+              Buffer: TextBuf;
+            end;
+
+(*
+{ Search record used by FindFirst and FindNext }
+Turbo Pascal 7.0 syntax:
+type
+  SearchRec = Packed Record // "record" to "Packed Record" Chg#57 (02.03.04 P.W)
+    Fill: array[1..21] of Byte;
+    Attr: Byte;
+    Time: Longint;
+    Size: Longint;
+    Name: string[12];
+  end;
+
+Delphi syntax; On Windows:
+type
+  TSearchRec = record
+    Time: Integer;
+    Size: Integer;
+    Attr: Integer;
+    Name: TFileName;
+    ExcludeAttr: Integer;
+    FindHandle: THandle;
+    FindData: TWin32FindData;
+  end;
+  (Syntax on Linux is different!)
+*)
+  SearchRec = TSearchRec;
+
+type
+{ Date and time record used by PackTime and UnpackTime }
+  DateTime = Packed Record // "record" to "Packed Record" Chg#58 (02.03.04 P.W)
+               Year,Month,Day,Hour,Min,Sec: Word;
+             end;
+
+var
+
+{ Error status variable }
+  DosError: Smallint = 0;  // used by FindFirstDE & FindNextDE!
+
+function ResetReadOnly(var Inp: Text): Integer;
+
+{ GetDate returns the current date set in the operating system. }
+{ Ranges of the values returned are: Year 1980-2099, Month      }
+{ 1-12, Day 1-31 and DayOfWeek 0-6 (0 corresponds to Sunday).   }
+
+procedure GetDate(var Year,Month,Day,aDayOfWeek: Word);
+
+{ SetDate sets the current date in the operating system. Valid  }
+{ parameter ranges are: Year 1980-2099, Month 1-12 and Day      }
+{ 1-31. If the date is not valid, the function call is ignored. }
+
+{procedure SetDate(Year,Month,Day: Word);}
+
+{ GetTime returns the current time set in the operating system. }
+{ Ranges of the values returned are: Hour 0-23, Minute 0-59,    }
+{ Second 0-59 and Sec100 (hundredths of seconds) 0-99.          }
+
+procedure GetTime(var Hour,Minute,Second,Sec100: Word);
+
+{ SetTime sets the time in the operating system. Valid          }
+{ parameter ranges are: Hour 0-23, Minute 0-59, Second 0-59 and }
+{ Sec100 (hundredths of seconds) 0-99. If the time is not       }
+{ valid, the function call is ignored.                          }
+
+{procedure SetTime(Hour,Minute,Second,Sec100: Word);}
+
+{ DiskFree returns the number of free bytes on the specified    }
+{ drive number (0=Default,1=A,2=B,..). DiskFree returns -1 if   }
+{ the drive number is invalid.                                  }
+
+function DiskFree(Drive: Byte): Longint;
+
+{ DiskSize returns the size in bytes of the specified drive     }
+{ number (0=Default,1=A,2=B,..). DiskSize returns -1 if the     }
+{ drive number is invalid.                                      }
+
+{function DiskSize(Drive: Byte): Longint;}
+
+{ GetFAttr returns the attributes of a file. F must be a file   }
+{ variable (typed, untyped or textfile) which has been assigned }
+{ a name. The attributes are examined by ANDing with the        }
+{ attribute masks defined as constants above. Errors are        }
+{ reported in DosError.                                         }
+
+//procedure GetFAttr(var F; var Attr: Word);
+
+{ SetFAttr sets the attributes of a file. F must be a file      }
+{ variable (typed, untyped or textfile) which has been assigned }
+{ a name. The attribute value is formed by adding (or ORing)    }
+{ the appropriate attribute masks defined as constants above.   }
+{ Errors are reported in DosError.                              }
+
+//procedure SetFAttr(var F; Attr: Word);
+
+{ GetFTime returns the date and time a file was last written.   }
+{ F must be a file variable (typed, untyped or textfile) which  }
+{ has been assigned and opened. The Time parameter may be       }
+{ unpacked throgh a call to UnpackTime. Errors are reported in  }
+{ DosError.                                                     }
+
+//procedure GetFTime(var F; var Time: Longint);  // replace by FileAge
+
+{ SetFTime sets the date and time a file was last written.      }
+{ F must be a file variable (typed, untyped or textfile) which  }
+{ has been assigned and opened. The Time parameter may be       }
+{ created through a call to PackTime. Errors are reported in    }
+{ DosError.                                                     }
+
+//procedure SetFTime(var F; Time: Longint); // replace by
+procedure FileSetAge(FileName: AnsiString; Age: Integer); // s. 15.10.04 P.W.
+
+{ FindFirst searches the specified (or current) directory for   }
+{ the first entry that matches the specified filename and       }
+{ attributes. The result is returned in the specified search    }
+{ record. Errors (and no files found) are reported in DosError. }
+// FindFirst Replaced by FindFirstDE
+procedure ChkFindClose(var F: SearchRec); // (05.03.04 P.W)
+
+//--- procedure FindFirst(Path: PathStr; Attr: Word; var F: SearchRec);
+// FindFirstDE is planed to replace FindFirst of Turbo 7.0 to avoid
+// conflict with SysUtils FindFirst FindNext; "DE" means DosError
+procedure FindFirstDE(Path: String; Attr: Word; var F: SearchRec);
+
+{ FindNext returs the next entry that matches the name and      }
+{ attributes specified in a previous call to FindFirst. The     }
+{ search record must be one passed to FindFirst. Errors (and no }
+{ more files) are reported in DosError.                         }
+
+//--- procedure FindNext(var F: SearchRec);
+// FindNextDE is planed to replace FindNext of Turbo 7.0 to avoid
+// conflict with SysUtils FindFirst FindNext; "DE" means DosError
+procedure FindNextDE(var F: SearchRec);
+
+procedure DelphiUnpackTime(const P: Longint;
+            var Year, Month, Day, Hour, Minute, Sec: Word);
+{ UnpackTime converts a 4-byte packed date/time returned by     }
+{ FindFirst, FindNext or GetFTime into a DateTime record.       }
+
+procedure UnpackTime(const P: Longint; var T: DateTime);
+
+{ PackTime converts a DateTime record into a 4-byte packed      }
+{ date/time used by SetFTime.                                   }
+
+{procedure PackTime(var T: DateTime; var P: Longint);}
+
+{ FExpand expands the file name in Path into a fully qualified  }
+{ file name. The resulting name consists of a drive letter, a   }
+{ colon, a root relative directory path, and a file name.       }
+{ Embedded '.' and '..' directory references are removed.       }
+
+function FExpand(Path: String): String; 
+
+{ FSplit splits the file name specified by Path into its three  }
+{ components. Dir is set to the drive and directory path with   }
+{ any leading and trailing backslashes, Name is set to the file }
+{ name, and Ext is set to the extension with a preceding dot.   }
+{ Each of the component strings may possibly be empty, if Path  }
+{ contains no such component.                                   }
+
+procedure FSplit(Path: String; var Dir: DirStr;
+  var Name: NameStr; var Ext: ExtStr);
+procedure FSplitA(const Path: PathStrA; var Dir: DirStrA;
+  var Name: NameStrA; var Ext: ExtStrA);
+
+{ GetEnv returns the value of a specified environment variable. }
+{ The variable name can be in upper or lower case, but it must  }
+{ not include the '=' character. If the specified environment   }
+{ variable does not exist, GetEnv returns an empty string.      }
+
+function GetEnv(EnvVar: String): String;
+
+{ DosExitCode returns the exit code of a sub-process. The low   }
+{ byte is the code sent by the terminating process. The high    }
+{ byte is zero for normal termination, 1 if terminated by       }
+{ Ctrl-C, 2 if terminated due to a device error, or 3 if        }
+{ terminated by the Keep procedure (function call 31 hex).      }
+
+{function DosExitCode: Word;}
+
+function DelphiTime: Double; {13.02.04 P.W}
+function DelphiUpperCase(const s: string): string; {13.02.04 P.W}
+function DelphiLowerCase(const s: string): string; {13.02.04 P.W}
+
+Implementation
+  const Unit_Name = 'Dos'; // 03.05.24 P.W
+
+
+function ResetReadOnly(var Inp: Text): Integer;
+// 27.06.05 P.W like FileOpenReadOnly of ScanIo.pas for Text
+// (18.04.08 P.W: copy in FileUtils.pas)
+var
+  FileModeSav         : Word;
+begin
+  {$I-}
+    FileModeSav:=FileMode;
+    FileMode:=FileMode_ReadOnly;
+    RESET(Inp) ;
+    FileMode:=FileModeSav;
+    ResetReadOnly := IoResult;
+  {$I+}
+end;
+
+procedure GetDate(var Year,Month,Day,aDayOfWeek: Word);
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W
+var
+  CurDate : TDateTime;
+begin
+  CurDate := Date;
+  DecodeDate(CurDate, Year, Month, Day);
+  aDayOfWeek := DayOfWeek(CurDate);
+end;
+
+procedure GetTime(var Hour,Minute,Second,Sec100: Word);
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W
+var
+  CurTime : TDateTime;
+  MSec : Word;
+begin
+  CurTime := Time;
+  DecodeTime(CurTime, Hour, Minute, Second, MSec);
+  Sec100 := MSec div 10;
+end;
+
+function DiskFree(Drive: Byte): Longint;
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W
+// 20.07.09 P.W use SysUtils.DiskFree
+var
+ HRes : Int64;
+begin
+  HRes := SysUtils.DiskFree(Drive);
+  If HRes > MaxLongInt then
+  begin
+    Result := MaxLongInt;
+//    ShowMessageFmt('DiskFree is %d, result reduced to %d',[HRes, Result]);
+  end else
+  begin
+    Result := HRes;
+//    ShowMessageFmt('DiskFree is %d, result is %d',[HRes, Result]);
+  end;
+end;
+
+//procedure GetFAttr_notsupported(var F; var Attr: Word);
+// Convert Turbo to Delphi
+// As replacement use FileGetAttr
+
+//procedure SetFAttr_notsupported(var F; Attr: Word);
+// Convert Turbo to Delphi
+// as replacement use FileSetAttr
+
+//procedure GetFTime_notsupported(var F; var Time: Longint);
+// Convert Turbo to Delphi
+// as replacement use FileAge
+
+procedure FileSetAge(FileName: AnsiString; Age: Integer); // s. 15.10.04 P.W.
+var
+  FileHandle : Integer;
+begin
+  FileHandle := FileOpen(FileName, fmOpenWrite or fmShareDenyNone);
+  if FileHandle > 0 then
+  begin
+    FileSetDate(FileHandle, Age);
+    FileClose(FileHandle);
+    {valid file handle}
+  end else
+  begin
+    {Open error: FileHandle = negative DOS error code}
+  end;
+end;
+
+//procedure SetFTime_notsupported(var F; Time: Longint);
+// Convert Turbo to Delphi
+// 20.02.04 P.W
+//  as replacement use FileSetAge see above
+
+(*  FindFirst, FindNext & FindClose
+Delphi syntax:
+function FindFirst(const Path: string; Attr: Integer; var F: TSearchRec): Integer;
+------------------
+Description
+FindFirst searches the directory specified by Path for the
+first file that matches the file name implied by Path and the
+attributes specified by the Attr parameter. The result is
+returned in the F parameter. Use the fields of this search
+record to extract the information needed. FindFirst returns 0
+if a file was successfully located, otherwise, it returns an
+error code.
+The Path constant parameter is the directory and file name mask,
+including wildcard characters. For example, '.\test\*.*'
+specifies all files in the current directory).
+The Attr parameter specifies the special files to include in
+addition to all normal files. Choose from these file attribute
+constants when specifying the Attr parameter:
+
+Constant	Description
+faReadOnly	Read-only files
+faHidden	Hidden files
+faSysFile	System files
+faVolumeID	Volume ID files
+faDirectory	Directory files
+faArchive	Archive files
+faAnyFile	Any file
+Attributes can be combined by adding (Delphi) or or-ing (C++)
+their constants or values. For example, to search for read-only
+and hidden files in addition to normal files, pass
+(faReadOnly + faHidden) in Delphi or
+(faReadOnly | faHidden) in C++ as the Attr parameter.
+
+Note:	FindFirst allocates resources (memory) which must be
+released by calling FindClose.
+
+function FindNext(var F: TSearchRec): Integer;
+-----------------
+Description
+FindNext returns the next entry that matches the name and attributes
+specified in a previous call to FindFirst. The search record must be one
+that was passed to FindFirst. The return value is zero if the function
+was successful. Otherwise the return value is an error code.
+
+procedure FindClose(var F: TSearchRec);
+-------------------
+Description
+FindClose terminates a FindFirst/FindNext sequence.
+=========================================================
+Look out!
+  The TP7 FindFirst / FindNext
+  a) do not need FindClose
+  b) they set DosError to non zero if they fail
+  Changes to support FindClose:
+  ChkFindClose added for each FindFirst (Project FemurPcDelphi) only
+  since 23.03.05 P.W: FindFirst changed to FindFirstDE and FindNext to
+  FindNextDE all callers checked and also renamed
+  SysUtils.FindFirst FindNext have also been checked
+  Now FindFirst and FindNext of Dos are no longer public!
+*)
+
+procedure ChkFindClose(var F: SearchRec);
+begin
+  SysUtils.FindClose(F);
+end;
+
+// FindFirstDE is used to replace FindFirst of Turbo 7.0 to avoid
+// conflict with SysUtils FindFirst FindNext; "DE" means DosError
+procedure FindFirstDE(Path: String; Attr: Word; var F: SearchRec);
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W to Delphi
+// PathStr to String 03.10.07 P.W
+//
+// Look out! Delphi FindFirst supports FindClose if whitout success!
+var
+  res : LongInt;
+begin
+  res := SysUtils.FindFirst(FExpand(Path), Attr, F); // FExpand added (04.03.04 P.W)
+  If (Res = 0) then
+  begin
+    DosError := DosErr_NoError;
+  end else
+  begin
+    DosError := DosErr_NoMoreFiles;
+    ChkFindClose(F);
+  end;
+end;
+
+// FindNextDE is planed to replace FindNext of Turbo 7.0 to avoid
+// conflict with SysUtils FindFirst FindNext; "DE" means DosError
+procedure FindNextDE(var F: SearchRec);
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W
+var
+  res : LongInt;
+begin
+  Res := SysUtils.FindNext(F);
+  If (Res = 0) then
+  begin
+    DosError := DosErr_NoError;
+  end else
+  begin
+    DosError := DosErr_NoMoreFiles;
+    ChkFindClose(F);
+  end;
+end;
+
+procedure DelphiUnpackTime(const P: Longint;
+            var Year, Month, Day, Hour, Minute, Sec: Word);
+// Modifications:
+// 20.02.04 P.W
+// Convert Turbo to Delphi
+var
+  TimDelphi: TDateTime;
+begin
+  TimDelphi := FileDateToDateTime(P);
+  Year  := YearOf(TimDelphi);
+  Month := MonthOf(TimDelphi);
+  Day   := DayOf(TimDelphi);
+  Hour  := HourOf(TimDelphi);
+  Minute:= MinuteOf(TimDelphi);
+  Sec   := SecondOf(TimDelphi);
+end;
+
+procedure UnpackTime(const P: Longint; var T: DateTime);
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W
+begin
+  With T do
+    DelphiUnpackTime(P, Year, Month, Day, Hour, Min, Sec);
+end;
+
+function  FullFileName(FileName: string): string;
+// also used by DOS.FExpand
+begin
+  if FileName = '' then
+  begin
+    Result := '';
+  end else
+  begin
+    Result := ExpandFileName(FileName);
+  end;
+end;
+
+function FExpand(Path: String): String;
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W Adapted to Delphi
+// 03.10.07 P.W type PathStr changed to String (no longer limit to 79 characters
+begin
+  Result := FullFileName(Path);
+end;
+
+procedure FSplit(Path: String; var Dir: DirStr; var Name: NameStr; var Ext: ExtStr);
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W
+// 23.04.04 P.W
+//   only check add "\" if Dir is not empty!
+// PathStr to String 03.10.07 P.W
+begin
+  Dir  := ExtractFileDir(Path);
+  If (Length(Dir) > 0) then  // 23.04.04 P.W
+    If (Dir[Length(Dir)] <> '\') then Dir := Dir + '\';  // (08.03.04. P.W)
+  Name := ChangeFileExt(ExtractFileName(Path), '');
+  Ext  := ExtractFileExt(Path);
+end;
+
+procedure FSplitA(const Path: PathStrA; var Dir: DirStrA;
+  var Name: NameStrA; var Ext: ExtStrA);
+// Created: 07.04.05 P.W
+// Purpose: Replace FSplit support Long FileNames
+// Modifications:
+begin
+  Dir  := ExtractFileDir(Path);
+  If (Length(Dir) > 0) then
+    Dir := IncludeTrailingPathDelimiter(Dir);
+  Name := ChangeFileExt(ExtractFileName(Path), '');
+  Ext  := ExtractFileExt(Path);
+end;
+
+function GetEnv(EnvVar: String): String;
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W
+begin
+  Result := GetEnvironmentVariable(EnvVar);
+end;
+
+function DelphiTime: Double;
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W
+begin
+  Result := SysUtils.Time;
+end;
+
+function DelphiUpperCase(const s: string): string;
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W
+begin
+  Result := UpperCase(s);
+end;
+
+function DelphiLowerCase(const s: string): string;
+// Convert Turbo to Delphi
+// Modifications:
+// 20.02.04 P.W
+begin
+  Result := LowerCase(s);
+end;
+
+
+procedure InitVars_Dll; // 03.05.24 P.W
+begin
+  Deb1(Unit_Name + '0');
+  DosError: Smallint = 0;  // used by FindFirstDE & FindNextDE!
+
+//  FillChar(, SizeOf(), #0);
+  Deb1(Unit_Name + '1');
+end;
+
+function Unit_Init(Mode : Integer = 0) : Integer;
+// Initialization part  into  function // 03.05.24 P.W
+begin
+  Result := 0;
+  InitVars_Dll; // 03.05.24 P.W
+end;
+Initialization
+  InitFinal_Add(Unit_Name, Unit_Init); // 03.05.24 P.W
+(* -v--- moved to function Unit_Init // 03.05.24 P.W
+   -^--- moved to function Unit_Init // 03.05.24 P.W *)
+end.

@@ -1,0 +1,1044 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; changes: 8; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; changes: 2; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+(*.+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+(*+ ~ ~                                                    ) %15nV0.%22v) +*)
+(*+ Module Name/Vers.: @(#)BnHead0 V.:1.00                              ) +*)
+(*+ Author           : P.Wueseke                                          +*)
+(*+ Date             : 29.08.95 (from BnHead)                             +*)
+(*+ Description      : Header of Datafiles (SV and CT) of XBONE V.5.20    +*)
+(*+ ~ ~                                                       : %15d%30w: +*)
+(*+ Date/Modification: 14.08.95 P.W / SlicesSymFlg; -> MeasPosSliceMm     +*)
+(*+ Date/Modification: 28.08.95 P.W / Parts for Updating put into Unit    +*)
+(*+ Date/Modification:                BnHeadUp, so we no longer use       +*)
+(*+ Date/Modification:                Unit BnDakoLD                       +*)
+(*+ Date/Modification: 15.11.95 P.W / RefPosSliceMm  implemented          +*)
+(*+ Date/Modification: 12.01.96 P.W / Rename PercentRuleGrp -> PercDist   +*)
+(*+ Date/Modification: 12.01.96 P.W / Sign of PercDist inverted!          +*)
+(*+ Date/Modification: 12.01.96 P.W / Add PercentFlg; -> MeasPosSliceMm   +*)
+(*+ Date/Modification: 12.01.96 P.W / Fields resorted for CtHalo to begin +*)
+(*+ Date/Modification: 12.01.96 P.W / Fields DeadtimeMySec, ShkFact extr. +*)
+(*+ Date/Modification: 29.01.96 P.W / HeadVersion1 and HeadSize exchanged +*)
+(*+ Date/Modification: 30.01.96 P.W / Const ErrValueFloat introduced      +*)
+(*+ Date/Modification: 30.01.96 P.W / Double --> Single                   +*)
+(*+ Date/Modification: 31.01.96 M.W./ THeadRec field names changed        +*)
+(*+ Date/Modification: 01.02.96 P.W / MeasRefPerc MeasRefPercStr and      +*)
+(*+ Date/Modification: 01.02.96 P.W / MeasRefDist introduced              +*)
+(*+ 31.01.96 Michael Welsch PatTitle -> PatID                             +*)
+(*+ 01.02.96 Michael Welsch ObjectName->MeasComment                       +*)
+(*+ Date/Modification: 09.02.96 P.W / Header: SymbolName introduced       +*)
+(*+ Date/Modification: 03.06.96 P.W / Header: ColOffs introduced          +*)
+(*+ Date/Modification: 16.08.96 Michael Welsch                            +*)
+(*+ HVersMOUSE           =  5000; { binär mouse version 1.0,              +*) //OemToAnsi Chg#1797 (02.03.04 P.W)
+(*+ Bilder C:\XMICE\AKDATEN\SAR2.B* }                                     +*)
+(*+ Date/Modification: 21.05.97 Michael Welsch                            +*)
+(*+ HVersASCII           =  20000; {21.05.97 MW, test and developement format}+*)
+// 26.01.09 P.W: New fields for Orientation Information as in PatInfoRecType_FEM
+(*+ Date/Modification  (end of list)                                      +*)
+(*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.*)
+Unit BnHead0;
+(*
+ {15.03.95 P.W}
+   Header-Erweiterungen (Vorschläge): //OemToAnsi Chg#1796 (02.03.04 P.W)
+     Palette,
+     Darstellung: Spiegelungen (Links/Rechts; Oben/Unten)
+*)
+
+Interface
+
+Uses
+  XGlb,             // 26.01.09 P.W
+  Dos,
+  GlbType;
+
+(*.**************************************************************************)
+(** Structure Info   : "MeasGroups and ReferenceLines"                    **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 22.05.95                                           **)
+(** Date             : -------------------------------------------------- **)
+(** Date             : 12.10.96: Description valid for PercentFlg = True  **)
+(** Date             : 12.10.96: If PercentFlg = False: PercDist serves   **)
+(** Date             : 12.10.96: as Dist between RefLine and MeasPosGrp   **)
+(** Date             : 12.01.96 P.W / Sign of PercDist inverted!          **)
+(** Descripiton      : -------------------------------------------------- **)
+(** Description      :  Describe up to MaxRefLine RefLines                **)
+(** Description      :    and    up to MaxMeasGrp MeasGrp                 **)
+(** Description      :  A reference line helps to find out the position   **)
+(** Description      :  of a meas group using PatArmLen and the percent   **)
+(** Description      :  rule of the meas group.                           **)
+(** Description      :  The number of RefLines is given by NumRefLines    **)
+(** Description      :  The total number of measgroups is given by        **)
+(** Description      :  NumMeasGroups. The conection between MeasGrp      **)
+(** Description      :  and Relines is established by MeasGrp.RefLineNo   **)
+(** Description      :  The minimum number is one Refline and one MeasGrp **)
+(** Description      :  There may be up to MaxMeasGrp MeasGroups conected **)
+(** Description      :  to one Refline if ther is only one Refline        **)
+(** Description      :  One MeasGrp may be a "single Slice" or a "Multiple**)
+(** Description      :  Slice" with its own percentrule and slicedistance **)
+(** Description      :                                                    **)
+(** Examples         :  ================================================= **)
+(** Example 1        :  PatArmLen                     = 200    [mm]       **)
+(** Example 1        :  NumMeasGroups                 =   1               **)
+(** Example 1        :  NumRefLines                   =   1               **)
+(** Example 1        :  RefLineArr[1]                 =  15    [mm]       **)
+(** Example 1        :  MeasGrpArr[1].RefLineNo       =   1               **)
+(** Example 1        :  MeasGrpArr[1].PercDist        =  -4.00 [%]        **)
+(** Example 1        :  MeasGrpArr[1].NumSlicesGrp    =   4               **)
+(** Example 1        :  MeasGrpArr[1].SliceDistGrp    =   1.0  [mm]       **)
+(** Example 1        :  PercentFlg                    = True              **)
+(** Example 1a       :  SlicesSymFlg                  = True              **)
+(** Example 1b       :  SlicesSymFlg                  = False             **)
+(** Example 1        :  ----------                                        **)
+(** Example 1a+b     :  MeasPosGrpMm = 15mm-4%(200mm) =  (15-8)mm = 7mm   **)
+(** Example 1a       :  With SlicesSymFlg = true we will receive          **)
+(** Example 1a       :  following positions of measurement (Function      **)
+(** Example 1a       :  MeasPosSliceMm) symmetric arround 7mm:            **)
+(** Example 1a       :    SliceNo        Position [mm]                    **)
+(** Example 1a       :       1              5.5                           **)
+(** Example 1a       :       2              6.5                           **)
+(** Example 1a       :       3              7.5                           **)
+(** Example 1a       :       4              8.5                           **)
+(** Example 1a       :                                                    **)
+(** Example 1b       :  With SlicesSymFlg = false we will receive         **)
+(** Example 1b       :  following positions of measurement (Function      **)
+(** Example 1b       :  MeasPosSliceMm) symmetric arround 7mm:            **)
+(** Example 1b       :    SliceNo        Position [mm]                    **)
+(** Example 1b       :       1              7.0                           **)
+(** Example 1b       :       2              8.0                           **)
+(** Example 1b       :       3              9.0                           **)
+(** Example 1b       :       4             10.0                           **)
+(** Example 1b       :                                                    **)
+(** Example 2        :  PatArmLen                     = 200    [mm]       **)
+(** Example 2        :  NumMeasGroups                 =   2               **)
+(** Example 2        :  NumRefLines                   =   2               **)
+(** Example 2        :  RefLineArr[1]                 =  15    [mm]       **)
+(** Example 2        :  RefLineArr[2]                 =  30    [mm]       **)
+(** Example 2        :  MeasGrpArr[1].RefLineNo       =   1               **)
+(** Example 2        :  MeasGrpArr[1].PercDist        =  -4.00 [%]        **)
+(** Example 2        :  MeasGrpArr[1].NumSlicesGrp    =   4               **)
+(** Example 2        :  MeasGrpArr[1].SliceDistGrp    =   1.0  [mm]       **)
+(** Example 2        :  MeasGrpArr[2].RefLineNo       =   2               **)
+(** Example 2        :  MeasGrpArr[2].PercDist        =  -2.00 [%]        **)
+(** Example 2        :  MeasGrpArr[2].NumSlicesGrp    =   3               **)
+(** Example 2        :  MeasGrpArr[2].SliceDistGrp    =  -0.1  [mm]       **)
+(** Example 2        :  PercentFlg                    = True              **)
+(** Example 2        :  SlicesSymFlg                  = False             **)
+(** Example 2        :  ----------                                        **)
+(** Example 2        :  MeasPosGrpMm[1]= 15mm-4%(200mm) = (15-8)mm =  7mm **)
+(** Example 2        :  MeasPosGrpMm[2]= 30mm-2%(200mm) = (30-4)mm = 26mm **)
+(** Example 2        :  With SlicesSymFlg = false we will receive         **)
+(** Example 2        :  following positions of measurement (Function      **)
+(** Example 2        :  MeasPosSliceMm)                                   **)
+(** Example 2        :    SliceNo        Position [mm]    MeasGrp         **)
+(** Example 2        :       1              7.0              1            **)
+(** Example 2        :       2              8.0              1            **)
+(** Example 2        :       3              9.0              1            **)
+(** Example 2        :       4             10.0              1            **)
+(** Example 2        :       5             26.0              2            **)
+(** Example 2        :       6             25.9              2            **)
+(** Example 2        :       7             25.8              2            **)
+(** Example 2        :                                                    **)
+(***************************************************************************)
+(** Defined by       : Const                                              **)
+(** Defined by       :   MaxRefLine                                       **)
+(** Defined by       :   MaxMeasGrp                                       **)
+(** Defined by       : Type                                               **)
+(** Defined by       :   tRefLineArr                                      **)
+(** Defined by       :   tMeasGrp                                         **)
+(** Defined by       :   tMeasGrpArr                                      **)
+(** Defined by       :                                                    **)
+(** Defined by       :   tHeadRec:                                        **)
+(** Defined by       :   tHeadRec.NumRefLines  : Word;                    **)
+(** Defined by       :   tHeadRec.RefArr       : tRefLineArr;             **)
+(** Defined by       :   tHeadRec.NumMeasGroups: Word;                    **)
+(** Defined by       :   tHeadRec.SlicesSymFlg : Boolean; {14.08.95 P.W}  **)
+(** Defined by       :   tHeadRec.PercentFlg   : Boolean; {12.01.96 P.W}  **)
+(** Defined by       :   tHeadRec.MeasGrpArr   : tMeasGrpArr;             **)
+(** According Procedures and Functions:                                   **)
+(**                  :   MultiSlices, MeasGrpNo,                          **)
+(**                  :   MeasPosGroupMm, MeasPosSliceMm,                  **)
+(**                  :   ChkAllSlicesZPosValid                            **)
+(** According Procedures and Functions to Add and Delete RLines and MGrps **)
+(**                  :   see Unit BNHead.1                                **)
+(***************************************************************************)
+(** Last modified/By : 14.08.95 / P.Wueseke                               **)
+(** Date/Modification: 14.08.95 P.W / Use SliceSymFlg                     **)
+(**************************************************************************.*)
+//Const                        // -> XGlb.pas :08.05.09 P.W
+//  MaxRefLine       =  5;
+//  MaxMeasGrp       =  5;
+//  ErrValueFloat_   : Single = MaxSingle * 0.000001; // renamed to "*_" 21.04.08 P.W
+
+Type
+  tRefLineArr      = Array[1..MaxRefLine] of Single;
+
+  tMeasGrp         = Packed Record // "Record" to "Packed Record" Chg#1788 (02.03.04 P.W)
+    RefLineNo      : Word;
+{    PercentRuleGrp : Single;}   {12.01.96 P.W}
+    PercDist       : Single;     {12.01.96 P.W}
+    NumSlicesGrp   : Word;
+    SliceDistGrp   : Single;
+  end;
+
+  tMeasGrpArr      = Array[1 .. MaxMeasGrp] of tMeasGrp;
+Const
+  ActHeadVersion       = 10003;
+  HVersB510_CTN        =  9000; { binär 510  mit neuem Cthalo, altes archiv } //OemToAnsi Chg#1795 (02.03.04 P.W)
+  HVersA520_CTN        =  9100; { ASCII 520ß mit neuem Cthalo, zwischenformat für altes CTHALO } //OemToAnsi Chg#1794 (02.03.04 P.W)
+  HVersB520_CTN_Start  = 10003; { binär 520  mit neuem Cthalo } //OemToAnsi Chg#1793 (02.03.04 P.W)
+
+  {16.08.96 Michael Welsch}
+  HVersMOUSE           =  5000; { binär mouse version 1.0, Bilder C:\XMICE\AKDATEN\SAR2.B* , //OemToAnsi Chg#1792 (02.03.04 P.W)
+                                  ACHTUNG: bisher muß Version und Size manuell angefügt werden!!  } //OemToAnsi Chg#1791 (02.03.04 P.W)
+  HVersASCII           =  20000; {21.05.97 MW, test and developement format}
+
+  { alte Bilder aus 5.20ß bzw aus C:\DICHTE\AKDATEN\ //OemToAnsi Chg#1790 (02.03.04 P.W)
+    HeadVersion=0, HeadSize=0 !! }
+
+                                   {=10003} {since 29.01.96 P.W}
+                                   {=3}     {since 12.01.96 P.W}
+                                   {=2}     {until 12.01.96 P.W}
+Type
+
+  THeadRec         = Packed Record // "Record" to "Packed Record" Chg#1789 (02.03.04 P.W)
+    {----------------------------------------------------------------}
+    HeadVersion1        : LongInt; {=2}     {until 12.01.96 P.W}
+                                   {=3}     {since 12.01.96 P.W}
+                                   {=10003} {since 29.01.96 P.W}
+                          {Negativ bei Update der Datei von BnDakOld}
+    HeadSize            : LongInt; {=SizeOf(THeadRec)}
+    {----------------------------------------------------------------}
+    DeviceTyp           : String12;  {S: SCT, X: XCT}
+                                {Animal, Mouse, Human, 960, 900}
+    LargeObjFlg         : Boolean;         {13.07.95 P.W}
+    VoxSizChr           : Char;
+    VoxelSize           : Single;
+    {--- Patient data: ---}
+    PatNo               : LongInt;
+    PatFamilyName       : String30;
+    PatPreName          : String30;
+    PatID               : String20;        {31.01.96 Michael Welsch}
+    PatSexGer           : Char;            { "F"=female,"M"=male,"N"=neuter }
+    PatEthnic           : Char;
+    PatBirthL           : LongInt;  {22.08.95 P.W i.e. 19960131 = 31.01.1996}
+    PatObjSide          : Char;            { "L"=left,"R"=right }
+    PatObjLen           : Single;
+
+    HeadVersion2        : Char;
+    SvCtScan            : String02;        { SV or CT}
+    SliceExt            : String04;        { .M01 etc}
+    MeasNo              : LongInt;
+    WorseMark           : Char;            { air range invalis , distortion " " = OK}
+
+
+    ScanDateL           : LongInt;         {22.08.95 P.W}
+    ScanTimeL           : LongInt;         {22.08.95 P.W}
+
+    SvDet               : Word;
+    SvStartPosMm        : Single;
+    SvNumLines          : Word;
+    SvLineDistMm        : Single;
+    SvXPosMm            : Single;
+
+    {----------------------------------------------------------------}
+    NumRefLines         : Word;
+    RefArr              : tRefLineArr;
+    NumMeasGroups       : Word;
+    SlicesSymFlg        : Boolean;         {14.08.95 P.W}
+                          { True : MultiSlices symmetric around MeasPosGrp }
+    PercentFlg          : Boolean;         {12.01.96 P.W}
+                          { True : PercDist serves as Percent  rule        }
+                          { False: PercDist serves as Distance rule        }
+    MeasGrpArr          : tMeasGrpArr;
+    {----------------------------------------------------------------}
+    CtSliceNo           : Word;
+    CtSlicePosMm        : Single;
+
+    TimeRefScale        : Single;
+
+    QaMarker            : Char;            {Q = QA Scan}
+
+    NumCorrIntv         : Word;            { = matrix size }
+    NumMeasIntv         : Word;
+    ChanCorrCtHalo      : Single;
+    Det7Mean            : Single;
+    SmoothFlg           : Boolean;
+    GeoCorrFlg          : Boolean;
+    ImpMeasRangeLong    : Single;
+    AirValue            : Single;
+
+    {----------------------------------------------------------------}
+
+    MeasComment         : String20;
+    MirrorLeftFlg       : Boolean;
+    MirrorTopFlg        : Boolean;
+    ColScale            : Single;          { valid for SV scan }
+    SymbolName          : String12;        {09.02.96 P.W}
+    ColOffs             : Single;          {03.06.96 P.W}
+    {Reserved           : Array[1..111] of Byte;  115->111: 03.06.96 P.W}
+                                                 {128->115: 09.02.96 P.W}
+    {----------------------------------------------------------------}
+    {since 26.01.09 P.W  for orientation information in CT and SV images}
+    OrientDirRec        : tOrientDirRec;
+    Free                     : Array[1..102] of Byte;   { Reserved; used to keep size constant}
+    {----------------------------------------------------------------}
+  end;
+
+(* * *
+  ------------------------------------------------
+  ! (Valid only for HeadVersion1=10003) !
+  Version for "BNHEAD.MSK" to be used with RECION:
+  "RECION BNHEAD.MSK SV_BN.REC 0"
+  ------------------------------------------------
+Const
+  MaxRefLine       =  5;
+  MaxMeasGrp       =  5;
+
+Type
+  THeadRec         = Record
+    HeadVersion1        : LongInt; {=10003}
+    HeadSize            : LongInt; {=SizeOf(THeadRec)}
+
+    {----------------------------------------------------------------}
+    DeviceTyp           : String12;  {S: SCT, X: XCT}
+                                {Animal, Mouse, Human, 960, 900}
+    LargeObjFlg         : Boolean;         {13.07.95 P.W}
+    VoxSizChr           : Char;
+    VoxelSize           : Single;
+    {--- Patient data: ---}
+    PatNo               : LongInt;
+    PatFamilyName       : String30;
+    PatPreName          : String30;
+    PatTitle            : String20;
+    PatSexGer           : Char;
+    PatEthnic           : Char;
+    PatBirthL           : LongInt;         {22.08.95 P.W}
+    PatArmSide          : Char;
+    PatArmLen           : Single;
+
+    HeadVersion2        : Char;
+    SvCtScan            : String02;
+    SliceExt            : String04;
+    MeasNo              : LongInt;
+    WorseMark           : Char;
+
+
+    ScanDateL           : LongInt;         {22.08.95 P.W}
+    ScanTimeL           : LongInt;         {22.08.95 P.W}
+
+    SvDet               : Word;
+    SvStartPosMm        : Single;
+    SvNumLines          : Word;
+    SvLineDistMm        : Single;
+    SvXPosMm            : Single;
+
+    {----------------------------------------------------------------}
+    NumRefLines         : Word;
+    RefArr              : Array[1..MaxRefLine] of Single;
+    NumMeasGroups       : Word;
+    SlicesSymFlg        : Boolean;
+    PercentFlg          : Boolean;
+
+    M1_RefLineNo        : Word;
+    M1_PercDist         : Single;
+    M1_NumSlicesGrp     : Word;
+    M1_SliceDistGrp     : Single;
+    M2_RefLineNo        : Word;
+    M2_PercDist         : Single;
+    M2_NumSlicesGrp     : Word;
+    M2_SliceDistGrp     : Single;
+    M3_RefLineNo        : Word;
+    M3_PercDist         : Single;
+    M3_NumSlicesGrp     : Word;
+    M3_SliceDistGrp     : Single;
+    M4_RefLineNo        : Word;
+    M4_PercDist         : Single;
+    M4_NumSlicesGrp     : Word;
+    M4_SliceDistGrp     : Single;
+    M5_RefLineNo        : Word;
+    M5_PercDist         : Single;
+    M5_NumSlicesGrp     : Word;
+    M5_SliceDistGrp     : Single;
+    {----------------------------------------------------------------}
+    CtSliceNo           : Word;
+    CtSlicePosMm        : Single;
+
+    TimeRefScale        : Single;
+    QaMarker            : Char;
+
+    NumCorrIntv         : Word;
+    NumMeasIntv         : Word;
+    ChanCorrCtHalo      : Single;
+    Det7Mean            : Single;
+    SmoothFlg           : Boolean;
+    GeoCorrFlg          : Boolean;
+    ImpMeasRangeLong    : Single;
+    AirValue            : Single;
+
+    {----------------------------------------------------------------}
+
+    ObjectName          : String20;
+    MirrorLeftFlg       : Boolean;
+    MirrorTopFlg        : Boolean;
+    ColScale            : Single;
+    Reserved            : Array[1..128] of Byte;
+  end;
+
+* * *)
+
+(* * *
+  ------------------------------------------------
+  ! old and invalid (Valid only for HeadVersion1=2) !
+  Version for "BNHEAD.MSK" to be used with RECION:
+  "RECION BNHEAD.MSK SV_BN.REC 0"
+  ------------------------------------------------
+Const
+  MaxRefLine       =  5;
+  MaxMeasGrp       =  5;
+
+Type
+  THeadRec         = Record
+    HeadSize            : LongInt; {=SizeOf(THeadRec)}
+    HeadVersion1        : LongInt; {=2}
+
+    {----------------------------------------------------------------}
+    HeadVersion2        : Char;
+    SvCtScan            : String02;
+    SliceExt            : String04;
+    MeasNo              : LongInt;
+    WorseMark           : Char;
+
+    {--- Patient data: ---}
+    PatNo               : LongInt;
+
+    PatFamilyName       : String30;
+    PatPreName          : String30;
+    PatTitle            : String20;
+    PatSexGer           : Char;
+    PatEthnic           : Char;
+    PatBirthL           : LongInt;      {22.08.95 P.W}
+    PatArmSide          : Char;
+    PatArmLen           : Single;
+    LargeObjFlg         : Boolean;      {13.07.95 P.W}
+
+    ScanDateL           : LongInt;      {22.08.95 P.W}
+    ScanTimeL           : LongInt;      {22.08.95 P.W}
+
+
+    SvDet               : Word;
+    SvStartPosMm        : Single;
+    SvNumLines          : Word;
+    SvLineDistMm        : Single;
+    SvXPosMm            : Single;
+
+    NumRefLines         : Word;
+    RefArr              : Array[1..MaxRefLine] of Single;
+    NumMeasGroups       : Word;
+    SlicesSymFlg        : Boolean;
+
+    M1_RefLineNo        : Word;
+    M1_PercentRuleGrp   : Single;
+    M1_NumSlicesGrp     : Word;
+    M1_SliceDistGrp     : Single;
+    M2_RefLineNo        : Word;
+    M2_PercentRuleGrp   : Single;
+    M2_NumSlicesGrp     : Word;
+    M2_SliceDistGrp     : Single;
+    M3_RefLineNo        : Word;
+    M3_PercentRuleGrp   : Single;
+    M3_NumSlicesGrp     : Word;
+    M3_SliceDistGrp     : Single;
+    M4_RefLineNo        : Word;
+    M4_PercentRuleGrp   : Single;
+    M4_NumSlicesGrp     : Word;
+    M4_SliceDistGrp     : Single;
+    M5_RefLineNo        : Word;
+    M5_PercentRuleGrp   : Single;
+    M5_NumSlicesGrp     : Word;
+    M5_SliceDistGrp     : Single;
+
+    {----------------------------------------------------------------}
+
+    CtSliceNo           : Word;
+    CtSlicePosMm        : Single;
+
+    SlFact              : Single;
+    DeadTimeMySec       : Single;
+    IntTimeMSec         : Single;
+    TimeRefScale        : Single;
+    ShkFact1            : Single;
+    ShkFact2            : Single;
+    ShkFact3            : Single;
+    ShkFact4            : Single;
+
+    DeviceTyp           : String20;  {S: SCT, X: XCT}
+                                {Animal, Mouse, Human, 960, 900}
+    QaMarker            : Char;
+
+    NumCorrIntv         : Word;
+    NumMeasIntv         : Word;
+    VoxelSizeChar       : Char;
+    VoxelSize           : Single;
+    ChanCorrCtHalo      : Single;
+    DistSourceCenter    : Single;
+    Det7Mean            : Single;
+    SmoothFlg           : Boolean;
+    GeoCorrFlg          : Boolean;
+    ImpMeasRangeLong    : Single;
+    AirValue            : Single;
+
+    {----------------------------------------------------------------}
+
+    ObjectName          : String20;
+    MirrorLeftFlg       : Boolean;
+    MirrorTopFlg        : Boolean;
+    ColScale            : Single;
+  end;
+
+* * *)
+
+  function IsErrValueFloat(XY: Single) : Boolean;
+  Function MultiSlices   (Const HR: THeadRec): Word;
+  Function MeasGrpNo     (Const HR: THeadRec; SliceNo: Word;
+             Var SliceNoGrp: Word): Word;
+  Function MeasPosGroupMm(Const HR: THeadRec; GroupNo: Word): Single;
+  Function MeasRefDist
+             (Const HR : THeadRec; GroupNo: Word): Single;
+  Function MeasRefPerc
+             (Const HR : THeadRec; GroupNo: Word): Single;
+  Function MeasRefPercStr
+             (Const HR : THeadRec; GroupNo: Word; MinLen, Dez: Byte): String;
+
+  Function MeasPosSliceMm(Const HR: THeadRec; SliceNo: Word): Single;
+  Function RefPosSliceMm (Const HR: THeadRec; SliceNo: Word): Single;
+  Function ChkAllSlicesZPosValid(Const HR: THeadRec;
+             MinZPosMm, MaxZPosMm: Single): Smallint;
+  Function ReadHead(Var Head: THeadRec; Name: PathStr): Smallint;
+  Function WriteHead(Head: THeadRec; Name: PathStr; WM: W_Mode): Smallint;
+
+Implementation
+
+function IsErrValueFloat(XY: Single) : Boolean;
+// 21.04.08 P.W
+// Aim: avoid critical (but working (for single and double)) comparison
+//   "if (XY <> ErrValueFloat) then ..."
+// (ErrValueFloat = 3.4e+32)
+begin
+  Result := Abs(XY - ErrValueFloat_) < 1e-6 * ErrValueFloat_;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : MultiSlices                                        **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 22.05.95                                           **)
+(** Description      : Calculates the sum of slices of all measgroups     **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ?                                                  **)
+(** Input            : Const, HR                                          **)
+(** Output           : RETURN (Word): WRet                                **)
+(** Global Variables                                                      **)
+(**  - affected      : ?                                                  **)
+(**  - predefined    : ?                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function MultiSlices(Const HR: THeadRec): Word;
+{!!! Imitiert von XBJob1.Pas WriteMeasXB MultiSlices!}
+Var
+  Grp              : Word;
+  Sum              : Word;
+begin
+  Sum:=0;
+  With HR do
+  For Grp:=1 to NumMeasGroups do
+    Inc(Sum, MeasGrpArr[Grp].NumSlicesGrp);
+  MultiSlices:=Sum;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : MeasGrpNo                                          **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 22.05.95                                           **)
+(** Description      : Calculates the measgroup of the slice "SliceNo"    **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : -                                                  **)
+(** Input            : Const, HR, SliceNo, SliceNoGrp                     **)
+(** Output           : SliceNoGrp                                         **)
+(** Output           : RETURN (Word): WRet                                **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function MeasGrpNo(Const HR: THeadRec; SliceNo: Word;
+           Var SliceNoGrp: Word): Word;
+{MeasGrpNo=0 : Invalid SliceNo}
+Var
+  Grp              : Word;
+  Sum              : Word;
+begin {Funct MeasGrpNo}
+  With HR do
+  begin
+    Grp:=0;
+    Sum:=0;
+    While (Sum<SliceNo) and (Grp<NumMeasGroups) do
+    begin
+      Inc(Grp);
+      With MeasGrpArr[Grp] do
+      begin
+        Inc(Sum, NumSlicesGrp);
+      end; {With MeasGrpArr}
+    end; {While}
+
+    if (Sum<SliceNo) then
+    begin
+      Grp:=0;
+      SliceNoGrp:=0;
+    end else
+    begin
+      SliceNoGrp:=SliceNo-(Sum-MeasGrpArr[Grp].NumSlicesGrp)
+    end;
+  end; {With HR}
+  MeasGrpNo:=Grp;
+end;  {Funct MeasGrpNo}
+
+(*.**************************************************************************)
+(** Function Name    : MeasPosGroupMm                                     **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 22.05.95                                           **)
+(** Description      : Calculates the position of the measgroup           **)
+(** Description      : depending on: PatArmlen, Percentrule, Reference    **)
+(** Description      :               PercentFlg                           **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : -                                                  **)
+(** Input            : Const, HR, GroupNo                                 **)
+(** Output           : RETURN (Single): DRet                              **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : 12.01.96 / P.Wueseke                               **)
+(** Date/Modification: 12.01.96 P.W / Use PercentFlg                      **)
+(** Date/Modification: 12.01.96 P.W / Sign of PercDist inverted!          **)
+(**************************************************************************.*)
+Function MeasPosGroupMm(Const HR : THeadRec; GroupNo: Word): Single;
+begin {Func. MeasPosGroupMm}
+  if (GroupNo>0) then
+  begin
+    With HR, MeasGrpArr[GroupNo] do
+      if PercentFlg
+      then MeasPosGroupMm:=RefArr[RefLineNo] + PatObjLen*PercDist*0.01
+                                            {^ "-" --> "+": 12.01.96 P.W}
+      else MeasPosGroupMm:=RefArr[RefLineNo] + PercDist;
+  end else
+  begin
+      MeasPosGroupMm:=ErrValueFloat_;  {0 -> ErrV.:30.01.96 P.W}
+  end;
+end;  {Func. MeasPosGroupMm}
+
+(*.**************************************************************************)
+(** Function Name    : MeasRefDist                                        **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 01.02.96                                           **)
+(** Description      :   Distance between Ref and MeasLine [mm]           **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ?                                                  **)
+(** Input            : Const, HR, GroupNo                                 **)
+(** Output           : RETURN (Single): SRet                              **)
+(** Global Variables                                                      **)
+(**  - affected      : ?                                                  **)
+(**  - predefined    : ?                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function MeasRefDist(Const HR : THeadRec; GroupNo: Word): Single;
+begin
+  if (GroupNo>0) then
+  begin
+    With HR, MeasGrpArr[GroupNo] do
+    if PercentFlg
+      then MeasRefDist:=(PatObjLen*PercDist)*0.01
+      else MeasRefDist:=PercDist;
+  end else
+  begin
+    MeasRefDist:=ErrValueFloat_;
+  end;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : MeasRefPerc                                        **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 01.02.96                                           **)
+(** Description      : Distance between Ref and Measline in percent objlen**)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ?                                                  **)
+(** Input            : Const, HR, GroupNo                                 **)
+(** Output           : RETURN (Single): SRet                              **)
+(** Global Variables                                                      **)
+(**  - affected      : ?                                                  **)
+(**  - predefined    : ?                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function MeasRefPerc(Const HR : THeadRec; GroupNo: Word): Single;
+begin
+  if (GroupNo>0) then
+  begin
+    With HR, MeasGrpArr[GroupNo] do
+    if PercentFlg
+      then MeasRefPerc:=PercDist
+      else
+      If PatObjLen=0
+      then MeasRefPerc:=ErrValueFloat_
+      else MeasRefPerc:=100.0*(PercDist/PatObjLen);
+  end else
+  begin
+    MeasRefPerc:=ErrValueFloat_;
+  end;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : MeasRefPercStr                                     **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 01.02.96                                           **)
+(** Description      : MRPerc back as String (if Objectlen=0: ---.--)     **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ?                                                  **)
+(** Input            : Const, HR, GroupNo, MinLen, Dez                    **)
+(** Output           : RETURN (Single): SRet                              **)
+(** Global Variables                                                      **)
+(**  - affected      : ?                                                  **)
+(**  - predefined    : ?                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function MeasRefPercStr
+           (Const HR : THeadRec; GroupNo: Word; MinLen, Dez: Byte): String;
+Var
+  HStr             : String;
+  HS               : Single;
+  P                : Byte;
+begin
+  HS:=MeasRefPerc(HR, GroupNo);
+  If IsErrValueFloat(HS) // HS=ErrValueFloat
+  then
+    begin
+      Str(0.0: MinLen: Dez, HStr);
+      For P:=1 to Length(HStr) do if HStr[P]<>'.' then HStr[P]:='-';
+    end
+  else Str(HS: MinLen: Dez, HStr);
+
+  MeasRefPercStr:=HStr;
+end;
+
+(*.**************************************************************************)
+(** Function Name    : MeasPosSliceMm                                     **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 22.05.95                                           **)
+(** Description      : Calculates the position of slice "SliceNo"         **)
+(** Description      : depending on: MeasPosGrpMm, SliceDistGrp,          **)
+(** Description      :               SliceNoGrp, SlicesSymFlg             **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : MeasGrpNo, MeasPosGrpMm,                           **)
+(** Input            : Const, HR, SliceNo                                 **)
+(** Output           : RETURN (Single): DRet                              **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By : 14.08.95 / P.Wueseke                               **)
+(** Date/Modification: -                                                  **)
+(** Date/Modification: 14.08.95 P.W / Use SliceSymFlg                     **)
+(**************************************************************************.*)
+Function MeasPosSliceMm(Const HR : THeadRec; SliceNo: Word): Single;
+Var
+  Grp              : Word;
+  SliceNoGrp       : Word;
+begin {Func. MeasPosSliceMm}
+  Grp:=MeasGrpNo(HR, SliceNo, SliceNoGrp);
+  if (Grp>0) then
+  begin
+    With HR, MeasGrpArr[Grp] do
+    begin
+      if SlicesSymFlg then  {14.08.95 P.W}
+      begin
+        MeasPosSliceMm:=MeasPosGroupMm(HR, Grp)+
+                        (SliceNoGrp - 0.5 * (NumSlicesGrp+1)) * SliceDistGrp;
+      end else
+      begin                 {14.08.95 P.W}
+        MeasPosSliceMm:=MeasPosGroupMm(HR, Grp)+
+                        (SliceNoGrp - 1) * SliceDistGrp;
+      end;
+    end;
+  end else
+  begin
+      MeasPosSliceMm:=ErrValueFloat_;  {0 -> ErrV.:30.01.96 P.W}
+  end;
+end;  {Func. MeasPosSliceMm}
+
+(*.**************************************************************************)
+(** Function Name    : RefPosSliceMm                                      **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 15.11.95                                           **)
+(** Description      : Calculates the position of reference line          **)
+(** Description      : depending on: SliceNo                              **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : MeasGrpNo                                          **)
+(** Input            :        HR, SliceNo                                 **)
+(** Output           : RETURN (Single)                                    **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Last modified/By :                                                    **)
+(** Date/Modification:                                                    **)
+(**************************************************************************.*)
+Function RefPosSliceMm (Const HR: THeadRec; SliceNo: Word): Single;
+Var
+  Grp              : Word;
+  SliceNoGrp       : Word;
+begin {Func. RefPosSliceMm}
+  Grp:=MeasGrpNo(HR, SliceNo, SliceNoGrp);
+  if (Grp>0) then
+  begin
+    With HR, MeasGrpArr[Grp] do
+      RefPosSliceMm:=RefArr[RefLineNo];
+  end else
+    RefPosSliceMm:=ErrValueFloat_;  {-1 -> ErrV.:30.01.96 P.W}
+end; {Func. RefPosSliceMm}
+
+(*.**************************************************************************)
+(** Function Name    : ChkAllSlicesZPosValid                              **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 29.08.95                                           **)
+(** Description      : Check if all Slices are between MinZPosMm          **)
+(** Description      : and MaxZPosMm (Tolerance: 0.1mm)                   **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ?                                                  **)
+(** Input            : HR, MinZPosMm, MaxZPosMm                           **)
+(** Output           : RETURN: Ok: Ret=0; not Ok: Ret=1th invalid MeasGrp **)
+(** Global Variables                                                      **)
+(**  - affected      : ?                                                  **)
+(**  - predefined    : ?                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function ChkAllSlicesZPosValid (Const HR: THeadRec;
+           MinZPosMm, MaxZPosMm: Single): Smallint;
+Const
+  Tolerance        = 0.1;  {mm}
+Var
+  Res              : Smallint;
+  HS               : Single;
+  SliceNo          : Word;
+  SliceNoGrp       : Word;
+begin  {Func. ChkAllSlicesZPosValid}
+  Res:=0;
+  if (MinZPosMm>MaxZPosMm) then
+  begin
+    HS:=MaxZPosMm;
+    MaxZPosMm:=MinZPosMm;
+    MinZPosMm:=HS;
+  end;
+  MinZPosMm:=MinZPosMm-Tolerance;
+  MaxZPosMm:=MaxZPosMm+Tolerance;
+  For SliceNo:=1 to MultiSlices(HR) do
+  if (Res=0) then
+  begin
+    HS:=MeasPosSliceMm(HR, SliceNo);
+    if (HS < MinZPosMm) or (HS > MaxZPosMm) then
+      Res:=MeasGrpNo(HR, SliceNo, SliceNoGrp);
+  end;
+  ChkAllSlicesZPosValid:=Res;
+end;   {Func. ChkAllSlicesZPosValid}
+
+(*.**************************************************************************)
+(** Function Name    : ReadHead                                           **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 27.07.95                                           **)
+(** Description      : BlockRead of Head to File                          **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : Assign, Reset, BlockRead, Close                    **)
+(** Input            : Name                                               **)
+(** Output           : Head                                               **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : ?                                                  **)
+(**  - predefined    : ?                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function ReadHead(Var Head: THeadRec; Name: PathStr): Smallint;
+Var
+  Res, ResH        : Smallint;
+  Readed           : LongInt; //Word;
+  Inp              : File;
+begin {Func. ReadHead}
+  Res:=0;
+
+  If (Res=0) then
+  begin
+  {$I-}
+    Assign(Inp, FExpand(Name)); // FExpand added (04.03.04 P.W)
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+    If (Res=0) then
+      Reset (Inp, 1);
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+    If (Res=0) then
+      BlockRead(Inp, Head, SizeOf(Head), Readed);
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+    If (Res=0) and (SizeOf(Head)<>Readed) then Res:=Err_DiskRead;
+    Close (Inp);
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+  {$I+}
+  end;
+
+  ReadHead:=Res;
+end;  {Func. ReadHead}
+
+(*.**************************************************************************)
+(** Function Name    : WriteHead                                          **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 27.07.95                                           **)
+(** Description      : BlockWrite of Head to File                         **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : Assign, Reset, BlockWrite, Close                   **)
+(** Input            : Head, Name, WM                                     **)
+(** Output           : RETURN (Smallint): Ok: Ret=0; not Ok: Ret=ErrCode;  **)
+(** Global Variables                                                      **)
+(**  - affected      : ?                                                  **)
+(**  - predefined    : ?                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function WriteHead(Head: THeadRec; Name: PathStr; WM: W_Mode): Smallint;
+Var
+  Res, ResH        : Smallint;
+  Written          : LongInt; //Word;
+  Out              : File;
+begin {Func. WriteHead}
+  Res:=0;
+
+  If (Res=0) then
+  begin
+  {$I-}
+    Head.HeadSize:=SizeOf(Head);
+    Assign(Out, FExpand(Name)); // FExpand added (04.03.04 P.W)
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+    If (Res=0) then
+    begin
+      Case WM of
+        W_READ:
+          begin
+            Res:=-1;
+          end;
+        W_OVERWRITE:
+          begin
+            Reset (Out, 1);
+            ResH:=IoResult;
+            if (ResH=Err_FileNotFound) then
+            begin
+              Rewrite(Out, 1);
+              ResH:=IoResult; If (Res=0) then Res:=ResH;
+            end else
+            begin
+              If (Res=0) then Res:=ResH;
+            end;
+          end;
+        W_APPEND:
+          begin
+            Reset (Out, 1);
+            ResH:=IoResult;
+            if (ResH=0) then
+            begin
+              Seek(Out, FileSize(Out));
+              ResH:=IoResult; If (Res=0) then Res:=ResH;
+            end else
+            if (ResH=Err_FileNotFound) then
+            begin
+              Rewrite(Out, 1);
+              ResH:=IoResult; If (Res=0) then Res:=ResH;
+            end else
+            begin
+              If (Res=0) then Res:=ResH;
+            end;
+          end;
+        W_REWRITE:
+          begin
+            Rewrite (Out, 1);
+            ResH:=IoResult; If (Res=0) then Res:=ResH;
+          end;
+      end;
+    end;
+    If (Res=0) then
+    begin
+      BlockWrite(Out, Head, SizeOf(Head), Written);
+      ResH:=IoResult; If (Res=0) then Res:=ResH;
+      If (Res=0) and (SizeOf(Head)<>Written) then Res:=Err_DiskWrite;
+    end;
+    Close (Out);
+    ResH:=IoResult; If (Res=0) then Res:=ResH;
+  {$I+}
+  end;
+
+  WriteHead:=Res;
+end;  {Func. WriteHead}
+
+(**--)
+procedure Test;
+// Result: Ok for Single and Double!
+var
+  Msg : String;
+  S : Single;
+  D : Double;
+begin
+  Msg := '';
+  S := ErrValueFloat;
+  D := ErrValueFloat;
+S := 0.9999999 * S;
+D := 0.9999999 * D;
+  if S = ErrValueFloat
+    then Msg := Msg + 'a Single: Ok;'
+    else Msg := Msg + 'a Single: not ok! ;';
+  if D = ErrValueFloat
+    then Msg := Msg + 'a Double: Ok;'
+    else Msg := Msg + 'a Double: not ok! ;';
+
+  if IsErrValueFloat(S)
+    then Msg := Msg + 'b Single: Ok;'
+    else Msg := Msg + 'b Single: not ok! ;';
+  if IsErrValueFloat(D)
+    then Msg := Msg + 'b Double: Ok;'
+    else Msg := Msg + 'b Double: not ok! ;';
+if Msg = '?' then;
+end;
+
+begin
+  Test;
+(**)
+
+end.

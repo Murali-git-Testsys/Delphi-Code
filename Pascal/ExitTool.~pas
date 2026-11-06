@@ -1,0 +1,123 @@
+// Turbo To Delphi; manually remove use of "LastExitProc" (08.03.04 P.W)
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; changes: 1; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+(*.+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*)
+(*+ ~ ~                                                    ) %15nV0.%22v) +*)
+(*+ Module Name/Vers.: @(#)ExitTool V.:1.00                             ) +*)
+(*+ Author           : P.Wueseke                                          +*)
+(*+ Date             : 01.09.97                                           +*)
+(*+ Description      : During use of Exitproc stack may be small          +*)
+(*+ Description      : to avoid getting Stackoverflow as last errorcode   +*)
+(*+ Description      : use ChkSaveExitCode                                +*)
+(*+ Description      : Reason found: 07.06.99 P.W                         +*)
+(*+ Description      : Runtime Error 200 leads to own small stack (prot.) +*)
+(*+ ~ ~                                                       : %15d%30w: +*)
+(*+ Last modified/By : 07.06.99 / P.Wueseke                               +*)
+(*+ Date/Modification: 07.06.99 P.W / Solve problems with stack during    +*)
+(*+ Date/Modification: 07.06.99 P.W + ExitChain (LastExitProc)            +*)
+(*+ Date/Modification: 07.06.99 P.W + AddExitProc                         +*)
+(*+ Date/Modification  (end of list)                                      +*)
+(*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.*)
+Unit ExitTool;
+
+INTERFACE
+
+Uses
+  Tools,
+  GlbType;
+
+var
+  SaveUnitName     : String08   =  '';
+  SaveExitCode     : Smallint   =   0;
+  SaveErrorAddr    : Pointer    = Nil;
+
+Type
+  tExitProc = Procedure;
+
+Procedure ChkSaveExitCode(Const A_UnitName: String08);
+Procedure GetSaveExitCodeStr(Var Msg : String30);
+
+Function AddExitProc(AddProc: tExitProc; Const Msg: String): Pointer;
+{Caller must store the Returnvalue in its local OldExitProc}
+{example:
+{   --- Change from:---
+{     OldExitProc:=ExitProc;
+{     ExitProc:=@MyExitProc;
+{   ---        to  :---
+{     OldExitProc:=AddExitProc(MyExitProc, 'GlbFT');
+}
+
+Implementation
+  const Unit_Name = 'ExitTool'; // 03.05.24 P.W
+
+{--------------------------------------------------------------------}
+{07.06.99 P.W}
+
+Function AddExitProc(AddProc: tExitProc; Const Msg: String): Pointer;
+// Turbo To Delphi; manually remove use of "LastExitProc" (08.03.04 P.W)
+begin
+  Result := ExitProc;
+  ExitProc := @AddProc;
+end;
+{--------------------------------------------------------------------}
+
+Procedure ChkSaveExitCode(Const A_UnitName: String08);
+begin
+  If (SaveExitCode=0) and (ExitCode<>0) then
+  begin
+    SaveUnitName   := A_UnitName;
+    SaveExitCode   := ExitCode;
+    SaveErrorAddr  := ErrorAddr;
+  end;
+end;
+
+(*.**************************************************************************)
+(** Procedure Name   : GetSaveExitCodeStr                                 **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 01.09.97                                           **)
+(** Description      : Make a string out of SaveExitcode, ...             **)
+(** Description      : Avoid "+" of strings to spare stack                **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : -                                                  **)
+(** Input            : -                                                  **)
+(** Output           : RETURN (String40): Ret                             **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : SaveExitCode, SaveErrorAddr, SaveUnitName          **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Procedure GetSaveExitCodeStr(Var Msg : String30);
+  Procedure Add(Const AStr: String30);
+  Var
+    LM, I          : Smallint;
+  begin
+    LM:=Length(Msg);
+    I :=Length(AStr);
+    If ((LM+I) <= (SizeOf(Msg)-1)) then
+    begin
+      For I:=1 to Length(AStr) do Msg[LM+I]:=AStr[I];
+      Inc(Msg[0], Length(AStr));
+    end;
+  end;
+begin
+  Msg := '';
+  Add('EC=');
+  Add(InvVal(SaveExitCode,1));
+  if (SaveExitCode<>0) then
+  begin
+    Add(' EA=');
+    Add(InvValHex(LongInt(SaveErrorAddr),8));
+    Add(' ');
+    Add(SaveUnitName);
+  end;
+end;
+
+end.

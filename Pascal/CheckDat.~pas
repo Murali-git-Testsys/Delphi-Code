@@ -1,0 +1,704 @@
+// Turbo To Delphi; Replace "Ofs(TypeOf" to "TypeOf"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; "Convert OemToAnsi"; changes: 2; (02.03.04 P.W)
+// Turbo To Delphi; Record to Packed Record; changes: 1; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PStream" to "PStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TStream" to "TStream_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "PObject" to "PObject_TP7"; nothing changed; (02.03.04 P.W)
+// Turbo To Delphi; Rename "TObject" to "TObject_TP7"; nothing changed; (02.03.04 P.W)
+Unit CheckDat;
+(*
+Modifications:
+{05.11.92 P.W} Wtxt,Wstr ersetzt
+{22.06.99 P.W} SecToDayHourMin implemented
+{18.07.03 P.W} Function AOlderB moved from CtFemNND.pas to CheckDat.pas
+{22.10.03 P.W}
+  All unused routines into comment
+*)
+
+Interface
+
+Uses
+// Dialogs, SysUtils,
+  GlbFT,
+  GlbType,
+  GlbTools,       {22.06.99 P.W}
+{  IntChar,        {12.11.92 P.W} {u.: 22.10.03 P.W}
+  TurbExt1,
+  Dos;
+
+Type
+  DatumZeitType=Packed Record // "Record" to "Packed Record" Chg#35 (02.03.04 P.W)
+    DT         : DateTime;
+    PackedDT   : LongInt;
+    DayOfWeek,
+    Sec100     : Word;
+  end;
+
+{Procedure GetDatumZeit(Var DatumZeit:DatumZeitType);}
+{Procedure SetDatumZeit(DatumZeit:DatumZeitType);}
+{Function GetPDat:LongInt;}
+{Function RPosPDat(PDat:LongInt):Real;}
+{Procedure SetPDat(PDat:LongInt);}
+{Function UnpackTimeStr(Time:LongInt):String20;}
+ Function TagesDatum:String08;
+ Function DateDescriptor(CountryCode:Word):String04;  {11.11.92 P.W}
+ Function DateGerToInt(DGer:String08;CountryCode:Word):String08; {11.11.92 P.W}
+{Function DateIntToGer(DInt:String08;CountryCode:Word):String08; {11.11.92 P.W}
+ Function IntDate(DGer:String08):String08; {17.11.92 P.W}
+{Function AmDate(Date:String08):String08;}
+{Function DateFormatInt(CountryCode:Word):String08; {12.11.92 P.W}
+{Function LongDateFormatInt(CountryCode:Word):String20; {12.11.92 P.W}
+ Function DayDateInt:String08;
+ Function TagesDatumPDat(PDat:LongInt):String08;
+ Function UhrZeit(WantSec: Boolean = True): String08;
+ Function UhrZeitPDat(PDat:LongInt):String08;
+{Function UhrZeitFullTenMin(PDat:LongInt):String08;}
+{Function SecUntilFullTenMin(PDat:LongInt):Word;}
+  { Wieviele Sekunden fehlen noch bis zu vollen zehn Minuten? }
+ Function Jahr2(jahr:Word):Word;
+{Function Jahr4(jahr:Word):Word;}
+{Function JJMMTT(Txt:String08):String08;}
+{Function MonatsLetzter(Monat,Jahr:word):Word;}
+{Function ValDatOk(Var Txt:String08; Var TT,MM,JJ:Smallint):Boolean;}
+{Function DatOk(Var Txt:String08):Boolean;}
+{Function IntDatOk(Var IntDate:String08; CountryCode:Word;AllowEmpty:Boolean):Boolean;}
+   {11.11.92 P.W} {Allow. 17.11.92 P.W}
+{Function DaysBetween(Datea,Dateb:String08; var ok:boolean):longint;}
+{Function CalcAge(Birth, Today: String08):Smallint;    {19.11.92 P.W}
+{Function CalcAgeDays(Birth, Today: String08):LongInt;    {28.06.93 P.W}
+ Function SecToDayHourMin(Sec: Comp): String;  {22.06.99 P.W}
+ Function AOlderB (A, B: LongInt): Boolean;
+
+{
+Const
+  MonthDays   : Array[0..12] of byte
+              = (   0,  31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31);
+}
+
+Implementation
+  const Unit_Name = 'CheckDat'; // 03.05.24 P.W
+
+Const
+  DateDescKey  : String04 = 'DMY';    {11.11.92 P.W}
+
+
+(*
+Procedure GetDatumZeit(Var DatumZeit:DatumZeitType);
+begin
+  with DatumZeit do
+    with DT do
+    begin
+      GetDate(Year,Month,Day,DayOfWeek);
+      GetTime(Hour,Min,Sec,Sec100);
+      PackTime(DT,PackedDT);
+    end;
+end;
+*)
+
+(*
+Procedure SetDatumZeit(DatumZeit:DatumZeitType);
+begin
+  with DatumZeit do
+    with DT do
+    begin
+      SetDate(Year,Month,Day);
+      SetTime(Hour,Min,Sec,Sec100);
+    end;
+end;
+*)
+
+(*
+Function GetPDat:LongInt;
+var DZ:DatumZeitType;
+begin
+  GetDatumZeit(DZ);
+  GetPDat:=DZ.PackedDT;
+end;
+*)
+
+(*
+Function RPosPDat(PDat:LongInt):Real;
+{ PDat wird irgendwann negativ bei steigendem Datum.
+{ Dies wird aufgefangen.
+}
+Var
+  R           : Real;
+begin
+  if Pdat<0 then R:=PDat+2.0*(MaxLongInt+1.0)
+            else R:=PDat;
+  RPosPDat:=R;
+
+{  Writeln(Pdat:15, R:15:0);}
+end;
+*)
+
+(*
+Procedure SetPDat(PDat:LongInt);
+var DZ:DatumZeitType;
+begin
+  FillChar(Dz,SizeOf(Dz),#0);
+  DZ.PackedDT:=PDat;
+  UnPackTime(DZ.PackedDT,DZ.DT);
+  SetDatumZeit(DZ);
+end;
+*)
+
+(*
+Function UnpackTimeStr(Time:LongInt):String20;
+var
+  DT:DateTime;
+  Wstr : String20;  {05.11.92 P.W}
+begin
+  UnpackTime(Time,DT);
+  with DT do
+  begin
+    {
+    Write(Wtxt,Day:2,'.',Month:2,'.',Year:4,'**',Hour:2,':',Min:2);
+    WHILE POS(' ',Wstr) > 0 DO Wstr[POS(' ',Wstr)] := '0' ;
+    WHILE POS('*',Wstr) > 0 DO Wstr[POS('*',Wstr)] := ' ' ;
+    }
+    {ab 05.11.92 P.W}
+    Wstr:=LeadZero(Day,2)+'.'+ LeadZero(Month,2)+'.'+ LeadZero(Year,4)
+          +'  '+ LeadZero(Hour,2) + ':' +  LeadZero(Min,2);
+
+  end;
+  if Time=0 then Wstr:=Repchar('-',length(Wstr));
+  UnpackTimeStr:=Wstr;
+end;
+*)
+
+Function TagesDatum:String08;
+var
+  Jahr,Monat,Tag,Wochentag:Word;
+begin
+  GETDATE(JAHR,MONAT,TAG,WOCHENTAG) ;
+  (*
+  WRITE(WTXT,TAG : 2,'.',MONAT : 2,'.',Jahr2(Jahr): 2) ;   { nicht ändern!} //OemToAnsi Chg#37 (02.03.04 P.W)
+  WHILE POS(' ',Wstr) > 0 DO Wstr[POS(' ',Wstr)] := '0' ;
+  TagesDatum:=Wstr;
+  *)  {05.11.92 P.W}
+  TagesDatum:=   LeadZero(Tag,2)         + '.'
+               + LeadZero(Monat,2)       + '.'
+               + LeadZero(Jahr2(Jahr),2);
+end;
+
+{----------------------------------------------------------------------}
+
+Function DateDescriptor(CountryCode:Word):String04;  {11.11.92 P.W}
+{ MDY-  bedeutet: Month, Day, Year, Trennzeichen "-"  }
+{       also    : MM-DD-YY                            }
+begin
+  Case CountryCode of
+    001:                         DateDescriptor:='MDY-';
+    002,036,038,042,046,048:     DateDescriptor:='YMD-';
+    031,045,061:                 DateDescriptor:='DMY-';
+    003,032,034,039,044,055,351: DateDescriptor:='DMY/';
+    033,041,047,049,358:         DateDescriptor:='DMY.';
+    else                         DateDescriptor:='DMY-';
+  end;
+end;
+
+Function DateGerToInt(DGer:String08;CountryCode:Word):String08; {11.11.92 P.W}
+Var
+  Desc  : String04;
+  DInt  : String08;
+  P,i,j : Smallint;
+begin
+  Desc:=DateDescriptor(CountryCode);
+  DInt[0]:=#8;
+  DInt[3]:=Desc[4];
+  DInt[6]:=Desc[4];
+  for i:=1 to 3 do
+  begin
+    P:=(Pos(DateDescKey[i],Desc)-1)*3+1;
+    j:=(i-1)*3+1;
+    DInt[p  ]:=DGer[j  ];
+    DInt[p+1]:=DGer[j+1];
+  end;
+  DateGerToInt:=DInt;
+end;
+
+(*
+Function DateIntToGer(DInt:String08;CountryCode:Word):String08; {11.11.92 P.W}
+Var
+  Desc : String04;
+  DGer : String08;
+  P,i,j : Smallint;
+begin
+  Desc:=DateDescriptor(CountryCode);
+  DGer[0]:=#8;
+  DGer[3]:='.';
+  DGer[6]:='.';
+  for i:=1 to 3 do
+  begin
+    P:=(Pos(DateDescKey[i],Desc)-1)*3+1;
+    j:=(i-1)*3+1;
+    DGer[j  ]:=DInt[p  ];
+    DGer[j+1]:=DInt[p+1];
+  end;
+  DateIntToGer:=DGer;
+end;
+*)
+
+(*
+Function DateFormatInt(CountryCode:Word):String08; {12.11.92 P.W}
+Var
+  D,M,Y       : Char;
+begin
+  D:=FirstUpCase(FT('Tag',FM,20));
+  M:=FirstUpCase(FT('Monat',FM,20));
+  Y:=FirstUpCase(FT('Jahr',FM,20));
+  DateFormatInt:=DateGerToInt(D+D+'.'+M+M+'.'+Y+Y, CountryCode);
+end;
+*)
+
+(*
+Function LongDateFormatInt(CountryCode:Word):String20; {12.11.92 P.W}
+Var
+  DMY         : Array[1..3] of String05;
+  LDF         : String20;
+  Desc        : String04;
+  i           : Smallint;
+begin
+  FillChar(LDF, SizeOf(LDF), #0);
+  Desc:=DateDescriptor(CountryCode);
+  DMY[1]:=FT('Tag',   FM,20);
+  DMY[2]:=FT('Monat', FM,20);
+  DMY[3]:=FT('Jahr',  FM,20);
+  for i:=1 to 3 do
+    LDF:=LDF+DMY[Pos(DateDescKey[i],Desc)]+Desc[4];
+  Dec(LDF[0]);
+  LongDateFormatInt:=LDF;
+end;
+*)
+
+Function DayDateInt:String08;
+begin
+  DayDateInt:=DateGerToInt(TagesDatum, CountryCodeGlb);
+end;
+
+Function IntDate(DGer:String08):String08; {17.11.92 P.W}
+begin
+  IntDate:=DateGerToInt(DGer,CountryCodeGlb);
+end;
+
+{----------------------------------------------------------------------}
+
+(*
+Function AmDate(Date:String08):String08;
+begin
+  AmDate:=Date[4]+Date[5]+'/'+Date[1]+Date[2]+'/'+Date[7]+Date[8];
+end;
+*)
+
+Procedure PDatToDZ(PDat:LongInt;Var DZ:DatumZeitType);
+begin
+  FillChar(Dz,SizeOf(Dz),#0);
+  DZ.PackedDT:=PDat;
+  UnPackTime(DZ.PackedDT,DZ.DT);
+end;
+
+Function TagesDatumPDat(PDat:LongInt):String08;
+var {Year,Month,Day,Wochentag:Word;}
+    DZ:DatumZeitType;
+begin
+  PDatToDZ(PDat,DZ);
+  With Dz.DT do
+  begin
+    (*
+    WRITE(WTXT,Day : 2,'.',Month : 2,'.',Jahr2(Year): 2) ;   { nicht ändern!} //OemToAnsi Chg#36 (02.03.04 P.W)
+    WHILE POS(' ',Wstr) > 0 DO Wstr[POS(' ',Wstr)] := '0' ;
+    TagesDatumPDat:=Wstr;
+    *)  {05.11.92 P.W}
+    TagesDatumPDat:=   LeadZero(Day,2)         + '.'
+                     + LeadZero(Month,2)       + '.'
+                     + LeadZero(Jahr2(Year),2);
+  end;
+end;
+
+
+Function UhrZeit(WantSec: Boolean = True): String08;
+var
+  Hour,Min,Second,Sec100:Word;
+begin
+  GetTime(Hour,Min,Second,Sec100);
+  (*
+  WRITE(WTXT,Hour : 2,':',Min : 2,':',Second: 2) ;
+  WHILE POS(' ',Wstr) > 0 DO Wstr[POS(' ',Wstr)] := '0' ;
+  UhrZeit:=Wstr;
+  *)  {05.11.92 P.W}
+  Result :=   LeadZero(Hour,2)      + ':'
+            + LeadZero(Min,2);
+  if WantSec then
+            Result := Result + ':'+ LeadZero(Second,2);
+end;
+
+Function UhrZeitPDat(PDat:LongInt):String08;
+var
+  DZ:DatumZeitType;
+begin
+  PDatToDZ(PDat,DZ);
+  With Dz.DT do
+  begin
+    (*
+    WRITE(WTXT,Hour : 2,':',Min : 2,':',Sec: 2) ;
+    WHILE POS(' ',Wstr) > 0 DO Wstr[POS(' ',Wstr)] := '0' ;
+    UhrZeitPDat:=Wstr;
+    *)  {05.11.92 P.W}
+    UhrZeitPDat:=   LeadZero(Hour,2)      + ':'
+                  + LeadZero(Min,2)       + ':'
+                  + LeadZero(Sec,2);
+  end;
+end;
+
+(*
+Function UhrZeitFullTenMin(PDat:LongInt):String08;
+var
+    DZ:DatumZeitType;
+    txt:string08;
+begin
+  PDatToDZ(PDat,DZ);
+  With Dz.DT do
+  begin
+    if Sec>0 then Inc(Min);
+    if Min>50
+    then
+      begin
+        Min:=0;
+        Inc(Hour);
+        if (hour>23) then Hour:=0;
+      end
+    else
+      if Min Mod 10=0 then Min:= 0 + (Min div 10) * 10
+                      else Min:=10 + (Min div 10) * 10;
+    {
+    WRITE(WTXT,Hour : 2,':',Min : 2) ;
+    WHILE POS(' ',Wstr) > 0 DO Wstr[POS(' ',Wstr)] := '0' ;
+    UhrZeitFullTenMin:=Wstr;
+    }  {05.11.92 P.W}
+    UhrZeitFullTenMin:=   LeadZero(Hour,2)      + ':'
+                        + LeadZero(Min,2);
+  end;
+end;
+*)
+
+(*
+Function SecUntilFullTenMin(PDat:LongInt):Word;
+  { Wieviele Sekunden fehlen noch bis zu vollen zehn Minuten? }
+var S,M:Word;
+    DZ:DatumZeitType;
+begin
+  PDatToDZ(PDat,DZ);
+  With DZ.DT do
+  begin
+    M:=9 - (Min mod 10);
+    s:=59 - Sec;
+    SecUntilFullTenMin:=(M*60+S+1) mod 600;
+  end;
+end;
+*)
+
+Function Jahr2(jahr:Word):Word;
+begin
+  if jahr<100
+    then jahr2:=jahr
+    else  if Jahr>=2000
+            then jahr2:=Jahr-2000
+            else Jahr2:=Jahr-1900;
+end;
+
+(*
+Function Jahr4(jahr:Word):Word;
+begin
+  if (80<=Jahr) and (jahr<=99)
+     then Jahr4:=Jahr+1900
+     else if (0<=jahr) and (jahr<=79)
+             then Jahr4:=Jahr+2000
+             else Jahr4:=jahr;
+end;
+*)
+
+(*
+Function JJMMTT(Txt:String08):String08;
+{ dd.mm.jj -> jj.mm.dd }
+begin
+  JJMMTT:=Copy(Txt,7,2)+Copy(Txt,4,2)+Copy(Txt,1,2);
+end;
+*)
+
+(*
+Function MonatsLetzter(Monat,Jahr:word):Word;
+Var MaxTT:Word;
+begin
+  maxtt:=MonthDays[Monat];
+  if (Monat=2) and ((Jahr mod 4)=0) then inc(maxtt);
+  MonatsLetzter:=MaxTT;
+end;
+*)
+
+(*
+Function ValDatOk(Var Txt:String08; Var TT,MM,JJ:Smallint):Boolean;
+{ Input : TXT    (Datum im Format TT.MM.JJ)           }
+{ Output: TT,MM,JJ im Fehlerfall auch TXT! ("TT.MM.JJ") }
+var ok:boolean;
+    ht:string;
+    err:Smallint;
+begin
+  ValDatOk:=False;
+  ok:=True;
+  ok:=ok and (Length(Txt)=8);
+  if not ok then Txt:= FT('TT.MM.JJ',FM,8) ;
+  While (Pos(' ',Txt)>0) do Txt[pos(' ',Txt)]:='0';
+  ok:=ok and (txt[3]='.') and (txt[6]='.');
+
+  ht:=copy(txt,4,2);
+  val(ht,MM,err);
+  ok:=ok and (err=0) and (1<=MM) and (MM<=12);
+
+  ht:=copy(txt,7,2);
+  val(ht,JJ,err);
+  ok:=ok and (err=0) and (0<=JJ) and (JJ<=99);
+
+  ht:=copy(txt,1,2);
+  val(ht,TT,err);
+  if ok then
+  begin
+    ok:=(err=0) and (1<=TT) and (TT<=MonatsLetzter(MM,JJ));
+  end;
+
+  if not ok then Txt:= FT('TT.MM.JJ',FM,8) ;
+  ValDatOk:=ok;
+end;
+*)
+
+(*
+Function DatOk(Var Txt:String08):Boolean;
+var TT,MM,JJ:Smallint;
+begin
+  DatOk:=ValDatOk(Txt,TT,MM,JJ);
+end;
+*)
+
+
+(*
+Function IntDatOk(Var IntDate:String08; CountryCode:Word;AllowEmpty:Boolean):Boolean;
+   {11.11.92 P.W} {Allow. 17.11.92 P.W}
+{ Input : IntDate    (Datum im Format entsprechend Coutrycode)   }
+{ Output: IntDate! Im Fehlerfall mit entsprechender Kennzeichnung }
+var
+  TT,MM,JJ    : Smallint;
+  Desc        : String04;
+  GerDate     : String08;
+  Ok          : Boolean;
+begin
+  GerDate:=DateIntToGer(IntDate,CountryCode);
+  Desc:=DateDescriptor(CountryCode);
+
+  if AllowEmpty then                        {17.11.92 P.W}
+  begin
+    IntDatOk:=True;
+    if (IntDate=DateFormatInt(CountryCode)) then
+    begin
+      IntDate:='??.??.??';                  {19.11.92 P.W}
+      Exit;
+    end else
+    if (Pos('?',IntDate)>0) then Exit;      {19.11.92 P.W}
+  end;
+
+  Ok:=(IntDate[3]=IntDate[6]) and (IntDate[6]=Desc[4]);
+  Ok:=Ok and ValDatOk(GerDate,TT,MM,JJ);
+  if Ok then IntDate:=DateGerToInt(GerDate,CountryCode)   {12.11.92 P.W}
+        else IntDate:=DateFormatInt(CountryCode);         {12.11.92 P.W}
+  IntDatOk:=Ok;
+end;
+*)
+
+(*
+Function Days(tt,mm,jj:Smallint):LongInt;  {Global: 28.06.93 P.W}
+var d,z:Real;
+begin
+  jj:=Jahr4(jj);
+
+  d:=tt;
+  if (mm>=3) then
+  begin
+    Z:=Trunc( (mm-3)*30.6 + 0.5 );
+    d:=d+z;
+  end else
+  begin
+    dec(jj);
+    z:=Trunc( (mm+9)*30.6 + 0.5 );
+    d:=d+z;
+  end;
+  z:=Trunc( jj*365.25 );
+  d:=d+z;
+
+  z:=Trunc(jj/100.0);
+  d:=d-z;
+
+  z:=Trunc(jj/400.0);
+  d:=d+z;
+
+  days:=Round(d);
+end;
+*)
+
+(*
+Function DaysBetween(Datea,Dateb:String08; var ok:boolean):longint;
+ {Function Days(tt,mm,jj:Smallint):LongInt;  {Global: 28.06.93 P.W}
+
+var tta,mma,jja,
+    ttb,mmb,jjb    :Smallint;
+    DaysA,
+    DaysB          :LongInt;
+begin
+  DaysBetween:=0;
+  if ValDatok(DateA,tta,mma,jja) and ValDatOk(DateB,ttb,mmb,jjb) then
+  begin
+    DaysA:=Days(tta,mma,jja);
+    DaysB:=Days(ttb,mmb,jjb);
+    DaysBetween:=DaysB-DaysA;
+    ok:=True;
+  end else ok:=False;
+end;
+*)
+
+(*
+Function CalcAge(Birth, Today: String08):Smallint;    {19.11.92 P.W}
+Var
+  B_Day,  B_Month,  B_Year,
+  T_Day,  T_Month,  T_Year,  Age  : Smallint;
+begin
+  Age:=0;
+  If ValDatOk(Birth, B_Day,B_Month,B_Year) and
+     ValDatOk(Today, T_Day,T_Month,T_Year) then
+  begin
+    Age:=(T_Year-B_Year);
+    if (B_Day+B_Month*31)>(T_Day+T_Month*31) then dec(Age);
+    if Age<0 then inc(Age,100);
+  end;
+  CalcAge:=Age;
+end;
+*)
+
+(*
+Function CalcAgeDays(Birth, Today: String08):LongInt;    {28.06.93 P.W}
+{ aus CalcAge }
+Var
+  B_Day,  B_Month,  B_Year,
+  T_Day,  T_Month,  T_Year,  Age  : Smallint;
+  DaysDiff                        : LongInt;  {28.06.93 P.W}
+  Year, Month, Day, DayOfWeek     : Word;
+begin
+  GetDate(Year,Month,Day,DayOfWeek);
+  Age:=0;
+  DaysDiff:=0;
+  If ValDatOk(Birth, B_Day,B_Month,B_Year) and
+     ValDatOk(Today, T_Day,T_Month,T_Year) then
+  begin
+    Inc(T_Year, 2100);
+    Inc(B_Year, 2100);
+    While (T_Year>  Year) do Dec(T_Year, 100);
+    While (B_Year>T_Year) do Dec(B_Year, 100);
+    Age:=(T_Year-B_Year);
+    if (B_Day+B_Month*31)>(T_Day+T_Month*31) then dec(Age);
+    if Age<0 then
+    begin
+      inc(Age,100);
+      Dec(B_Year, 100);
+    end;
+    DaysDiff:=Days(T_Day, T_Month, T_Year) - Days(B_Day, B_Month, B_Year);
+  end;
+  CalcAgeDays:=DaysDiff;
+end;
+*)
+
+(*.**************************************************************************)
+(** Function Name    : SecToDayHourMin                                    **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 22.06.99                                           **)
+(** Description      :                                                    **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : ?                                                  **)
+(** Input            : Sec      : Double;                                 **)
+(** Function RETURN  : STRING;                                            **)
+(** Global Variables                                                      **)
+(**  - affected      : ?                                                  **)
+(**  - predefined    : ?                                                  **)
+(***************************************************************************)
+(** Last modified/By : -                                                  **)
+(** Date/Modification: -                                                  **)
+(**************************************************************************.*)
+Function SecToDayHourMin (Sec: Comp): String;
+Const
+  SecArr    : Array[1..4] of Comp = ( 24*3600, 3600, 60, 1);
+{  UnitArr   : Array[1..4] of String[12] = ('d', 'h', 'm', 's');}
+Var
+  DHMSArray : Array[1..4] of Comp;
+Var
+  SRet             : String;
+  I                : Smallint;
+  AddFlg           : Boolean;
+  UnitName         : String[12];
+begin  {Func. SecToDayHourMin}
+  AddFlg:=False;
+  SRet:='';
+  For I:=1 to 4 do
+  begin
+    Case I of
+      1: UnitName:=FT('d.=days',    FLP, 4);
+      2: UnitName:=FT('h.=hours',   FLP, 4);
+      3: UnitName:=FT('m.=minutes', FLP, 4);
+      4: UnitName:=FT('s.=seconds', FLP, 4);
+    end;
+    UnitName:=StringParser(UnitName,'=',1);
+    DHMSArray[I]:=Trunc(Sec / SecArr[I]);
+    Sec:=Sec - DHMSArray[I] * SecArr[I];
+    AddFlg := AddFlg or (I=4) or (DHMSArray[I]<>0);
+    If AddFlg then
+      SRet := SRet
+              + InvValD(DHMSArray[I], 3, 0)
+              + ' '
+              + UnitName
+              + FixSem
+              +'';
+  end;
+
+  SecToDayHourMin:=SRet;
+end;   {Func. SecToDayHourMin}
+
+(*.**************************************************************************)
+(** Function Name    : AOlderB                                            **)
+(** Author           : P.Wueseke                                          **)
+(** Date             : 23.02.96                                           **)
+(** Description      :   True if A is older than B (A,B: SR.Time)         **)
+(***************************************************************************)
+(** Called By        : any                                                **)
+(** Calls            : -                                                  **)
+(** Input            : A, B from SearchRec.Time                           **)
+(** Output           : RETURN (Boolean): Ok                               **)
+(** Global Variables                                                      **)
+(**  - affected      : -                                                  **)
+(**  - predefined    : -                                                  **)
+(***************************************************************************)
+(** Date/Modification:                                                    **)
+(*
+{18.07.03 P.W}
+  Function AOlderB moved from CtFemNND.pas to CheckDat.pas
+*)
+(**************************************************************************.*)
+Function AOlderB (A, B: LongInt): Boolean;
+  Function TimeToDoub(Time: LongInt): Double;
+  {Time increases until MaxLongInt and then goes negativ!}
+  begin
+    If (Time>=0) then TimeToDoub := 1.0 * Time
+                 else TimeToDoub := 1.0 * Time + 2.0 * MaxLongInt;
+  end;
+begin  {Func. AOlderB}
+  AOlderB := TimeToDoub(A) < TimeToDoub(B);
+//ShowMessageFmt('CheckDat.pas function AOlderB(%d, %d) = %s', [A, B, BoolToStr(Result)]);
+end;   {Func. AOlderB}
+
+
+end.
